@@ -1,4 +1,7 @@
-use crate::application_window::system_tray_menu::{SystemTrayMenu, spawn_system_tray};
+use crate::application_window::{
+    application_window_shell::ApplicationWindowShellInput,
+    system_tray_menu::{SystemTrayMenu, spawn_system_tray},
+};
 
 #[derive(Clone)]
 pub struct RunningTrayHandle(ksni::Handle<SystemTrayMenu>);
@@ -21,8 +24,10 @@ pub enum TrayStartFailure {
     TraySpawnFailed(#[from] ksni::Error),
 }
 
-pub async fn start_system_tray() -> Result<RunningTrayHandle, TrayStartFailure> {
-    Ok(RunningTrayHandle(spawn_system_tray().await?))
+pub async fn start_system_tray(
+    shell_sender: relm4::Sender<ApplicationWindowShellInput>,
+) -> Result<RunningTrayHandle, TrayStartFailure> {
+    Ok(RunningTrayHandle(spawn_system_tray(shell_sender).await?))
 }
 
 pub async fn show_unresolved_detections(

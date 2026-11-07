@@ -1,39 +1,66 @@
 use gettextrs::gettext;
 use ksni::{TrayMethods, menu::StandardItem};
-use relm4::gtk::{gio::prelude::ActionGroupExt, glib};
 
 use crate::{
     APPLICATION_ID, TRAY_ATTENTION_ICON_NAME, TRAY_ICON_NAME,
+    application_window::application_window_shell::ApplicationWindowShellInput,
     findings::detections_page::detection_alerts::OPEN_DETECTIONS_ACTION,
+    host_services::desktop::running_instance_forwarding::SHOW_WINDOW_ACTION,
 };
 
-#[derive(Default)]
 pub struct SystemTrayMenu {
     pub unresolved_detections: usize,
+    shell_sender: relm4::Sender<ApplicationWindowShellInput>,
 }
 
-fn activate_application_action(action_name: &'static str) {
-    glib::MainContext::default().invoke(move || {
-        relm4::main_application().activate_action(action_name, None);
-    });
+#[derive(Clone, Copy)]
+enum TrayClickEffect {
+    PresentsWindow,
+    RunsInBackground,
 }
 
-fn tray_menu_item(item_label: String, action_name: &'static str) -> ksni::MenuItem<SystemTrayMenu> {
+impl SystemTrayMenu {
+    fn forward_tray_click(&self, action_name: &'static str, click_effect: TrayClickEffect) {
+        if let TrayClickEffect::PresentsWindow = click_effect
+            && let Some(activation_token) = ksni::current_xdg_activation_token()
+        {
+            self.shell_sender
+                .emit(ApplicationWindowShellInput::ActivationTokenReceived(
+                    activation_token,
+                ));
+        }
+        self.shell_sender
+            .emit(ApplicationWindowShellInput::TrayActionRequested(
+                action_name,
+            ));
+    }
+}
+
+fn tray_menu_item(
+    item_label: String,
+    action_name: &'static str,
+    click_effect: TrayClickEffect,
+) -> ksni::MenuItem<SystemTrayMenu> {
     StandardItem {
         label: item_label,
-        activate: Box::new(move |_tray_menu: &mut SystemTrayMenu| {
-            activate_application_action(action_name);
+        activate: Box::new(move |tray_menu: &mut SystemTrayMenu| {
+            tray_menu.forward_tray_click(action_name, click_effect);
         }),
         ..Default::default()
     }
     .into()
 }
 
-pub async fn spawn_system_tray() -> Result<ksni::Handle<SystemTrayMenu>, ksni::Error> {
-    SystemTrayMenu::default()
-        .assume_sni_available(true)
-        .spawn()
-        .await
+pub async fn spawn_system_tray(
+    shell_sender: relm4::Sender<ApplicationWindowShellInput>,
+) -> Result<ksni::Handle<SystemTrayMenu>, ksni::Error> {
+    SystemTrayMenu {
+        unresolved_detections: 0,
+        shell_sender,
+    }
+    .assume_sni_available(true)
+    .spawn()
+    .await
 }
 
 impl ksni::Tray for SystemTrayMenu {
@@ -62,17 +89,33 @@ impl ksni::Tray for SystemTrayMenu {
     }
 
     fn activate(&mut self, _horizontal: i32, _vertical: i32) {
-        activate_application_action("show-window");
+        self.forward_tray_click(SHOW_WINDOW_ACTION, TrayClickEffect::PresentsWindow);
     }
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         vec![
-            tray_menu_item(gettext("Show Lazaret"), "show-window"),
-            tray_menu_item(gettext("Show Detections"), OPEN_DETECTIONS_ACTION),
-            tray_menu_item(gettext("Quick Scan"), "quick-scan"),
-            tray_menu_item(gettext("Update Definitions"), "update-definitions"),
+            tray_menu_item(
+                gettext("Show Lazaret"),
+                SHOW_WINDOW_ACTION,
+                TrayClickEffect::PresentsWindow,
+            ),
+            tray_menu_item(
+                gettext("Show Detections"),
+                OPEN_DETECTIONS_ACTION,
+                TrayClickEffect::PresentsWindow,
+            ),
+            tray_menu_item(
+                gettext("Quick Scan"),
+                "quick-scan",
+                TrayClickEffect::RunsInBackground,
+            ),
+            tray_menu_item(
+                gettext("Update Definitions"),
+                "update-definitions",
+                TrayClickEffect::RunsInBackground,
+            ),
             ksni::MenuItem::Separator,
-            tray_menu_item(gettext("Quit"), "quit"),
+            tray_menu_item(gettext("Quit"), "quit", TrayClickEffect::RunsInBackground),
         ]
     }
 }
@@ -84,7 +127,8 @@ mod system_tray_menu_tests {
     #[tokio::test]
     #[ignore = "needs a real desktop session with a tray host"]
     async fn host_tray_registers_on_the_session_bus() {
-        let tray_handle = spawn_system_tray().await;
+        let (shell_sender, _shell_receiver) = relm4::channel::<ApplicationWindowShellInput>();
+        let tray_handle = spawn_system_tray(shell_sender).await;
         println!(
             "tray spawn: {:?}",
             tray_handle.as_ref().map(|_handle| "registered")

@@ -137,6 +137,8 @@ pub enum ApplicationWindowShellInput {
     CloseAnswered(CloseAnswer),
     CloseActionChanged,
     UnresolvedDetectionsChanged(usize),
+    ActivationTokenReceived(String),
+    TrayActionRequested(&'static str),
 }
 
 #[derive(Debug)]
@@ -319,8 +321,11 @@ impl AsyncComponent for ApplicationWindowShell {
         };
         let content_widget = model.window_content.content_widget();
         let widgets = view_output!();
-        sender.oneshot_command(async {
-            ApplicationWindowShellCommand::TrayStartFinished(start_system_tray().await)
+        let tray_shell_sender = sender.input_sender().clone();
+        sender.oneshot_command(async move {
+            ApplicationWindowShellCommand::TrayStartFinished(
+                start_system_tray(tray_shell_sender).await,
+            )
         });
         match shown_startup_page {
             StartupPage::PreferencesDialog => {
@@ -342,6 +347,12 @@ impl AsyncComponent for ApplicationWindowShell {
     ) {
         match shell_input {
             ApplicationWindowShellInput::WindowShowRequested => root.present(),
+            ApplicationWindowShellInput::ActivationTokenReceived(activation_token) => {
+                root.set_startup_id(&activation_token);
+            }
+            ApplicationWindowShellInput::TrayActionRequested(action_name) => {
+                relm4::main_application().activate_action(action_name, None);
+            }
             ApplicationWindowShellInput::AboutRequested => present_about_dialog(root),
             ApplicationWindowShellInput::PreferencesRequested => {
                 self.preferences_dialog.widget().present(Some(root));
