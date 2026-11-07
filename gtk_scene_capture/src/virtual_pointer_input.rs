@@ -3,7 +3,10 @@ use std::{os::unix::net::UnixStream, path::Path, thread, time::Duration};
 use wayland_client::{
     Connection, Dispatch, EventQueue, QueueHandle, delegate_noop,
     globals::{GlobalListContents, registry_queue_init},
-    protocol::{wl_pointer::ButtonState, wl_registry::WlRegistry},
+    protocol::{
+        wl_pointer::{Axis, AxisSource, ButtonState},
+        wl_registry::WlRegistry,
+    },
 };
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
     zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1,
@@ -15,6 +18,7 @@ use crate::scene_capture_failure::SceneCaptureFailure;
 const LEFT_MOUSE_BUTTON: u32 = 0x110;
 const POINTER_INPUT_DELAY: Duration = Duration::from_millis(250);
 const EVENT_TIME_STEP_MILLISECONDS: u32 = 100;
+const WHEEL_CLICK_DISTANCE: f64 = 15.0;
 
 #[derive(Clone, Copy)]
 pub struct ScreenPosition {
@@ -102,6 +106,26 @@ impl VirtualPointerInput {
         let event_time = self.next_event_time();
         self.virtual_pointer
             .button(event_time, LEFT_MOUSE_BUTTON, button_state);
+        self.deliver_pointer_frame()
+    }
+
+    pub const fn screen_size(&self) -> ScreenSize {
+        self.screen_size
+    }
+
+    pub fn scroll_wheel_down(
+        &mut self,
+        position: ScreenPosition,
+    ) -> Result<(), SceneCaptureFailure> {
+        self.move_to(position)?;
+        let event_time = self.next_event_time();
+        self.virtual_pointer.axis_source(AxisSource::Wheel);
+        self.virtual_pointer.axis_discrete(
+            event_time,
+            Axis::VerticalScroll,
+            WHEEL_CLICK_DISTANCE,
+            1,
+        );
         self.deliver_pointer_frame()
     }
 

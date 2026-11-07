@@ -78,6 +78,10 @@ impl WidgetTarget {
         Self::new(Role::ListItem, accessible_name)
     }
 
+    pub fn label(accessible_name: impl Into<String>) -> Self {
+        Self::new(Role::Label, accessible_name)
+    }
+
     pub fn page_tab(accessible_name: impl Into<String>) -> Self {
         Self::new(Role::PageTab, accessible_name)
     }

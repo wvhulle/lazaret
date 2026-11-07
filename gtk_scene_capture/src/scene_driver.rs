@@ -16,6 +16,8 @@ const WIDGET_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
 const WIDGET_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const INTERACTION_SETTLE_DURATION: Duration = Duration::from_millis(1500);
 const ACCESSIBILITY_BUS_TIMEOUT: Duration = Duration::from_secs(15);
+const SCROLL_WHEEL_CLICK_LIMIT: usize = 40;
+const VISIBLE_EDGE_MARGIN: i32 = 24;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UserInteraction {
@@ -169,8 +171,35 @@ impl<'session> SceneDriver<'session> {
         }
     }
 
+    fn is_inside_screen(&self, located_widget: &LocatedWidget) -> bool {
+        let screen_height =
+            i32::try_from(self.pointer_input.screen_size().logical_height).unwrap_or(i32::MAX);
+        let (_center_horizontal, center_vertical) = located_widget.widget_bounds.center_point();
+        (VISIBLE_EDGE_MARGIN..screen_height - VISIBLE_EDGE_MARGIN).contains(&center_vertical)
+    }
+
+    fn scroll_into_view(
+        &mut self,
+        widget_target: &WidgetTarget,
+    ) -> Result<LocatedWidget, SceneCaptureFailure> {
+        let mut located_widget = self.wait_for_widget(widget_target)?;
+        let screen_size = self.pointer_input.screen_size();
+        let screen_center = ScreenPosition {
+            logical_x: screen_size.logical_width / 2,
+            logical_y: screen_size.logical_height / 2,
+        };
+        for _wheel_click in 0..SCROLL_WHEEL_CLICK_LIMIT {
+            if self.is_inside_screen(&located_widget) {
+                break;
+            }
+            self.pointer_input.scroll_wheel_down(screen_center)?;
+            located_widget = self.wait_for_widget(widget_target)?;
+        }
+        Ok(located_widget)
+    }
+
     fn click_widget(&mut self, widget_target: &WidgetTarget) -> Result<(), SceneCaptureFailure> {
-        let located_widget = self.wait_for_widget(widget_target)?;
+        let located_widget = self.scroll_into_view(widget_target)?;
         self.pointer_input
             .move_to(screen_position_of(&located_widget))?;
         let activation_outcome = self.async_runtime.block_on(
@@ -188,7 +217,7 @@ impl<'session> SceneDriver<'session> {
     }
 
     fn hover_widget(&mut self, widget_target: &WidgetTarget) -> Result<(), SceneCaptureFailure> {
-        let located_widget = self.wait_for_widget(widget_target)?;
+        let located_widget = self.scroll_into_view(widget_target)?;
         self.pointer_input
             .move_to(screen_position_of(&located_widget))
     }

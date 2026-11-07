@@ -90,6 +90,10 @@ fn point_and_click(widget_target: WidgetTarget) -> Vec<UserInteraction> {
     ]
 }
 
+fn scroll_to(widget_target: WidgetTarget) -> Vec<UserInteraction> {
+    vec![UserInteraction::HoverWidget(widget_target)]
+}
+
 fn wait_for(widget_target: WidgetTarget) -> Vec<UserInteraction> {
     vec![UserInteraction::WaitForWidget(widget_target)]
 }
@@ -159,7 +163,7 @@ fn page_scenarios() -> Vec<PageScenario> {
             animation_name: "scan-exclusions",
             user_interactions: [
                 frame(),
-                point_and_click(WidgetTarget::list_item("node_modules")),
+                scroll_to(WidgetTarget::label("Custom Exclusions")),
                 shown("scan-exclusions"),
             ]
             .concat(),
