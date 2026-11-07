@@ -26,10 +26,14 @@ name = "lazaret"
 changelog_path = "CHANGELOG.md"
 git_tag_name = "v{{ version }}"
 git_release_name = "v{{ version }}"
-changelog_include = ["lazaret-clamav-admin"]
+changelog_include = ["lazaret-clamav-admin", "lazaret-clamd-configuration"]
 
 [[package]]
 name = "lazaret-clamav-admin"
+release = false
+
+[[package]]
+name = "lazaret-clamd-configuration"
 release = false
 
 [[package]]
