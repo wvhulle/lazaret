@@ -1690,6 +1690,7 @@ name = "gtk_scene_capture"
 version = "0.1.0"
 dependencies = [
  "atspi",
+ "futures",
  "libc",
  "tempfile",
  "thiserror",
@@ -5394,6 +5395,9 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "gtk_scene_capture",
+ "hex",
+ "md-5",
+ "sha2",
  "tempfile",
  "thiserror",
  "tokio",

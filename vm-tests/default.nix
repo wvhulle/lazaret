@@ -1,19 +1,8 @@
-{ lazaretModule }:
+{ lazaretModule, xtask }:
 let
-  machineModule = machineName: {
-    imports = [
-      lazaretModule
-      ./shared/common.nix
-      ./${machineName}/machine.nix
-    ];
-    networking.hostName = "lazaret-${machineName}";
-  };
-
   machineDescriptions = {
-    detection-alerts = "a desktop with on-access blocking, for alerts, the tray and quarantining a blocked file";
-    scheduled-scan = "a desktop with a system scan timer, for Run Now through a real password prompt";
-    signature-update = "updaters with no network and a fixture URLhaus key, for Update Now keeping keys out of the UI";
-    live-tuning = "the root admin service, with real polkit prompts, refused settings and rollback";
+    desktop-user-journey = "a desktop user's detections moving through quarantine, lookups, submissions, trust, a signature update and restore, against a fake internet";
+    administrator-journey = "the root admin service: trust for all users, a system scan timer and live tuning, through real polkit prompts";
   };
 in
 {
@@ -21,6 +10,19 @@ in
 
   checksFor =
     pkgs:
+    let
+      fixtureCorpus = import ./shared/fixture-samples.nix { inherit pkgs xtask; };
+
+      machineModule = machineName: {
+        imports = [
+          lazaretModule
+          ./shared/common.nix
+          ./${machineName}/machine.nix
+        ];
+        _module.args = { inherit fixtureCorpus xtask; };
+        networking.hostName = "lazaret-${machineName}";
+      };
+    in
     pkgs.lib.mapAttrs' (
       machineName: _machineDescription:
       pkgs.lib.nameValuePair "vm-${machineName}" (

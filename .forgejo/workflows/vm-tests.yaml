@@ -23,14 +23,8 @@ jobs:
       - name: Require KVM
         run: test -r /dev/kvm -a -w /dev/kvm
 
-      - name: Detection alerts
-        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-detection-alerts
+      - name: Desktop user journey
+        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-desktop-user-journey
 
-      - name: Live tuning
-        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-live-tuning
-
-      - name: Scheduled scan
-        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-scheduled-scan
-
-      - name: Signature update
-        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-signature-update
+      - name: Administrator journey
+        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-administrator-journey

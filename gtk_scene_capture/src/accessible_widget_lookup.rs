@@ -1,16 +1,19 @@
 use std::collections::VecDeque;
 
 use atspi::{
-    AccessibilityConnection, CoordType, ObjectRefOwned, Role, State,
+    AccessibilityConnection, CoordType, ObjectRefOwned, Role, State, StateSet,
     proxy::{
         accessible::{AccessibleProxy, ObjectRefExt},
         action::ActionProxy,
         component::ComponentProxy,
+        editable_text::EditableTextProxy,
     },
     zbus,
 };
+use futures::future::join_all;
 
 const SEARCHED_NODE_LIMIT: usize = 20_000;
+const ANCESTOR_STEP_LIMIT: usize = 32;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WidgetLookupFailure {
@@ -25,18 +28,38 @@ pub enum WidgetLookupFailure {
     },
     #[error("{accessible_name:?} offers no action to activate")]
     ActionMissing { accessible_name: String },
+    #[error("{accessible_name:?} refused the new text")]
+    TextRefused { accessible_name: String },
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum NameMatch {
+    #[default]
+    ExactName,
+    ContainedName,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WidgetSensitivity {
+    AcceptsInput,
+    RefusesInput,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SearchScope {
     WholeScreen,
     InsideWidget(Box<WidgetTarget>),
+    InsideEnclosingWidget {
+        enclosing_role: Role,
+        anchor_target: Box<WidgetTarget>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WidgetTarget {
     pub widget_role: Role,
     pub accessible_name: String,
+    pub name_match: NameMatch,
     pub search_scope: SearchScope,
 }
 
@@ -47,13 +70,28 @@ impl WidgetTarget {
         Self {
             widget_role,
             accessible_name: accessible_name.into(),
+            name_match: NameMatch::ExactName,
             search_scope: SearchScope::WholeScreen,
         }
+    }
+
+    pub fn matching_names(self, name_match: NameMatch) -> Self {
+        Self { name_match, ..self }
     }
 
     pub fn inside(self, container_target: Self) -> Self {
         Self {
             search_scope: SearchScope::InsideWidget(Box::new(container_target)),
+            ..self
+        }
+    }
+
+    pub fn inside_enclosing(self, enclosing_role: Role, anchor_target: Self) -> Self {
+        Self {
+            search_scope: SearchScope::InsideEnclosingWidget {
+                enclosing_role,
+                anchor_target: Box::new(anchor_target),
+            },
             ..self
         }
     }
@@ -109,8 +147,16 @@ pub struct LocatedWidget {
     pub widget_bounds: WidgetBounds,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum ApplicationScope {
+    #[default]
+    EveryApplication,
+    ApplicationNamed(String),
+}
+
 pub struct AccessibleTree {
     accessibility_connection: AccessibilityConnection,
+    application_scope: ApplicationScope,
 }
 
 async fn proxy_for<'reference>(
@@ -120,17 +166,70 @@ async fn proxy_for<'reference>(
     Ok(object_reference.as_accessible_proxy(connection).await?)
 }
 
-async fn is_matching_widget(
-    accessible_proxy: &AccessibleProxy<'_>,
-    widget_target: &WidgetTarget,
-) -> Result<bool, WidgetLookupFailure> {
-    if accessible_proxy.get_role().await? != widget_target.widget_role {
-        return Ok(false);
+struct InspectedNode {
+    object_reference: ObjectRefOwned,
+    widget_role: Role,
+    accessible_name: String,
+    widget_state: StateSet,
+    child_references: Vec<ObjectRefOwned>,
+}
+
+impl InspectedNode {
+    fn is_showing(&self) -> bool {
+        self.widget_state.contains(State::Showing)
     }
-    if accessible_proxy.name().await? != widget_target.accessible_name {
-        return Ok(false);
+
+    fn matches(&self, widget_target: &WidgetTarget) -> bool {
+        let name_matches = match widget_target.name_match {
+            NameMatch::ExactName => self.accessible_name == widget_target.accessible_name,
+            NameMatch::ContainedName => self
+                .accessible_name
+                .contains(&widget_target.accessible_name),
+        };
+        self.widget_role == widget_target.widget_role && name_matches && self.is_showing()
     }
-    Ok(accessible_proxy.get_state().await?.contains(State::Showing))
+
+    fn may_hold_showing_widgets(&self) -> bool {
+        self.widget_role == Role::Application || self.is_showing()
+    }
+}
+
+async fn inspect_node(
+    bus_connection: &zbus::Connection,
+    object_reference: ObjectRefOwned,
+) -> Option<InspectedNode> {
+    if object_reference.is_null() {
+        return None;
+    }
+    let accessible_proxy = proxy_for(bus_connection, &object_reference).await.ok()?;
+    let (widget_role, accessible_name, widget_state, child_references) = tokio::join!(
+        accessible_proxy.get_role(),
+        accessible_proxy.name(),
+        accessible_proxy.get_state(),
+        accessible_proxy.get_children(),
+    );
+    Some(InspectedNode {
+        widget_role: widget_role.ok()?,
+        accessible_name: accessible_name.unwrap_or_default(),
+        widget_state: widget_state.unwrap_or_default(),
+        child_references: child_references.unwrap_or_default(),
+        object_reference,
+    })
+}
+
+async fn inspect_level(
+    bus_connection: &zbus::Connection,
+    level_references: Vec<ObjectRefOwned>,
+) -> Vec<InspectedNode> {
+    join_all(
+        level_references
+            .into_iter()
+            .map(|object_reference| inspect_node(bus_connection, object_reference)),
+    )
+    .await
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 impl AccessibleTree {
@@ -140,6 +239,7 @@ impl AccessibleTree {
                 accessibility_bus_address.parse()?,
             )
             .await?,
+            application_scope: ApplicationScope::EveryApplication,
         })
     }
 
@@ -147,13 +247,38 @@ impl AccessibleTree {
         self.accessibility_connection.connection()
     }
 
+    pub fn limited_to(self, application_scope: ApplicationScope) -> Self {
+        Self {
+            application_scope,
+            ..self
+        }
+    }
+
     async fn top_level_nodes(&self) -> Result<Vec<ObjectRefOwned>, WidgetLookupFailure> {
-        Ok(self
+        let application_nodes = self
             .accessibility_connection
             .root_accessible_on_registry()
             .await?
             .get_children()
-            .await?)
+            .await?;
+        let ApplicationScope::ApplicationNamed(application_name) = &self.application_scope else {
+            return Ok(application_nodes);
+        };
+        let mut scoped_nodes = Vec::new();
+        for application_node in application_nodes {
+            let Ok(application_proxy) = proxy_for(self.bus_connection(), &application_node).await
+            else {
+                continue;
+            };
+            if application_proxy
+                .name()
+                .await
+                .is_ok_and(|shown_name| shown_name.eq_ignore_ascii_case(application_name))
+            {
+                scoped_nodes.push(application_node);
+            }
+        }
+        Ok(scoped_nodes)
     }
 
     async fn search_from(
@@ -161,26 +286,20 @@ impl AccessibleTree {
         starting_nodes: Vec<ObjectRefOwned>,
         widget_target: &WidgetTarget,
     ) -> Option<ObjectRefOwned> {
-        let mut pending_nodes = starting_nodes.into_iter().collect::<VecDeque<_>>();
+        let mut level_references = starting_nodes;
         let mut searched_nodes = 0;
-        while let Some(object_reference) = pending_nodes.pop_front() {
-            searched_nodes += 1;
-            if searched_nodes > SEARCHED_NODE_LIMIT || object_reference.is_null() {
-                continue;
+        while !level_references.is_empty() && searched_nodes <= SEARCHED_NODE_LIMIT {
+            searched_nodes += level_references.len();
+            let mut next_level_references = Vec::new();
+            for inspected_node in inspect_level(self.bus_connection(), level_references).await {
+                if inspected_node.matches(widget_target) {
+                    return Some(inspected_node.object_reference);
+                }
+                if inspected_node.may_hold_showing_widgets() {
+                    next_level_references.extend(inspected_node.child_references);
+                }
             }
-            let Ok(accessible_proxy) = proxy_for(self.bus_connection(), &object_reference).await
-            else {
-                continue;
-            };
-            if is_matching_widget(&accessible_proxy, widget_target)
-                .await
-                .unwrap_or(false)
-            {
-                return Some(object_reference);
-            }
-            if let Ok(child_references) = accessible_proxy.get_children().await {
-                pending_nodes.extend(child_references);
-            }
+            level_references = next_level_references;
         }
         None
     }
@@ -198,7 +317,54 @@ impl AccessibleTree {
                     .get_children()
                     .await?)
             }
+            SearchScope::InsideEnclosingWidget {
+                enclosing_role,
+                anchor_target,
+            } => {
+                let anchor_reference = Box::pin(self.locate_reference(anchor_target)).await?;
+                let enclosing_reference = self
+                    .enclosing_reference(anchor_reference, *enclosing_role)
+                    .await
+                    .ok_or_else(|| WidgetLookupFailure::WidgetMissing {
+                        widget_role: *enclosing_role,
+                        accessible_name: anchor_target.accessible_name.clone(),
+                    })?;
+                Ok(proxy_for(self.bus_connection(), &enclosing_reference)
+                    .await?
+                    .get_children()
+                    .await?)
+            }
         }
+    }
+
+    async fn enclosing_reference(
+        &self,
+        anchor_reference: ObjectRefOwned,
+        enclosing_role: Role,
+    ) -> Option<ObjectRefOwned> {
+        let mut current_reference = anchor_reference;
+        for _ancestor_step in 0..ANCESTOR_STEP_LIMIT {
+            let parent_reference = proxy_for(self.bus_connection(), &current_reference)
+                .await
+                .ok()?
+                .parent()
+                .await
+                .ok()?;
+            if parent_reference.is_null() {
+                return None;
+            }
+            let parent_role = proxy_for(self.bus_connection(), &parent_reference)
+                .await
+                .ok()?
+                .get_role()
+                .await
+                .ok()?;
+            if parent_role == enclosing_role {
+                return Some(parent_reference);
+            }
+            current_reference = parent_reference;
+        }
+        None
     }
 
     async fn locate_reference(
@@ -227,16 +393,51 @@ impl AccessibleTree {
     }
 
     pub async fn describe_visible_widgets(&self) -> Result<Vec<String>, WidgetLookupFailure> {
+        let mut level_references = self.top_level_nodes().await?;
+        let mut widget_descriptions = Vec::new();
+        let mut searched_nodes = 0;
+        while !level_references.is_empty() && searched_nodes <= SEARCHED_NODE_LIMIT {
+            searched_nodes += level_references.len();
+            let mut next_level_references = Vec::new();
+            for inspected_node in inspect_level(self.bus_connection(), level_references).await {
+                if inspected_node.is_showing() {
+                    widget_descriptions.push(format!(
+                        "{:?} {:?}",
+                        inspected_node.widget_role, inspected_node.accessible_name
+                    ));
+                }
+                if inspected_node.may_hold_showing_widgets() {
+                    next_level_references.extend(inspected_node.child_references);
+                }
+            }
+            level_references = next_level_references;
+        }
+        Ok(widget_descriptions)
+    }
+
+    pub async fn describe_ancestry_of_named(
+        &self,
+        name_fragment: &str,
+    ) -> Result<Vec<String>, WidgetLookupFailure> {
+        #[derive(Clone, Copy)]
+        enum ParentLink {
+            TopLevel,
+            ChildOf(usize),
+        }
+        struct VisitedNode {
+            parent_link: ParentLink,
+            node_description: String,
+        }
+        let mut visited_nodes: Vec<VisitedNode> = Vec::new();
         let mut pending_nodes = self
             .top_level_nodes()
             .await?
             .into_iter()
+            .map(|object_reference| (ParentLink::TopLevel, object_reference))
             .collect::<VecDeque<_>>();
-        let mut widget_descriptions = Vec::new();
-        let mut searched_nodes = 0;
-        while let Some(object_reference) = pending_nodes.pop_front() {
-            searched_nodes += 1;
-            if searched_nodes > SEARCHED_NODE_LIMIT || object_reference.is_null() {
+        let mut ancestry_descriptions = Vec::new();
+        while let Some((parent_link, object_reference)) = pending_nodes.pop_front() {
+            if visited_nodes.len() > SEARCHED_NODE_LIMIT || object_reference.is_null() {
                 continue;
             }
             let Ok(accessible_proxy) = proxy_for(self.bus_connection(), &object_reference).await
@@ -244,21 +445,40 @@ impl AccessibleTree {
                 continue;
             };
             let accessible_name = accessible_proxy.name().await.unwrap_or_default();
-            let is_showing = accessible_proxy
+            let widget_role = accessible_proxy.get_role().await.ok();
+            let showing_marker = if accessible_proxy
                 .get_state()
                 .await
-                .is_ok_and(|widget_state| widget_state.contains(State::Showing));
-            if is_showing
-                && !accessible_name.is_empty()
-                && let Ok(widget_role) = accessible_proxy.get_role().await
+                .is_ok_and(|widget_state| widget_state.contains(State::Showing))
             {
-                widget_descriptions.push(format!("{widget_role:?} {accessible_name:?}"));
+                "showing"
+            } else {
+                "hidden"
+            };
+            let node_position = visited_nodes.len();
+            visited_nodes.push(VisitedNode {
+                parent_link,
+                node_description: format!("{widget_role:?} {accessible_name:?} {showing_marker}"),
+            });
+            if accessible_name.contains(name_fragment) {
+                let mut ancestry = Vec::new();
+                let mut current_link = ParentLink::ChildOf(node_position);
+                while let ParentLink::ChildOf(position) = current_link {
+                    ancestry.push(visited_nodes[position].node_description.clone());
+                    current_link = visited_nodes[position].parent_link;
+                }
+                ancestry.reverse();
+                ancestry_descriptions.push(ancestry.join(" > "));
             }
             if let Ok(child_references) = accessible_proxy.get_children().await {
-                pending_nodes.extend(child_references);
+                pending_nodes.extend(
+                    child_references.into_iter().map(|child_reference| {
+                        (ParentLink::ChildOf(node_position), child_reference)
+                    }),
+                );
             }
         }
-        Ok(widget_descriptions)
+        Ok(ancestry_descriptions)
     }
 
     async fn widget_bounds(
@@ -309,5 +529,50 @@ impl AccessibleTree {
             });
         }
         Ok(())
+    }
+
+    pub async fn widget_sensitivity(
+        &self,
+        located_widget: &LocatedWidget,
+    ) -> Result<WidgetSensitivity, WidgetLookupFailure> {
+        let widget_state = proxy_for(self.bus_connection(), &located_widget.object_reference)
+            .await?
+            .get_state()
+            .await?;
+        Ok(if widget_state.contains(State::Sensitive) {
+            WidgetSensitivity::AcceptsInput
+        } else {
+            WidgetSensitivity::RefusesInput
+        })
+    }
+
+    pub async fn replace_widget_text(
+        &self,
+        located_widget: &LocatedWidget,
+        widget_target: &WidgetTarget,
+        replacement_text: &str,
+    ) -> Result<(), WidgetLookupFailure> {
+        let object_reference = &located_widget.object_reference;
+        let editable_text_proxy = EditableTextProxy::builder(self.bus_connection())
+            .destination(
+                object_reference
+                    .name()
+                    .cloned()
+                    .ok_or(atspi::AtspiError::MissingName)?,
+            )?
+            .path(object_reference.path().clone())?
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await?;
+        if editable_text_proxy
+            .set_text_contents(replacement_text)
+            .await?
+        {
+            Ok(())
+        } else {
+            Err(WidgetLookupFailure::TextRefused {
+                accessible_name: widget_target.accessible_name.clone(),
+            })
+        }
     }
 }

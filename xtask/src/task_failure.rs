@@ -6,6 +6,12 @@ pub enum TaskFailure {
     SceneCaptureFailed(#[from] gtk_scene_capture::scene_capture_failure::SceneCaptureFailure),
     #[error("the fixture systemd service failed: {0}")]
     FixtureSystemdFailed(#[from] zbus::Error),
+    #[error("the session's accessibility bus could not be reached: {0}")]
+    AccessibilityBusUnreachable(zbus::Error),
+    #[error("{accessible_name:?} was still shown when the wait ended")]
+    WidgetStayedShown { accessible_name: String },
+    #[error("{accessible_name:?} never accepted input")]
+    WidgetStayedInsensitive { accessible_name: String },
     #[error("environment variable {variable_name} is not set")]
     VariableMissing { variable_name: &'static str },
     #[error(

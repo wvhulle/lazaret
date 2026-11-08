@@ -1,4 +1,9 @@
-{ pkgs, ... }:
+{
+  pkgs,
+  fixtureCorpus,
+  xtask,
+  ...
+}:
 {
   system.stateVersion = "26.05";
 
@@ -16,12 +21,18 @@
 
   systemd.tmpfiles.rules = [
     "d /var/lib/clamav 0755 clamav clamav -"
-    "f /var/lib/clamav/fixture.hdb 0644 clamav clamav - 44d88612fea8a8f36de82e1278abb02f:68:Win.Fixture.Agent-1"
+    "C /var/lib/clamav/lazaret-fixture.hdb - - - - ${fixtureCorpus}/signatures/v1/lazaret-fixture.hdb"
+    "C /var/lib/clamav/lazaret-fixture.ndb - - - - ${fixtureCorpus}/signatures/lazaret-fixture.ndb"
   ];
 
-  environment.systemPackages = [
-    pkgs.sqlite
-  ];
+  environment = {
+    etc."lazaret-test/samples".source = "${fixtureCorpus}/samples";
+    systemPackages = [
+      pkgs.curl
+      pkgs.sqlite
+      xtask
+    ];
+  };
 
   virtualisation = {
     memorySize = 3072;

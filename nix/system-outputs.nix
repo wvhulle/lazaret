@@ -213,6 +213,7 @@ let
 
   vmTests = import ../vm-tests {
     lazaretModule = self.nixosModules.default;
+    xtask = xtaskPackage;
   };
 
   moduleChecks = import ./module-checks.nix {

@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+futures = "0.3"
 atspi = { version = "0.30", default-features = false, features = ["proxies", "connection", "zbus", "tokio"] }
 tempfile = "3"
 thiserror = "2"

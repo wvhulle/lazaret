@@ -22,10 +22,15 @@ It also checks the dependencies and the text:
 The same tools are in the dev shell, so `cargo deny check`, `cargo machete`, `typos` and `lychee --offline docs` run locally. The dev shell also has `minisign`, to make the release key pair with `minisign -G -W` and to check a signed release asset. Run one VM test on its own with:
 
 ```sh
-nix build path:.#checks.x86_64-linux.vm-live-tuning
+nix build path:.#checks.x86_64-linux.vm-administrator-journey
 ```
 
-The VM tests are `vm-detection-alerts`, `vm-live-tuning`, `vm-scheduled-scan` and `vm-signature-update`. Each one boots a desktop session with real ClamAV services and drives Lazaret through its D-Bus actions.
+The VM tests are two journeys, each booting one desktop session with real ClamAV services:
+
+- `vm-desktop-user-journey` moves a fixture corpus through every Findings page: an on-access block and its alert, a manual scan, quarantine, reputation lookups, uploads to MalwareBazaar and VirusTotal, reports to ClamAV through `clamsubmit`, trusting and ignoring for one user, a signature update that fixes a false positive, restore, deletion and a scheduled scan.
+- `vm-administrator-journey` covers what needs the administrator password: trusting files and stopping ignored detections for all users, Run Now on a system scan timer, and live tuning with refused settings and rollback.
+
+`xtask build-vm-fixtures` builds the corpus: an EICAR invoice, the same file under a name that isn't UTF-8, a zip of it, a document that the first signature release wrongly detects and the second doesn't, a potentially unwanted toolbar, and a dropper only the second release detects, with their signatures and a test certificate authority. `vm-tests/shared/fake_internet_server.py` answers as MalwareBazaar, CIRCL hashlookup, VirusTotal, clamav.net, URLhaus and a signature mirror over TLS, logs every request so a test can check exactly what left the machine, and switches to failure answers through `/var/lib/fake-internet/scenario.json`. The tests never read the screen. They find widgets over AT-SPI by role and accessible name, the way a screen reader does: `xtask press-widget` waits until the widget accepts input, scrolls it into view and presses it, `xtask await-widget` and `xtask await-widget-gone` wait for a widget, a label or a dialog to appear or close, and `xtask type-into-widget` sets an entry's text. `--inside-role` and `--inside-name` limit the search to one row or dialog; add `--enclosing-role list-item` to reach the expanded content of an expander row from its title. Every widget a test uses needs an accessible name, so give an icon-only button its tooltip as accessible label. On a failure the test prints `xtask describe-session-widgets`, which lists every named widget in the session.
 
 `src/host_verification_tests.rs` holds tests that need a real ClamAV host. They are ignored by default:
 
