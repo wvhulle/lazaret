@@ -18,6 +18,7 @@ use crate::{
         },
         desktop::locale_formatting::byte_size_text,
     },
+    shared_widgets::listed_spin_row::listed_spin_row,
     translated_messages,
 };
 
@@ -264,9 +265,15 @@ fn apply_button() -> gtk::Button {
 }
 
 fn count_spin_row(setting_key: &str, minimum: f64, maximum: f64, shown_value: f64) -> adw::SpinRow {
-    let spin_row = adw::SpinRow::with_range(minimum, maximum, 1.0);
-    spin_row.set_title(setting_key);
-    spin_row.set_use_markup(false);
+    let spin_row = listed_spin_row(setting_key);
+    spin_row.set_adjustment(Some(&gtk::Adjustment::new(
+        shown_value,
+        minimum,
+        maximum,
+        1.0,
+        10.0,
+        0.0,
+    )));
     spin_row.set_digits(0);
     spin_row.set_numeric(true);
     spin_row.set_value(shown_value);
@@ -283,13 +290,15 @@ fn spin_entered_edit(spin_row: &adw::SpinRow) -> ConfigSettingRowInput {
 }
 
 fn connect_spin_activation(spin_row: &adw::SpinRow, sender: &FactorySender<ConfigSettingRow>) {
-    if let Some(spin_button) = spin_row
+    if let Some(spin_text) = spin_row
         .delegate()
         .and_then(|spin_delegate| spin_delegate.downcast::<gtk::SpinButton>().ok())
+        .and_then(|spin_button| spin_button.delegate())
+        .and_then(|text_delegate| text_delegate.downcast::<gtk::Text>().ok())
     {
         let activation_sender = sender.clone();
         let activated_row = spin_row.clone();
-        spin_button.connect_activate(move |_activated_button| {
+        spin_text.connect_activate(move |_activated_text| {
             activation_sender.input(spin_entered_edit(&activated_row));
         });
     }

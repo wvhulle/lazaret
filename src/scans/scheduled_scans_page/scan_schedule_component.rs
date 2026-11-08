@@ -20,6 +20,7 @@ use crate::{
             read_schedule_timer_state, systemd_user_unit_directory,
         },
     },
+    shared_widgets::listed_spin_row::listed_spin_row,
     translated_messages,
 };
 
@@ -296,8 +297,7 @@ impl Component for ScanScheduleSection {
                     } @weekday_chosen_handler,
                 },
 
-                adw::SpinRow {
-                    set_title: &translated_messages::scans::day_month_title(),
+                listed_spin_row(&translated_messages::scans::day_month_title()) -> adw::SpinRow {
                     set_subtitle: &translated_messages::scans::used_monthly_scans_subtitle(),
                     set_adjustment: Some(&gtk::Adjustment::new(1.0, 1.0, 28.0, 1.0, 7.0, 0.0)),
                     #[watch]

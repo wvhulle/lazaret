@@ -7,7 +7,9 @@ use crate::{
             DraftEdit, SizeUnit, SwitchPosition, TypedSettingValue, WriteRefusal,
         },
     },
-    shared_widgets::engine_settings::config_setting_row::size_unit_labels,
+    shared_widgets::{
+        engine_settings::config_setting_row::size_unit_labels, listed_spin_row::listed_spin_row,
+    },
     translated_messages,
 };
 
@@ -179,9 +181,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
                         },
 
                         #[name = "count_editor"]
-                        adw::SpinRow {
-                            set_use_markup: false,
-                            set_title: &model.setting_key,
+                        listed_spin_row(&model.setting_key) -> adw::SpinRow {
                             set_visible: model.shows_count() || model.shows_size(),
                             set_digits: 0,
                             set_numeric: true,

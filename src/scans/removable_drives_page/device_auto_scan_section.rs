@@ -13,6 +13,7 @@ use crate::{
         DEVICE_SCAN_ENABLED_KEY, DEVICE_SCAN_MAX_GIGABYTES_KEY, DEVICE_SCAN_SETTING_KEYS,
         DEVICE_SCAN_SKIP_BATTERY_KEY, DeviceAutoScanSettings,
     },
+    shared_widgets::listed_spin_row::listed_spin_row,
     translated_messages,
 };
 
@@ -56,8 +57,7 @@ impl Component for DeviceAutoScanSection {
                     } @auto_scan_handler,
                 },
 
-                adw::SpinRow {
-                    set_title: &translated_messages::scans::max_device_size_title(),
+                listed_spin_row(&translated_messages::scans::max_device_size_title()) -> adw::SpinRow {
                     set_subtitle: &translated_messages::scans::no_size_limit_subtitle(),
                     set_adjustment: Some(&gtk::Adjustment::new(32.0, 0.0, 10_000.0, 1.0, 10.0, 0.0)),
                     #[watch]

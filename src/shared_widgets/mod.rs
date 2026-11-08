@@ -5,6 +5,7 @@ pub mod database_migration_failure_text;
 pub mod engine_settings;
 pub mod host_read_failure_text;
 pub mod journal_follow_failure_text;
+pub mod listed_spin_row;
 pub mod loading_indicators;
 pub mod page_widget_templates;
 pub mod quarantine_failure_text;
