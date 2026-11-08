@@ -112,6 +112,7 @@ pub enum SentSamplesPageInput {
     SampleUploadConfirmed(SampleUploadProposal),
     MissedMalwareReportRequested,
     MissedMalwareFileChosen(PathBuf),
+    MissedMalwareFileUnavailable(String),
     RemoteEntryRequested(String),
 }
 
@@ -742,8 +743,14 @@ impl Component for SentSamplesPage {
                             Some(SentSamplesPageInput::MissedMalwareFileChosen(chosen_path))
                         }
                         ChosenSubmissionFile::ChoiceCancelled => None,
+                        ChosenSubmissionFile::ChoiceFailed(failure_text) => Some(
+                            SentSamplesPageInput::MissedMalwareFileUnavailable(failure_text),
+                        ),
                     },
                 );
+            }
+            SentSamplesPageInput::MissedMalwareFileUnavailable(failure_text) => {
+                self.toaster.add_toast(plain_text_toast(&failure_text));
             }
             SentSamplesPageInput::MissedMalwareFileChosen(chosen_path) => {
                 present_clamav_report_confirmation(

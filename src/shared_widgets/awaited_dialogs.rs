@@ -23,6 +23,23 @@ pub enum ImportedFileOutcome {
     ImportFailed(glib::Error),
 }
 
+enum FileDialogEnding {
+    DismissedByUser,
+    DialogBroke(glib::Error),
+}
+
+impl From<glib::Error> for FileDialogEnding {
+    fn from(dialog_error: glib::Error) -> Self {
+        if dialog_error.matches(gtk::DialogError::Dismissed)
+            || dialog_error.matches(gtk::DialogError::Cancelled)
+        {
+            Self::DismissedByUser
+        } else {
+            Self::DialogBroke(dialog_error)
+        }
+    }
+}
+
 pub fn describe_export_failure(export_failure: &glib::Error) -> String {
     translated_messages::widgets::not_save_file_error(export_failure)
 }
@@ -118,20 +135,29 @@ pub async fn chosen_folders_to_open(dialog_title: String) -> Vec<PathBuf> {
 pub enum ChosenSubmissionFile {
     FileChosen(PathBuf),
     ChoiceCancelled,
+    ChoiceFailed(String),
 }
 
 pub async fn chosen_file_to_submit(dialog_title: String) -> ChosenSubmissionFile {
-    gtk::FileDialog::builder()
+    let chosen_file = gtk::FileDialog::builder()
         .title(dialog_title)
         .build()
         .open_future(active_application_window().as_ref())
-        .await
-        .ok()
-        .and_then(|chosen_file| chosen_file.path())
-        .map_or(
-            ChosenSubmissionFile::ChoiceCancelled,
+        .await;
+    match chosen_file.map_err(FileDialogEnding::from) {
+        Ok(chosen_file) => chosen_file.path().map_or_else(
+            || {
+                ChosenSubmissionFile::ChoiceFailed(
+                    translated_messages::widgets::chosen_file_not_local(chosen_file.uri()),
+                )
+            },
             ChosenSubmissionFile::FileChosen,
-        )
+        ),
+        Err(FileDialogEnding::DismissedByUser) => ChosenSubmissionFile::ChoiceCancelled,
+        Err(FileDialogEnding::DialogBroke(dialog_failure)) => ChosenSubmissionFile::ChoiceFailed(
+            translated_messages::widgets::not_choose_file_error(dialog_failure),
+        ),
+    }
 }
 
 pub async fn imported_file(dialog_title: String) -> ImportedFileOutcome {
@@ -140,8 +166,11 @@ pub async fn imported_file(dialog_title: String) -> ImportedFileOutcome {
         .build()
         .open_future(active_application_window().as_ref())
         .await;
-    match chosen_file {
-        Err(_dialog_dismissed) => ImportedFileOutcome::ImportCancelled,
+    match chosen_file.map_err(FileDialogEnding::from) {
+        Err(FileDialogEnding::DismissedByUser) => ImportedFileOutcome::ImportCancelled,
+        Err(FileDialogEnding::DialogBroke(dialog_failure)) => {
+            ImportedFileOutcome::ImportFailed(dialog_failure)
+        }
         Ok(chosen_file) => match chosen_file.load_contents_future().await {
             Ok(loaded_contents) => ImportedFileOutcome::FileRead(loaded_contents.0.to_vec()),
             Err(read_failure) => ImportedFileOutcome::ImportFailed(read_failure),
@@ -156,8 +185,11 @@ pub async fn exported_text(suggested_name: String, exported_text: String) -> Tex
         .build()
         .save_future(active_application_window().as_ref())
         .await;
-    match chosen_file {
-        Err(_dialog_dismissed) => TextExportOutcome::ExportCancelled,
+    match chosen_file.map_err(FileDialogEnding::from) {
+        Err(FileDialogEnding::DismissedByUser) => TextExportOutcome::ExportCancelled,
+        Err(FileDialogEnding::DialogBroke(dialog_failure)) => {
+            TextExportOutcome::ExportFailed(dialog_failure)
+        }
         Ok(chosen_file) => match chosen_file
             .replace_contents_future(
                 exported_text.into_bytes(),
