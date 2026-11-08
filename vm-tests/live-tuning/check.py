@@ -103,6 +103,12 @@ machine.succeed("systemctl start clamav-daemon.service")
 machine.wait_for_unit("clamav-daemon.service")
 wait_for_clamd()
 
+with subtest("the privileged units run sandboxed"):
+    for privileged_unit in ["lazaret-clamav-admin.service", "lazaret-settings-merge.service", "lazaret-reduction-expiry.service"]:
+        exposure_report = machine.succeed(f"systemd-analyze security --no-pager {privileged_unit}")
+        exposure_score = float(exposure_report.strip().splitlines()[-1].split("level for")[-1].split(":")[1].split()[0])
+        assert exposure_score <= 3.0, f"{privileged_unit} exposure {exposure_score}:\n{exposure_report}"
+
 with subtest("the socket survives a daemon restart"):
     machine.succeed("test -S /run/clamav/clamd.ctl")
     machine.succeed("systemctl restart clamav-daemon.service")

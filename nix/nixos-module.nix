@@ -81,6 +81,31 @@ let
   );
   liveTuningBind = [ "-${mergedConfigPath}:/etc/clamav/clamd.conf" ];
 
+  privilegedUnitSandbox = {
+    PrivateTmp = true;
+    PrivateDevices = true;
+    PrivateNetwork = true;
+    ProtectHome = true;
+    ProtectSystem = "strict";
+    ProtectKernelTunables = true;
+    ProtectKernelModules = true;
+    ProtectKernelLogs = true;
+    ProtectControlGroups = true;
+    ProtectClock = true;
+    ProtectHostname = true;
+    NoNewPrivileges = true;
+    RestrictAddressFamilies = [ "AF_UNIX" ];
+    RestrictNamespaces = true;
+    RestrictRealtime = true;
+    RestrictSUIDSGID = true;
+    LockPersonality = true;
+    MemoryDenyWriteExecute = true;
+    SystemCallArchitectures = "native";
+    SystemCallFilter = [ "@system-service" ];
+    SystemCallErrorNumber = "EPERM";
+    UMask = "0022";
+  };
+
   adminServiceDataFiles = pkgs.linkFarm "lazaret-clamav-admin-data" [
     {
       name = "share/polkit-1/actions/page.codeberg.wvhulle.Lazaret.policy";
@@ -226,11 +251,12 @@ in
             "/run/lazaret"
             "-/var/lib/clamav"
           ];
-          NoNewPrivileges = true;
-          PrivateTmp = true;
-          ProtectHome = true;
-          ProtectSystem = "strict";
-        };
+          CapabilityBoundingSet = [
+            "CAP_DAC_OVERRIDE"
+            "CAP_DAC_READ_SEARCH"
+          ];
+        }
+        // privilegedUnitSandbox;
       };
 
       systemd.services.lazaret-settings-merge = {
@@ -250,7 +276,9 @@ in
           RuntimeDirectory = "lazaret";
           RuntimeDirectoryPreserve = true;
           ExecStart = "${lib.getExe liveTuning.adminServicePackage} merge";
-        };
+          CapabilityBoundingSet = [ "CAP_DAC_READ_SEARCH" ];
+        }
+        // privilegedUnitSandbox;
       };
 
       systemd.services.lazaret-reduction-expiry = {
@@ -259,7 +287,10 @@ in
         serviceConfig = {
           Type = "oneshot";
           ExecStart = "${lib.getExe liveTuning.adminServicePackage} expire";
-        };
+          ReadWritePaths = [ "/var/lib/lazaret" ];
+          CapabilityBoundingSet = [ "CAP_DAC_READ_SEARCH" ];
+        }
+        // privilegedUnitSandbox;
       };
 
       systemd.timers.lazaret-reduction-expiry = {
