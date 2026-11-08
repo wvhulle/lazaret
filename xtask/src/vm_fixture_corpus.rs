@@ -21,12 +21,10 @@ const ARCHIVED_SAMPLE_NAME: &str = "invoice.pdf.exe";
 const ARCHIVE_SAMPLE_NAME: &str = "holiday photos.zip";
 const CERTIFICATE_LIFETIME_DAYS: &str = "3650";
 
-const FAKE_INTERNET_HOSTS: [&str; 7] = [
+const FAKE_INTERNET_HOSTS: [&str; 5] = [
     "mb-api.abuse.ch",
     "hashlookup.circl.lu",
     "www.virustotal.com",
-    "www.clamav.net",
-    "clamav-site.s3.amazonaws.com",
     "urlhaus-api.abuse.ch",
     "signatures.fixture.test",
 ];

@@ -9,11 +9,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-VIRUSTOTAL_ANALYSIS_PREFIX = "fixture-analysis/"
-CLAMAV_SESSION_COOKIE = "_clamav-net_session=fixture-session-cookie"
-CLAMAV_AUTHENTICITY_TOKEN = "fixture-authenticity-token"
-
-
 class FakeInternetState:
     def __init__(self, state_directory, signature_directory):
         self.state_directory = Path(state_directory)
@@ -22,8 +17,6 @@ class FakeInternetState:
         self.scenario_path = self.state_directory / "scenario.json"
         self.state_lock = threading.Lock()
         self.bazaar_uploaded_hashes = set()
-        self.virustotal_uploaded_hashes = set()
-        self.virustotal_analysis_polls = {}
 
     def scenario_overrides(self):
         try:
@@ -144,11 +137,7 @@ class FakeInternetHandler(BaseHTTPRequestHandler):
         if requested_host == "hashlookup.circl.lu":
             return "circl_lookup", 404, json_headers, {"message": "Non existing SHA-256"}
         if requested_host == "www.virustotal.com":
-            return self.virustotal_answer(requested_url, form_fields, json_headers)
-        if requested_host == "www.clamav.net":
-            return self.clamav_answer(requested_url)
-        if requested_host == "clamav-site.s3.amazonaws.com":
-            return "clamav_sample_upload", 204, {}, b""
+            return self.virustotal_answer(requested_url, json_headers)
         if requested_host == "signatures.fixture.test":
             return self.signature_answer(requested_url)
         if requested_host == "urlhaus-api.abuse.ch":
@@ -195,76 +184,16 @@ class FakeInternetHandler(BaseHTTPRequestHandler):
             return "bazaar_get_info", 200, json_headers, {"query_status": "hash_not_found"}
         return "bazaar_unknown_query", 200, json_headers, {"query_status": "unknown_query"}
 
-    def virustotal_answer(self, requested_url, form_fields, json_headers):
-        virustotal_state = self.fake_internet_state
-        request_path = requested_url.path
-        if request_path == "/api/v3/files" and "file" in form_fields:
-            uploaded_hash = form_fields["file"]["content_sha256"]
-            with virustotal_state.state_lock:
-                virustotal_state.virustotal_uploaded_hashes.add(uploaded_hash)
-            return (
-                "virustotal_upload",
-                200,
-                json_headers,
-                {"data": {"type": "analysis", "id": f"{VIRUSTOTAL_ANALYSIS_PREFIX}{uploaded_hash}=="}},
-            )
-        if request_path.startswith("/api/v3/files/"):
+    @staticmethod
+    def virustotal_answer(requested_url, json_headers):
+        if requested_url.path.startswith("/api/v3/files/"):
             return (
                 "virustotal_file_report",
                 404,
                 json_headers,
                 {"error": {"code": "NotFoundError", "message": "File not found"}},
             )
-        if request_path.startswith("/api/v3/analyses/"):
-            analysis_id = request_path.removeprefix("/api/v3/analyses/")
-            with virustotal_state.state_lock:
-                poll_count = virustotal_state.virustotal_analysis_polls.get(analysis_id, 0) + 1
-                virustotal_state.virustotal_analysis_polls[analysis_id] = poll_count
-            analysis_status = "queued" if poll_count == 1 else "completed"
-            return (
-                "virustotal_analysis",
-                200,
-                json_headers,
-                {
-                    "data": {
-                        "id": analysis_id,
-                        "attributes": {
-                            "status": analysis_status,
-                            "stats": {"malicious": 41, "suspicious": 2, "undetected": 20, "harmless": 0},
-                        },
-                    }
-                },
-            )
         return "virustotal_unknown_path", 404, json_headers, {"error": {"code": "NotFoundError"}}
-
-    def clamav_answer(self, requested_url):
-        request_path = requested_url.path
-        if request_path in ("/reports/fp", "/reports/malware"):
-            return (
-                "clamav_report_form",
-                200,
-                {"Content-Type": "text/html", "Set-Cookie": f"{CLAMAV_SESSION_COOKIE}; path=/; HttpOnly"},
-                f'<form><input type="hidden" name="authenticity_token" value="{CLAMAV_AUTHENTICITY_TOKEN}" /></form>',
-            )
-        if request_path == "/presigned":
-            return (
-                "clamav_presigned",
-                200,
-                {"Content-Type": "application/json"},
-                {
-                    "key": "uploads/fixturesubmission-0001",
-                    "acl": "private",
-                    "policy": "fixture-policy",
-                    "x-amz-meta-original-filename": "clamsubmit",
-                    "x-amz-credential": "fixture-credential",
-                    "x-amz-algorithm": "AWS4-HMAC-SHA256",
-                    "x-amz-date": "20260101T000000Z",
-                    "x-amz-signature": "fixture-signature",
-                },
-            )
-        if request_path == "/reports/submit":
-            return "clamav_submit", 302, {"Location": "https://www.clamav.net/reports/success"}, b""
-        return "clamav_unknown_path", 404, {"Content-Type": "text/plain"}, "not found"
 
     def signature_answer(self, requested_url):
         release_name = self.fake_internet_state.scenario_overrides().get("signature_release", "v1")
