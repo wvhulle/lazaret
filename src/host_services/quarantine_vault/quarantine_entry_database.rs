@@ -560,12 +560,16 @@ impl QuarantineVault {
                 threat_identity,
             )
             .await;
-        spawn_blocking(move || {
-            if let Err(pending_failure) = pending_outcome {
+        if let Err(pending_failure) = pending_outcome {
+            spawn_blocking(move || discard_copied_payload(&copied_payload)).await?;
+            return Err(pending_failure);
+        }
+        let pending_destination = copied_payload.destination_path.clone();
+        let removal_outcome = spawn_blocking(move || {
+            if let Err(removal_failure) = remove_quarantined_source(&copied_payload) {
                 discard_copied_payload(&copied_payload);
-                return Err(pending_failure);
+                return Err(removal_failure);
             }
-            remove_quarantined_source(&copied_payload)?;
             Ok(RecordedPayload {
                 source_path: copied_payload.source_path,
                 destination_path: copied_payload.destination_path,
@@ -574,7 +578,11 @@ impl QuarantineVault {
                 original_permissions: copied_payload.original_permissions,
             })
         })
-        .await?
+        .await?;
+        if removal_outcome.is_err() {
+            self.forget_pending_move(&pending_destination).await;
+        }
+        removal_outcome
     }
 
     pub async fn move_file_into_quarantine(
@@ -1069,6 +1077,37 @@ mod quarantine_entry_database_tests {
                 .payload_bytes,
             b"fixture payload"
         );
+    }
+
+    #[tokio::test]
+    async fn a_source_that_cannot_be_removed_leaves_no_payload_and_no_pending_row() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let vault_fixture = VaultFixture::open_fixture().await;
+        let locked_folder = vault_fixture.temporary_root.path().join("locked-folder");
+        fs::create_dir_all(&locked_folder).expect("locked folder");
+        let source_path = locked_folder.join("shared-report.exe");
+        fs::write(&source_path, b"readable but not removable").expect("source file");
+        fs::set_permissions(&locked_folder, fs::Permissions::from_mode(0o555))
+            .expect("read-only folder");
+        let move_outcome = vault_fixture
+            .quarantine_vault
+            .move_file_into_quarantine(&source_path, &signature_identity("Test.Signature"))
+            .await;
+        fs::set_permissions(&locked_folder, fs::Permissions::from_mode(0o755))
+            .expect("writable folder");
+        assert!(
+            move_outcome.is_err(),
+            "a file that stays in place was reported as moved"
+        );
+        assert!(source_path.exists(), "the original file disappeared");
+        assert_eq!(pending_row_count(&vault_fixture.temporary_root), 0);
+        let left_payloads = fs::read_dir(VaultFixture::quarantine_directory(
+            &vault_fixture.temporary_root,
+        ))
+        .expect("quarantine directory")
+        .count();
+        assert_eq!(left_payloads, 0, "a payload was left in the quarantine");
     }
 
     #[tokio::test]
