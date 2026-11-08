@@ -30,6 +30,35 @@ pub enum RemoteRefreshFailure {
     HistoryFailed(ActivityHistoryFailure),
 }
 
+struct ServiceRefresh {
+    refreshed_records: Vec<SubmissionRecord>,
+    record_failures: Vec<RemoteRefreshFailure>,
+}
+
+impl ServiceRefresh {
+    const fn empty() -> Self {
+        Self {
+            refreshed_records: Vec::new(),
+            record_failures: Vec::new(),
+        }
+    }
+
+    fn record_outcome<LookupFailure>(
+        &mut self,
+        awaiting_record: &SubmissionRecord,
+        lookup_outcome: Result<SubmissionState, LookupFailure>,
+        refresh_failure: fn(LookupFailure) -> RemoteRefreshFailure,
+    ) {
+        match lookup_outcome {
+            Ok(submission_state) => self.refreshed_records.push(SubmissionRecord {
+                submission_state,
+                ..awaiting_record.clone()
+            }),
+            Err(lookup_failure) => self.record_failures.push(refresh_failure(lookup_failure)),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct RemoteRefreshSummary {
     pub updated_count: usize,
@@ -64,27 +93,26 @@ async fn service_key(
 
 async fn refreshed_bazaar_records(
     awaiting_records: &[&SubmissionRecord],
-) -> Result<Vec<SubmissionRecord>, RemoteRefreshFailure> {
+) -> Result<ServiceRefresh, RemoteRefreshFailure> {
     let auth_key = service_key(
         ThreatIntelService::AbuseChService,
         SubmissionService::MalwareBazaar,
     )
     .await?;
-    let mut refreshed_records = Vec::new();
+    let mut service_refresh = ServiceRefresh::empty();
     for awaiting_record in awaiting_records {
-        refreshed_records.push(SubmissionRecord {
-            submission_state: refreshed_bazaar_state(&auth_key, awaiting_record)
-                .await
-                .map_err(RemoteRefreshFailure::BazaarLookupFailed)?,
-            ..(*awaiting_record).clone()
-        });
+        service_refresh.record_outcome(
+            awaiting_record,
+            refreshed_bazaar_state(&auth_key, awaiting_record).await,
+            RemoteRefreshFailure::BazaarLookupFailed,
+        );
     }
-    Ok(refreshed_records)
+    Ok(service_refresh)
 }
 
 async fn refreshed_virustotal_records(
     awaiting_records: &[&SubmissionRecord],
-) -> Result<Vec<SubmissionRecord>, RemoteRefreshFailure> {
+) -> Result<ServiceRefresh, RemoteRefreshFailure> {
     let virustotal_client = VirusTotalClient::with_api_key(
         service_key(
             ThreatIntelService::VirusTotalService,
@@ -93,16 +121,15 @@ async fn refreshed_virustotal_records(
         .await?,
     )
     .map_err(RemoteRefreshFailure::VirusTotalLookupFailed)?;
-    let mut refreshed_records = Vec::new();
+    let mut service_refresh = ServiceRefresh::empty();
     for awaiting_record in awaiting_records {
-        refreshed_records.push(SubmissionRecord {
-            submission_state: refreshed_virustotal_state(&virustotal_client, awaiting_record)
-                .await
-                .map_err(RemoteRefreshFailure::VirusTotalLookupFailed)?,
-            ..(*awaiting_record).clone()
-        });
+        service_refresh.record_outcome(
+            awaiting_record,
+            refreshed_virustotal_state(&virustotal_client, awaiting_record).await,
+            RemoteRefreshFailure::VirusTotalLookupFailed,
+        );
     }
-    Ok(refreshed_records)
+    Ok(service_refresh)
 }
 
 fn awaiting_records_of(
@@ -148,8 +175,11 @@ pub async fn refresh_remote_statuses(activity_history: &ActivityHistory) -> Remo
     };
     for refresh_outcome in refresh_outcomes {
         match refresh_outcome {
-            Ok(refreshed_records) => {
-                for refreshed_record in refreshed_records {
+            Ok(service_refresh) => {
+                refresh_summary
+                    .refresh_failures
+                    .extend(service_refresh.record_failures);
+                for refreshed_record in service_refresh.refreshed_records {
                     if awaits_remote_service(&refreshed_record.submission_state) {
                         continue;
                     }
@@ -175,9 +205,11 @@ pub async fn refresh_remote_statuses(activity_history: &ActivityHistory) -> Remo
 
 #[cfg(test)]
 mod remote_status_refresh_tests {
+    use jiff::Timestamp;
+
     use super::*;
     use crate::host_services::activity_history::submission_history_store::{
-        FalsePositiveReview, MissedMalwareReview,
+        FalsePositiveReview, MissedMalwareReview, SubmittedFile,
     };
 
     #[test]
@@ -224,5 +256,43 @@ mod remote_status_refresh_tests {
         .await;
         assert_eq!(refresh_summary.updated_count, 0);
         assert!(refresh_summary.refresh_failures.is_empty());
+    }
+
+    fn awaiting_bazaar_upload(hash_character: char) -> SubmissionRecord {
+        SubmissionRecord {
+            submitted_file: SubmittedFile {
+                content_sha256: hash_character.to_string().repeat(64),
+                file_name: "invoice.exe".to_owned(),
+            },
+            submitted_at: Timestamp::constant(100, 0),
+            submission_state: SubmissionState::MalwareBazaarSample {
+                bazaar_status: BazaarSampleStatus::UploadAccepted,
+            },
+        }
+    }
+
+    #[test]
+    fn a_failed_lookup_keeps_the_other_uploads_refreshed() {
+        let mut service_refresh = ServiceRefresh::empty();
+        service_refresh.record_outcome(
+            &awaiting_bazaar_upload('a'),
+            Err(MalwareBazaarFailure::UnexpectedStatus { status_code: 500 }),
+            RemoteRefreshFailure::BazaarLookupFailed,
+        );
+        service_refresh.record_outcome(
+            &awaiting_bazaar_upload('b'),
+            Ok::<_, MalwareBazaarFailure>(SubmissionState::MalwareBazaarSample {
+                bazaar_status: BazaarSampleStatus::ListedOnMalwareBazaar,
+            }),
+            RemoteRefreshFailure::BazaarLookupFailed,
+        );
+        assert_eq!(service_refresh.record_failures.len(), 1);
+        assert_eq!(service_refresh.refreshed_records.len(), 1);
+        assert_eq!(
+            service_refresh.refreshed_records[0]
+                .submitted_file
+                .content_sha256,
+            "b".repeat(64)
+        );
     }
 }
