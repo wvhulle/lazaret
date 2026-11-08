@@ -904,6 +904,7 @@ impl Component for ScanPage {
                 },
             ),
             ScanPageInput::ScanTargetsChosen(scan_targets) => {
+                self.scan_target_rows.guard().clear();
                 self.add_scan_targets(scan_targets);
                 self.start_chosen_targets_scan(&sender);
             }
