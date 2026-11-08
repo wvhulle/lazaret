@@ -323,6 +323,12 @@ fn describe_bazaar_lookup_failure(bazaar_failure: &MalwareBazaarFailure) -> Stri
         MalwareBazaarFailure::QueryRefused { query_status } => {
             translated_messages::findings::query_refused(query_status)
         }
+        MalwareBazaarFailure::RequestLimitReached => {
+            translated_messages::findings::request_limit_reached()
+        }
+        MalwareBazaarFailure::UnexpectedStatus { status_code } => {
+            translated_messages::findings::unexpected_status(status_code)
+        }
     }
 }
 

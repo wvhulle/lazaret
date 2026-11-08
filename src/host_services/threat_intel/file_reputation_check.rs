@@ -223,6 +223,12 @@ pub fn describe_bazaar_failure(bazaar_failure: &MalwareBazaarFailure) -> String 
         MalwareBazaarFailure::QueryRefused { query_status } => {
             translated_messages::host::query_refused(sanitize_scanner_line(query_status))
         }
+        MalwareBazaarFailure::RequestLimitReached => {
+            translated_messages::host::request_limit_reached_bazaar()
+        }
+        MalwareBazaarFailure::UnexpectedStatus { status_code } => {
+            translated_messages::host::unexpected_status_bazaar(status_code)
+        }
     }
 }
 
