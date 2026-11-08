@@ -63,23 +63,32 @@ impl FileManagerKind {
     }
 }
 
-fn double_quoted_body(launcher_path: &Path) -> String {
-    launcher_path.to_string_lossy().chars().fold(
-        String::new(),
-        |mut escaped_path, path_character| {
-            if matches!(path_character, '"' | '`' | '$' | '\\') {
-                escaped_path.push('\\');
-            }
-            escaped_path.push(path_character);
-            escaped_path
-        },
-    )
+fn double_quoted_word(launcher_word: &str) -> String {
+    let escaped_word =
+        launcher_word
+            .chars()
+            .fold(String::new(), |mut escaped_word, word_character| {
+                if matches!(word_character, '"' | '`' | '$' | '\\') {
+                    escaped_word.push('\\');
+                }
+                escaped_word.push(word_character);
+                escaped_word
+            });
+    format!("\"{escaped_word}\"")
 }
 
-pub fn file_manager_action_text(file_manager: FileManagerKind, launcher_path: &Path) -> String {
+pub fn file_manager_action_text(
+    file_manager: FileManagerKind,
+    launcher_words: &[String],
+) -> String {
+    let quoted_launcher = launcher_words
+        .iter()
+        .map(|launcher_word| double_quoted_word(launcher_word))
+        .collect::<Vec<_>>()
+        .join(" ");
     file_manager
         .action_template()
-        .replace(LAUNCHER_PLACEHOLDER, &double_quoted_body(launcher_path))
+        .replace(LAUNCHER_PLACEHOLDER, &quoted_launcher)
 }
 
 pub fn file_manager_action_installed(file_manager: FileManagerKind, data_directory: &Path) -> bool {
@@ -89,7 +98,7 @@ pub fn file_manager_action_installed(file_manager: FileManagerKind, data_directo
 pub fn install_file_manager_action(
     file_manager: FileManagerKind,
     data_directory: &Path,
-    launcher_path: &Path,
+    launcher_words: &[String],
 ) -> io::Result<()> {
     let action_path = file_manager.action_path(data_directory);
     if let Some(action_directory) = action_path.parent() {
@@ -97,7 +106,7 @@ pub fn install_file_manager_action(
     }
     fs::write(
         &action_path,
-        file_manager_action_text(file_manager, launcher_path),
+        file_manager_action_text(file_manager, launcher_words),
     )?;
     fs::set_permissions(
         &action_path,
@@ -124,13 +133,13 @@ mod file_manager_actions_tests {
     #[test]
     fn installing_and_removing_only_touches_the_action_file() {
         let data_root = tempfile::tempdir().expect("data root");
-        let launcher_path = Path::new("/usr/bin/lazaret");
+        let launcher_words = ["/usr/bin/lazaret".to_owned()];
         SUPPORTED_FILE_MANAGERS.iter().for_each(|file_manager| {
             assert!(!file_manager_action_installed(
                 *file_manager,
                 data_root.path()
             ));
-            install_file_manager_action(*file_manager, data_root.path(), launcher_path)
+            install_file_manager_action(*file_manager, data_root.path(), &launcher_words)
                 .expect("installed action");
             assert!(file_manager_action_installed(
                 *file_manager,
@@ -164,8 +173,44 @@ mod file_manager_actions_tests {
     fn launcher_paths_cannot_escape_their_quotes() {
         let action_text = file_manager_action_text(
             FileManagerKind::Nautilus,
-            Path::new("/opt/a\"$(touch x)`b`\\/lazaret"),
+            &["/opt/a\"$(touch x)`b`\\/lazaret".to_owned()],
         );
         assert!(action_text.contains("exec \"/opt/a\\\"\\$(touch x)\\`b\\`\\\\/lazaret\" \"$@\""));
+    }
+
+    #[test]
+    fn a_launcher_path_with_spaces_stays_one_word() {
+        let action_text = file_manager_action_text(
+            FileManagerKind::Nemo,
+            &["/home/someone/My Programs/lazaret".to_owned()],
+        );
+        assert!(action_text.contains("Exec=\"/home/someone/My Programs/lazaret\" %F"));
+    }
+
+    #[test]
+    fn a_flatpak_launcher_quotes_each_word() {
+        let launcher_words = [
+            "flatpak",
+            "run",
+            "--command=lazaret",
+            "page.codeberg.wvhulle.Lazaret",
+        ]
+        .map(str::to_owned);
+        [FileManagerKind::Nemo, FileManagerKind::Dolphin]
+            .into_iter()
+            .for_each(|file_manager| {
+                assert!(
+                    file_manager_action_text(file_manager, &launcher_words).contains(
+                        "Exec=\"flatpak\" \"run\" \"--command=lazaret\" \
+                         \"page.codeberg.wvhulle.Lazaret\" %F"
+                    )
+                );
+            });
+        assert!(
+            file_manager_action_text(FileManagerKind::Nautilus, &launcher_words).contains(
+                "exec \"flatpak\" \"run\" \"--command=lazaret\" \"page.codeberg.wvhulle.Lazaret\" \
+                 \"$@\""
+            )
+        );
     }
 }

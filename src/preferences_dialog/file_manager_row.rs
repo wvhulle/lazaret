@@ -4,14 +4,17 @@ use std::{
 };
 
 use gettextrs::gettext;
-use relm4::{FactorySender, adw, adw::prelude::*, gtk::glib, prelude::FactoryComponent};
+use relm4::{FactorySender, adw, adw::prelude::*, prelude::FactoryComponent};
 
 use crate::{
-    host_services::desktop::file_manager_actions::{
-        FileManagerKind, file_manager_action_installed, install_file_manager_action,
-        remove_file_manager_action,
+    host_services::desktop::{
+        file_manager_actions::{
+            FileManagerKind, file_manager_action_installed, install_file_manager_action,
+            remove_file_manager_action,
+        },
+        flatpak_sandbox::host_user_data_directory,
     },
-    scans::scheduled_scans_page::scan_schedule_units::current_launcher_path,
+    scans::scheduled_scans_page::scan_schedule_units::current_launcher_words,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -151,9 +154,9 @@ fn install_integration(
     file_manager: FileManagerKind,
     data_directory: &Path,
 ) -> Result<(), IntegrationChangeFailure> {
-    let launcher_path =
-        current_launcher_path().map_err(IntegrationChangeFailure::LauncherNotFound)?;
-    install_file_manager_action(file_manager, data_directory, &launcher_path)
+    let launcher_words =
+        current_launcher_words().map_err(IntegrationChangeFailure::LauncherNotFound)?;
+    install_file_manager_action(file_manager, data_directory, &launcher_words)
         .map_err(IntegrationChangeFailure::ActionUnwritable)
 }
 
@@ -244,7 +247,7 @@ impl FactoryComponent for FileManagerRow {
         _row_index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
-        let data_directory = glib::user_data_dir();
+        let data_directory = host_user_data_directory();
         Self {
             integration_state: settled_integration(read_integration_presence(
                 file_manager,
@@ -320,7 +323,7 @@ mod file_manager_row_tests {
         let change_attempt = install_file_manager_action(
             FileManagerKind::Nautilus,
             &data_directory,
-            std::path::Path::new("/usr/bin/lazaret"),
+            &["/usr/bin/lazaret".to_owned()],
         )
         .map_err(IntegrationChangeFailure::ActionUnwritable);
         let integration_state = integration_after_change(finished_integration_change(

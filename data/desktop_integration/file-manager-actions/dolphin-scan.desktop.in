@@ -7,4 +7,4 @@ Actions=lazaretScan;
 [Desktop Action lazaretScan]
 Name=Scan with Lazaret
 Icon=page.codeberg.wvhulle.Lazaret
-Exec="@LAUNCHER@" %F
+Exec=@LAUNCHER@ %F

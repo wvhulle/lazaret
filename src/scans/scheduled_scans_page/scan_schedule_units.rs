@@ -202,7 +202,7 @@ pub fn launcher_path_from(
         .unwrap_or(fallback_executable)
 }
 
-pub fn current_launcher_path() -> io::Result<PathBuf> {
+fn current_launcher_path() -> io::Result<PathBuf> {
     let current_executable = std::env::current_exe()?;
     Ok(launcher_path_from(
         &std::env::args_os().next().unwrap_or_default(),
@@ -211,7 +211,7 @@ pub fn current_launcher_path() -> io::Result<PathBuf> {
     ))
 }
 
-fn current_launcher_words() -> io::Result<Vec<String>> {
+pub fn current_launcher_words() -> io::Result<Vec<String>> {
     if running_in_flatpak() {
         return Ok(sandboxed_launcher_words(crate::APPLICATION_ID));
     }

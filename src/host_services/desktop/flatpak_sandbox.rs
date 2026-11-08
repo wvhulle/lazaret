@@ -6,9 +6,12 @@ use std::{
     sync::OnceLock,
 };
 
+use relm4::gtk::glib;
 use zbus::zvariant::Value;
 
 const FLATPAK_INFO_PATH: &str = "/.flatpak-info";
+const HOST_DATA_HOME_VARIABLE: &str = "HOST_XDG_DATA_HOME";
+const DEFAULT_DATA_HOME_IN_HOME: &str = ".local/share";
 const HOST_ROOT_IN_SANDBOX: &str = "/run/host";
 const FLATPAK_SPAWN_PROGRAM: &str = "flatpak-spawn";
 const PORTAL_BUS_NAME: &str = "org.freedesktop.portal.Desktop";
@@ -131,6 +134,18 @@ pub fn host_program_async_command(
     environment_variables: &[ProgramEnvironmentVariable],
 ) -> tokio::process::Command {
     tokio::process::Command::from(host_program_command(program_path, environment_variables))
+}
+
+pub fn host_user_data_directory() -> PathBuf {
+    if !running_in_flatpak() {
+        return glib::user_data_dir();
+    }
+    std::env::var_os(HOST_DATA_HOME_VARIABLE)
+        .filter(|host_data_home| !host_data_home.is_empty())
+        .map_or_else(
+            || glib::home_dir().join(DEFAULT_DATA_HOME_IN_HOME),
+            PathBuf::from,
+        )
 }
 
 pub fn sandboxed_launcher_words(application_id: &str) -> Vec<String> {
