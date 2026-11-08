@@ -70,12 +70,25 @@ let
           }
       '';
 
+  cacheFetch =
+    pkgs.runCommand "fetch-from-cache"
+      {
+        nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
+        meta.mainProgram = "fetch-from-cache";
+      }
+      ''
+        makeWrapper ${pkgs.lib.getExe xtask} $out/bin/fetch-from-cache \
+          --add-flags fetch-from-cache \
+          --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nix ]}
+      '';
+
   screenshots = pkgs.runCommand "lazaret-screenshots" { } ''
     ${pkgs.lib.getExe renderScreenshots} $out
   '';
 in
 {
   inherit
+    cacheFetch
     cachixPush
     publishScreenshots
     renderScreenshots

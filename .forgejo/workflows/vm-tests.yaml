@@ -6,6 +6,10 @@ on:
 jobs:
   vm-tests:
     runs-on: nix
+    strategy:
+      fail-fast: false
+      matrix:
+        journey: [desktop-user-journey, administrator-journey]
     env:
       NIX_CONFIG: |
         experimental-features = nix-command flakes
@@ -23,8 +27,18 @@ jobs:
       - name: Require KVM
         run: test -r /dev/kvm -a -w /dev/kvm
 
-      - name: Desktop user journey
-        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-desktop-user-journey
+      - name: Download from Cachix
+        run: nix run --quiet .#fetch-from-cache -- .#checks.x86_64-linux.vm-${{ matrix.journey }} .#push-to-cachix
 
-      - name: Administrator journey
-        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-administrator-journey
+      - name: Build the test machines
+        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-${{ matrix.journey }}.driver
+
+      - name: Run the journey
+        run: nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.vm-${{ matrix.journey }}
+
+      - name: Push to Cachix
+        if: always()
+        continue-on-error: true
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: nix run --quiet .#push-to-cachix -- .#checks.x86_64-linux.vm-${{ matrix.journey }}

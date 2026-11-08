@@ -25,6 +25,8 @@ The same tools are in the dev shell, so `cargo deny check`, `cargo machete`, `ty
 nix build path:.#checks.x86_64-linux.vm-administrator-journey
 ```
 
+In Forgejo Actions the two journeys run as separate jobs, so one failing doesn't hide the other. Each job pushes what it built to Cachix with the `CACHIX_AUTH_TOKEN` secret, including the result of a journey that passed, so a later commit that changes none of a journey's inputs downloads its result instead of booting the VM again.
+
 The VM tests are two journeys, each booting one desktop session with real ClamAV services:
 
 - `vm-desktop-user-journey` moves a fixture corpus through every Findings page: an on-access block and its alert, a manual scan, quarantine, reputation lookups, uploads to MalwareBazaar and VirusTotal, reports to ClamAV through `clamsubmit`, trusting and ignoring for one user, a signature update that fixes a false positive, restore, deletion and a scheduled scan.

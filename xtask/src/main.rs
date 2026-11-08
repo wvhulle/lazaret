@@ -23,7 +23,7 @@ use std::{path::PathBuf, process::ExitCode};
 use clap::{Parser, Subcommand};
 
 use crate::{
-    cachix_closure_push::push_build_closure,
+    cachix_closure_push::{fetch_from_cache, push_build_closure},
     ci_tool_preparation::{check_commit_messages, download_tools, prepare_ci_tools},
     debian_package::{build_debian_package, check_debian_package_install, ci_build_debian_package},
     dependency_update_pull_request::open_dependency_update_pull_request,
@@ -63,6 +63,10 @@ enum RepositoryTask {
         screenshots_directory: PathBuf,
     },
     PushToCachix {
+        #[arg(required = true)]
+        installables: Vec<String>,
+    },
+    FetchFromCache {
         #[arg(required = true)]
         installables: Vec<String>,
     },
@@ -124,6 +128,7 @@ fn run_repository_task(repository_task: RepositoryTask) -> Result<(), TaskFailur
             selected_scenarios,
         } => render_page_screenshots(&output_directory, &selected_scenarios),
         RepositoryTask::PushToCachix { installables } => push_build_closure(&installables),
+        RepositoryTask::FetchFromCache { installables } => fetch_from_cache(&installables),
         RepositoryTask::CheckCommits {
             fetch_target_branch,
             revision_ranges,

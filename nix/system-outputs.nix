@@ -317,6 +317,7 @@ in
     render-screenshots = screenshotRendering.renderScreenshots;
     publish-screenshots = screenshotRendering.publishScreenshots;
     push-to-cachix = screenshotRendering.cachixPush;
+    fetch-from-cache = screenshotRendering.cacheFetch;
     dependency-checks = pkgs.linkFarmFromDrvs "lazaret-dependency-checks" [
       dependencyAdvisories
       dependencyPolicy
@@ -373,6 +374,10 @@ in
       push-to-cachix = {
         type = "app";
         program = lib.getExe screenshotRendering.cachixPush;
+      };
+      fetch-from-cache = {
+        type = "app";
+        program = lib.getExe screenshotRendering.cacheFetch;
       };
     };
 

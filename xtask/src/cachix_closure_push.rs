@@ -89,6 +89,35 @@ pub fn push_build_closure(installables: &[String]) -> Result<(), TaskFailure> {
     }
 }
 
+pub fn fetch_from_cache(installables: &[String]) -> Result<(), TaskFailure> {
+    let fetch_status = Command::new("nix")
+        .args([
+            "build",
+            "--quiet",
+            "--no-link",
+            "--keep-going",
+            "--max-jobs",
+            "0",
+        ])
+        .args(installables)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|start_failure| TaskFailure::ToolNotStarted {
+            tool_name: "nix",
+            start_failure,
+        })?;
+    eprintln!(
+        "xtask: {}",
+        if fetch_status.success() {
+            "everything was in the cache, so nothing needs building"
+        } else {
+            "downloaded what the cache had; the rest is built in the next step"
+        }
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod cachix_closure_push_tests {
     use super::*;
