@@ -240,7 +240,7 @@ in
 
       systemd.services.lazaret-clamav-admin = {
         description = "Lazaret ClamAV admin service";
-        requires = [ "lazaret-settings-merge.service" ];
+        wants = [ "lazaret-settings-merge.service" ];
         after = [ "lazaret-settings-merge.service" ];
         serviceConfig = {
           Type = "dbus";

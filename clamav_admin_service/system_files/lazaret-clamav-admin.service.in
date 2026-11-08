@@ -1,6 +1,6 @@
 [Unit]
 Description=Lazaret ClamAV admin service
-Requires=lazaret-settings-merge.service
+Wants=lazaret-settings-merge.service
 After=lazaret-settings-merge.service
 
 [Service]
