@@ -283,11 +283,22 @@ fn ask_to_trust_for_all_users(
 
 fn show_scan_engine_page(journey_run: &JourneyRun) -> Result<(), JourneyFailure> {
     show_page(ApplicationPage::ScanEngine)?;
-    journey_run.await_shown(&row_titled(MAX_THREADS))
+    wait_until(
+        "the MaxThreads setting on the Scan Engine page",
+        SHORT_WAIT,
+        || {
+            Ok(journey_run.widgets.is_shown(&row_titled(MAX_THREADS))
+                || journey_run.widgets.is_shown(&max_threads_editor()))
+        },
+    )
+}
+
+fn max_threads_editor() -> WidgetTarget {
+    WidgetTarget::new(WidgetRole::SpinButton, MAX_THREADS)
 }
 
 fn edit_max_threads(journey_run: &JourneyRun, new_value: u32) -> Result<(), JourneyFailure> {
-    journey_run.press(&row_titled(MAX_THREADS))?;
+    journey_run.press(&max_threads_editor())?;
     send_keys(&[
         KeyInput::ControlChord(ChordKey::SelectAll),
         KeyInput::TypedText(&new_value.to_string()),
@@ -752,14 +763,14 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
                 |journey_run| {
                     journey_run
                         .widgets
-                        .await_shown_within(&row_titled(MAX_THREADS), Duration::from_secs(15))
+                        .await_shown_within(&max_threads_editor(), Duration::from_secs(15))
                 },
             );
             Ok(())
         },
     )?;
 
-    if journey_run.widgets.is_shown(&row_titled(MAX_THREADS)) {
+    if journey_run.widgets.is_shown(&max_threads_editor()) {
         journey_run.step(
             "editing and confirming applies through a real password prompt",
             |journey_run| {
