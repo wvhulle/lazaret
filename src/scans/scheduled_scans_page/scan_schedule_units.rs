@@ -20,6 +20,7 @@ const SERVICE_TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/data/user_units/lazaret-scheduled-scan.service.in"
 ));
+const NIX_STORE_DIRECTORY: &str = "/nix/store";
 const TIMER_TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/data/user_units/lazaret-scheduled-scan.timer.in"
@@ -184,6 +185,17 @@ pub fn timer_unit_text(scan_schedule: &ScanSchedule) -> String {
     TIMER_TEMPLATE.replace("@ON_CALENDAR@", &on_calendar_expression(scan_schedule))
 }
 
+fn is_in_nix_store(program_path: &Path) -> bool {
+    program_path.starts_with(NIX_STORE_DIRECTORY)
+}
+
+fn stable_search_path_entry(program_name: &OsStr, search_path: &OsStr) -> Option<PathBuf> {
+    std::env::split_paths(search_path)
+        .map(|search_directory| search_directory.join(program_name))
+        .filter(|candidate_path| !is_in_nix_store(candidate_path))
+        .find(|candidate_path| candidate_path.is_file())
+}
+
 pub fn launcher_path_from(
     invoked_program: &OsStr,
     search_path: &OsStr,
@@ -191,7 +203,13 @@ pub fn launcher_path_from(
 ) -> PathBuf {
     let invoked_path = Path::new(invoked_program);
     if invoked_path.is_absolute() {
-        return invoked_path.to_path_buf();
+        return match invoked_path.file_name() {
+            Some(program_name) if is_in_nix_store(invoked_path) => {
+                stable_search_path_entry(program_name, search_path)
+                    .unwrap_or_else(|| invoked_path.to_path_buf())
+            }
+            _ => invoked_path.to_path_buf(),
+        };
     }
     if invoked_path.components().count() > 1 {
         return fallback_executable;
@@ -535,6 +553,26 @@ mod scan_schedule_units_tests {
                 PathBuf::from("/fallback")
             ),
             PathBuf::from("/fallback")
+        );
+    }
+
+    #[test]
+    fn a_nix_store_launcher_is_replaced_by_its_stable_profile_entry() {
+        let profile_root = tempfile::tempdir().expect("profile root");
+        fs::write(profile_root.path().join("lazaret"), b"").expect("profile launcher");
+        let store_launcher = OsString::from("/nix/store/0000-lazaret-0.3.0/bin/lazaret");
+        let search_path = std::env::join_paths([
+            Path::new("/nix/store/0000-lazaret-0.3.0/bin"),
+            profile_root.path(),
+        ])
+        .expect("search path");
+        assert_eq!(
+            launcher_path_from(&store_launcher, &search_path, PathBuf::from("/fallback")),
+            profile_root.path().join("lazaret")
+        );
+        assert_eq!(
+            launcher_path_from(&store_launcher, OsStr::new(""), PathBuf::from("/fallback")),
+            PathBuf::from("/nix/store/0000-lazaret-0.3.0/bin/lazaret")
         );
     }
 }
