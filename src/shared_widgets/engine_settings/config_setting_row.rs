@@ -376,6 +376,14 @@ impl ConfigSettingRow {
     }
 
     fn editor_root(&self, editor_draft: &TypedSettingValue) -> adw::PreferencesRow {
+        let editor_row = self.unlabelled_editor_root(editor_draft);
+        editor_row
+            .upcast_ref::<gtk::Widget>()
+            .update_property(&[gtk::accessible::Property::Label(&self.setting_key)]);
+        editor_row
+    }
+
+    fn unlabelled_editor_root(&self, editor_draft: &TypedSettingValue) -> adw::PreferencesRow {
         match editor_draft {
             TypedSettingValue::BooleanValue(switch_position) => adw::SwitchRow::builder()
                 .use_markup(false)
