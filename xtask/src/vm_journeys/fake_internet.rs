@@ -102,15 +102,6 @@ impl RequestFilter {
 }
 
 impl RouteOverride {
-    pub fn json_answer(status: u16, body: Value) -> Self {
-        Self {
-            status,
-            body,
-            content_type: "application/json",
-            request_filter: RequestFilter::EveryRequest,
-        }
-    }
-
     pub fn html_page(status: u16, page_text: &str) -> Self {
         Self {
             status,

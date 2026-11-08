@@ -8,33 +8,25 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SubmissionService {
-    Clamav,
     MalwareBazaar,
-    VirusTotal,
 }
 
 impl SubmissionService {
     const fn stored_text(self) -> &'static str {
         match self {
-            Self::Clamav => "clamav",
             Self::MalwareBazaar => "malware_bazaar",
-            Self::VirusTotal => "virustotal",
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SubmissionKind {
-    FalsePositive,
-    MissedMalware,
     MalwareSample,
 }
 
 impl SubmissionKind {
     const fn stored_text(self) -> &'static str {
         match self {
-            Self::FalsePositive => "false_positive",
-            Self::MissedMalware => "missed_malware",
             Self::MalwareSample => "malware_sample",
         }
     }
@@ -42,25 +34,13 @@ impl SubmissionKind {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SubmissionStatus {
-    AwaitingReview,
-    FixedInDatabase,
-    NowDetected,
     UploadAccepted,
-    Listed,
-    AnalysisQueued,
-    Analysed,
 }
 
 impl SubmissionStatus {
     const fn stored_text(self) -> &'static str {
         match self {
-            Self::AwaitingReview => "awaiting_review",
-            Self::FixedInDatabase => "fixed_in_database",
-            Self::NowDetected => "now_detected",
             Self::UploadAccepted => "upload_accepted",
-            Self::Listed => "listed",
-            Self::AnalysisQueued => "analysis_queued",
-            Self::Analysed => "analysed",
         }
     }
 }
@@ -94,12 +74,6 @@ impl LazaretDatabase {
             &self.database_path,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        database_connection.busy_timeout(BUSY_TIMEOUT)?;
-        Ok(database_connection)
-    }
-
-    fn write_connection(&self) -> Result<Connection, JourneyFailure> {
-        let database_connection = Connection::open(&self.database_path)?;
         database_connection.busy_timeout(BUSY_TIMEOUT)?;
         Ok(database_connection)
     }
@@ -141,14 +115,6 @@ impl LazaretDatabase {
         )?)
     }
 
-    pub fn has_quarantine_entry_for(&self, path_fragment: &str) -> Result<bool, JourneyFailure> {
-        Ok(self.read_connection()?.query_row(
-            "SELECT COUNT(*) FROM quarantine WHERE instr(CAST(original_path AS TEXT), ?1) > 0",
-            params![path_fragment],
-            |count_row| count_row.get::<_, i64>(0),
-        )? > 0)
-    }
-
     pub fn quarantined_original_paths(&self) -> Result<Vec<Vec<u8>>, JourneyFailure> {
         let database_connection = self.read_connection()?;
         let mut path_statement =
@@ -157,35 +123,6 @@ impl LazaretDatabase {
             .query_map([], |path_row| path_row.get(0))?
             .collect::<Result<Vec<Vec<u8>>, _>>()?;
         Ok(original_paths)
-    }
-
-    pub fn payload_path_for(&self, path_fragment: &str) -> Result<Option<String>, JourneyFailure> {
-        Ok(self
-            .read_connection()?
-            .query_row(
-                "SELECT CAST(quarantine_path AS TEXT) FROM quarantine WHERE \
-                 instr(CAST(original_path AS TEXT), ?1) > 0",
-                params![path_fragment],
-                |path_row| path_row.get(0),
-            )
-            .optional()?)
-    }
-
-    pub fn pending_move_count(&self) -> Result<i64, JourneyFailure> {
-        Ok(self.read_connection()?.query_row(
-            "SELECT COUNT(*) FROM quarantine_pending",
-            [],
-            |count_row| count_row.get(0),
-        )?)
-    }
-
-    pub fn backdate_quarantine_entry(&self, path_fragment: &str) -> Result<(), JourneyFailure> {
-        self.write_connection()?.execute(
-            "UPDATE quarantine SET detection_date = '2020-01-01T00:00:00.000Z' WHERE \
-             instr(CAST(original_path AS TEXT), ?1) > 0",
-            params![path_fragment],
-        )?;
-        Ok(())
     }
 
     pub fn stored_detection(
@@ -278,24 +215,6 @@ impl LazaretDatabase {
             params![content_sha256],
             |count_row| count_row.get::<_, i64>(0),
         )? > 0)
-    }
-
-    pub fn trusted_content_count(&self) -> Result<i64, JourneyFailure> {
-        Ok(self.read_connection()?.query_row(
-            "SELECT COUNT(*) FROM trusted_contents",
-            [],
-            |count_row| count_row.get(0),
-        )?)
-    }
-
-    pub fn ignored_signatures(&self) -> Result<Vec<String>, JourneyFailure> {
-        let database_connection = self.read_connection()?;
-        let mut signature_statement =
-            database_connection.prepare("SELECT signature_name FROM ignored_signatures")?;
-        let ignored_names = signature_statement
-            .query_map([], |signature_row| signature_row.get(0))?
-            .collect::<Result<Vec<String>, _>>()?;
-        Ok(ignored_names)
     }
 
     pub fn update_activity_statuses(&self) -> Result<Vec<String>, JourneyFailure> {

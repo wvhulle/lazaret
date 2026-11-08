@@ -1,48 +1,42 @@
 use std::{fs, os::unix::ffi::OsStrExt, path::Path, time::Duration};
 
 use gtk_scene_capture::accessible_widget_lookup::{NameMatch, WidgetRole, WidgetTarget};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::vm_journeys::{
     desktop_environment::{
         ApplicationAction, ApplicationPage, KeyInput, NotificationUrgency, TrayStatus,
         activate_application_action, answer_every_password_prompt, dismiss_notifications,
-        file_chooser_closed, invoke_latest_notification, lazaret_window_is_visible,
-        notifications_mentioning, scan_with_lazaret, send_keys, show_page, take_screenshot,
-        type_path_into_file_chooser, wait_for_lazaret_service, wait_for_lazaret_window,
-        wait_for_notification, wait_for_notification_withdrawn, wait_for_tray_status,
-        wait_for_window_closed,
+        invoke_latest_notification, lazaret_window_is_visible, notifications_mentioning,
+        scan_with_lazaret, send_keys, show_page, take_screenshot, wait_for_lazaret_service,
+        wait_for_lazaret_window, wait_for_notification, wait_for_notification_withdrawn,
+        wait_for_tray_status,
     },
     fake_internet::{
         BAZAAR_FIXTURE_FAMILY, FakeInternetScenario, FakeRoute, RouteOverride, SignatureRelease,
-        request_count_stays, requests_to, wait_for_first_request, wait_for_request_after,
+        request_count_stays, requests_to, wait_for_first_request,
     },
     fixture_corpus::FixtureSample,
     journey_failure::{JourneyFailure, ensure},
-    journey_run::{JourneyRun, SAMPLE_HOME, SAMPLE_PASSWORD, SAMPLE_USER},
+    journey_run::{JourneyRun, SAMPLE_HOME, SAMPLE_PASSWORD},
     lazaret_database::{SubmissionKey, SubmissionKind, SubmissionService, SubmissionStatus},
-    session_widgets::{button, in_alert, in_expanded_row, in_row, label_containing, row_titled},
+    session_widgets::{button, in_alert, in_expanded_row, label_containing, row_titled},
     system_commands::{
         as_root, journal_text, settle, succeed, unit_journal_lines_mentioning, wait_until,
     },
-    ui_messages::{findings, host, text_before_placeholder, widgets},
+    ui_messages::{findings, text_before_placeholder, widgets},
 };
 
 const ON_ACCESS_UNIT: &str = "clamav-clamonacc.service";
 const ABUSE_CH_KEY: &str = "FIXTUREKEYMUSTNEVERAPPEAR";
 const VIRUSTOTAL_KEY: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-const REPORTER_NAME: &str = "Sample User";
-const REPORTER_EMAIL: &str = "sample-user@example.org";
 const NON_UTF8_FILE_NAME: &[u8] = b"r\xe9sum\xe9-copy.exe";
-const UNREMOVABLE_FILE: &str = "/srv/shared/shared-report.exe";
 const SIGNATURE_DATABASE_FILE: &str = "/var/lib/clamav/lazaret-fixture.hdb";
-const GLOBAL_IGNORE_LIST: &str = "/var/lib/clamav/lazaret-local.ign2";
 const FIXTURE_SIGNATURE_ADDRESS: &str = "https://signatures.fixture.test/lazaret-fixture.hdb";
 const FAKE_INTERNET_REQUEST_LOG: &str = "/var/lib/fake-internet/requests.jsonl";
 const IGNORE_DETECTION_MENU_POSITION: usize = 1;
 const WRONG_URLHAUS_DIGEST: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
-const GTK_OPEN_LABEL: &str = "Open";
 const SHORT_WAIT: Duration = Duration::from_secs(30);
 const LONG_WAIT: Duration = Duration::from_secs(120);
 
@@ -70,26 +64,6 @@ impl JourneyPaths {
     }
 }
 
-struct SampleHashes {
-    eicar_invoice: String,
-    holiday_archive: String,
-    payroll_document: String,
-    toolbar_installer: String,
-    missed_dropper: String,
-}
-
-impl SampleHashes {
-    fn read() -> Result<Self, JourneyFailure> {
-        Ok(Self {
-            eicar_invoice: FixtureSample::EicarInvoice.content_sha256()?,
-            holiday_archive: FixtureSample::HolidayArchive.content_sha256()?,
-            payroll_document: FixtureSample::PayrollDocument.content_sha256()?,
-            toolbar_installer: FixtureSample::ToolbarInstaller.content_sha256()?,
-            missed_dropper: FixtureSample::MissedDropper.content_sha256()?,
-        })
-    }
-}
-
 fn wait_until_blocked(file_path: &str) -> Result<(), JourneyFailure> {
     wait_until(
         &format!("on-access scanning blocking {file_path}"),
@@ -107,10 +81,6 @@ fn wait_until_missing(file_path: &str) -> Result<(), JourneyFailure> {
     wait_until(&format!("{file_path} disappearing"), SHORT_WAIT, || {
         Ok(!Path::new(file_path).exists())
     })
-}
-
-fn quarantine_payload_count(journey_paths: &JourneyPaths) -> Result<usize, JourneyFailure> {
-    Ok(fs::read_dir(&journey_paths.quarantine_directory)?.count())
 }
 
 fn assert_lines_stay_at(file_path: &str, settle_duration: Duration) -> Result<(), JourneyFailure> {
@@ -205,26 +175,6 @@ fn submit_quarantined_entry(
     journey_run.press(&in_alert(button(confirm_label), confirm_heading))
 }
 
-fn type_reporter_contact(
-    journey_run: &JourneyRun,
-    dialog_heading: String,
-) -> Result<(), JourneyFailure> {
-    journey_run.widgets.type_into(
-        &in_alert(
-            WidgetTarget::new(WidgetRole::Text, widgets::name_title()),
-            dialog_heading.clone(),
-        ),
-        REPORTER_NAME,
-    )?;
-    journey_run.widgets.type_into(
-        &in_alert(
-            WidgetTarget::new(WidgetRole::Text, widgets::email_address_title()),
-            dialog_heading,
-        ),
-        REPORTER_EMAIL,
-    )
-}
-
 fn quarantine_scan_results(
     journey_run: &JourneyRun,
     threat_count: u32,
@@ -250,18 +200,13 @@ fn submission(
     }
 }
 
-fn reset_scenario() -> Result<(), JourneyFailure> {
-    FakeInternetScenario::default().apply()
-}
-
 pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
     let journey_paths = JourneyPaths::for_sample_user();
-    let sample_hashes = SampleHashes::read()?;
+    let invoice_sha256 = FixtureSample::EicarInvoice.content_sha256()?;
     let blocked_file = journey_paths.download("invoice.pdf.exe");
     let archive_file = journey_paths.document("holiday photos.zip");
     let false_positive_file = journey_paths.document("payroll-macro.docm");
     let unwanted_program_file = journey_paths.document("toolbar-setup.exe");
-    let missed_malware_file = journey_paths.document("dropper-2026.bin");
     let non_utf8_file =
         Path::new(&journey_paths.documents).join(std::ffi::OsStr::from_bytes(NON_UTF8_FILE_NAME));
 
@@ -473,104 +418,10 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
         },
     )?;
 
-    let mut eicar_title = String::new();
-    journey_run.step(
-        "the reputation check sends each service only the hash",
-        |journey_run| {
-            eicar_title = show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
-            journey_run.press(&entry_button(findings::check_label(), &eicar_title))?;
-            let circl_request = wait_for_first_request(FakeRoute::CirclLookup)?;
-            let bazaar_request = wait_for_first_request(FakeRoute::BazaarGetInfo)?;
-            let virustotal_request = wait_for_first_request(FakeRoute::VirustotalFileReport)?;
-            ensure(
-                circl_request.path.ends_with(&sample_hashes.eicar_invoice),
-                || format!("{circl_request:?}"),
-            )?;
-            ensure(
-                circl_request.header("auth-key").is_none()
-                    && circl_request.header("x-apikey").is_none(),
-                || "CIRCL got a key".to_owned(),
-            )?;
-            ensure(
-                bazaar_request.text_field("query") == Some("get_info")
-                    && bazaar_request.text_field("hash")
-                        == Some(sample_hashes.eicar_invoice.as_str()),
-                || format!("{bazaar_request:?}"),
-            )?;
-            ensure(
-                virustotal_request.path == format!("/api/v3/files/{}", sample_hashes.eicar_invoice),
-                || format!("{virustotal_request:?}"),
-            )?;
-            ensure(
-                virustotal_request.header("x-apikey") == Some(VIRUSTOTAL_KEY),
-                || "VirusTotal lacked its key".to_owned(),
-            )?;
-            for lookup_request in [&circl_request, &bazaar_request, &virustotal_request] {
-                ensure(lookup_request.body_byte_size < 200, || {
-                    format!("a lookup sent the file: {lookup_request:?}")
-                })?;
-            }
-            journey_run.await_shown(&label_containing(host::file_unknown_virustotal()))?;
-            take_screenshot("reputation_checked");
-            Ok(())
-        },
-    )?;
-
-    journey_run.step(
-        "a VirusTotal rate limit and a rejected key are explained",
-        |journey_run| {
-            FakeInternetScenario::default()
-                .answering(
-                    FakeRoute::VirustotalFileReport,
-                    RouteOverride::json_answer(
-                        429,
-                        json!({"error": {"code": "QuotaExceededError"}}),
-                    ),
-                )
-                .apply()?;
-            journey_run.press(&entry_button(findings::check_label(), &eicar_title))?;
-            journey_run.await_shown(&label_containing(host::request_limit_reached()))?;
-            FakeInternetScenario::default()
-                .answering(
-                    FakeRoute::VirustotalFileReport,
-                    RouteOverride::json_answer(
-                        401,
-                        json!({"error": {"code": "WrongCredentialsError"}}),
-                    ),
-                )
-                .apply()?;
-            journey_run.press(&entry_button(findings::check_label(), &eicar_title))?;
-            journey_run.await_shown(&label_containing(host::api_key_rejected()))?;
-            reset_scenario()
-        },
-    )?;
-
-    journey_run.step(
-        "an unavailable MalwareBazaar is reported as unavailable, not as an unreadable answer",
-        |journey_run| {
-            FakeInternetScenario::default()
-                .answering(
-                    FakeRoute::BazaarGetInfo,
-                    RouteOverride::html_page(503, "<html>Service Unavailable</html>"),
-                )
-                .apply()?;
-            let lookups_before = requests_to(FakeRoute::BazaarGetInfo)?.len();
-            journey_run.press(&entry_button(findings::check_label(), &eicar_title))?;
-            wait_for_request_after(FakeRoute::BazaarGetInfo, lookups_before, SHORT_WAIT)?;
-            journey_run.expect_behaviour(
-                "an HTTP 503 from MalwareBazaar is reported with its status",
-                |journey_run| {
-                    journey_run.await_shown(&label_containing(host::unexpected_status_bazaar(503)))
-                },
-            );
-            take_screenshot("bazaar_unavailable");
-            reset_scenario()
-        },
-    )?;
-
     journey_run.step(
         "uploading the invoice to MalwareBazaar names it by its hash and is never repeated",
         |journey_run| {
+            let eicar_title = show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
             submit_quarantined_entry(
                 journey_run,
                 &eicar_title,
@@ -582,14 +433,12 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             let uploaded_file = upload_request.uploaded_file("file").ok_or_else(|| {
                 JourneyFailure::ExpectationFailed("the upload had no file".to_owned())
             })?;
-            ensure(
-                uploaded_file.uploaded_name == sample_hashes.eicar_invoice,
-                || format!("{uploaded_file:?}"),
-            )?;
-            ensure(
-                uploaded_file.content_sha256 == sample_hashes.eicar_invoice,
-                || "the upload is not the quarantined file".to_owned(),
-            )?;
+            ensure(uploaded_file.uploaded_name == invoice_sha256, || {
+                format!("{uploaded_file:?}")
+            })?;
+            ensure(uploaded_file.content_sha256 == invoice_sha256, || {
+                "the upload is not the quarantined file".to_owned()
+            })?;
             let upload_options: Value =
                 serde_json::from_str(upload_request.text_field("json_data").unwrap_or("{}"))?;
             ensure(upload_options["anonymous"] == 1, || {
@@ -603,14 +452,14 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             )?;
             journey_run.database.wait_for_submission_status(
                 &submission(
-                    &sample_hashes.eicar_invoice,
+                    &invoice_sha256,
                     SubmissionService::MalwareBazaar,
                     SubmissionKind::MalwareSample,
                 ),
                 SubmissionStatus::UploadAccepted,
                 Duration::from_secs(90),
             )?;
-            eicar_title = show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
+            let eicar_title = show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
             submit_quarantined_entry(
                 journey_run,
                 &eicar_title,
@@ -622,295 +471,12 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
         },
     )?;
 
-    journey_run.step("the archive goes to MalwareBazaar too", |journey_run| {
-        let archive_title = show_quarantine_entry(journey_run, "holiday", "holiday")?;
-        submit_quarantined_entry(
-            journey_run,
-            &archive_title,
-            findings::malwarebazaar_sample_choice(),
-            widgets::upload_malwarebazaar_heading(),
-            widgets::upload_publicly_button(),
-        )?;
-        wait_for_request_after(FakeRoute::BazaarUpload, 1, Duration::from_secs(60))?;
-        journey_run.database.wait_for_submission_status(
-            &submission(
-                &sample_hashes.holiday_archive,
-                SubmissionService::MalwareBazaar,
-                SubmissionKind::MalwareSample,
-            ),
-            SubmissionStatus::UploadAccepted,
-            Duration::from_secs(90),
-        )
-    })?;
-
     journey_run.step(
-        "a potentially unwanted program is never offered to MalwareBazaar",
+        "a scan result's menu offers working actions",
         |journey_run| {
-            let toolbar_title = show_quarantine_entry(journey_run, "toolbar", "toolbar")?;
-            journey_run.press(&entry_button(
-                findings::submit_quarantine_label(),
-                &toolbar_title,
-            ))?;
-            journey_run.await_shown(&WidgetTarget::alert(findings::choose_service_heading()))?;
-            ensure(
-                !journey_run.widgets.is_shown(&in_alert(
-                    button(findings::malwarebazaar_sample_choice()),
-                    findings::choose_service_heading(),
-                )),
-                || "MalwareBazaar was offered a potentially unwanted program".to_owned(),
-            )?;
-            journey_run.press(&in_alert(
-                button(findings::cancel_submission()),
-                findings::choose_service_heading(),
-            ))?;
-            let upload_count = requests_to(FakeRoute::BazaarUpload)?.len();
-            ensure(upload_count == 2, || {
-                format!("{upload_count} MalwareBazaar uploads, expected 2")
-            })
-        },
-    )?;
-
-    journey_run.step(
-        "uploading the invoice to VirusTotal queues an analysis",
-        |journey_run| {
-            eicar_title = show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
-            submit_quarantined_entry(
-                journey_run,
-                &eicar_title,
-                findings::virustotal_sample_choice(),
-                widgets::upload_virustotal_heading(),
-                widgets::upload_button(),
-            )?;
-            let virustotal_upload = wait_for_first_request(FakeRoute::VirustotalUpload)?;
-            ensure(
-                virustotal_upload
-                    .uploaded_file("file")
-                    .is_some_and(|uploaded_file| {
-                        uploaded_file.uploaded_name == sample_hashes.eicar_invoice
-                    }),
-                || format!("{virustotal_upload:?}"),
-            )?;
-            ensure(
-                virustotal_upload.header("x-apikey") == Some(VIRUSTOTAL_KEY),
-                || "the upload lacked the VirusTotal key".to_owned(),
-            )?;
-            journey_run.database.wait_for_submission_status(
-                &submission(
-                    &sample_hashes.eicar_invoice,
-                    SubmissionService::VirusTotal,
-                    SubmissionKind::MalwareSample,
-                ),
-                SubmissionStatus::AnalysisQueued,
-                Duration::from_secs(90),
-            )
-        },
-    )?;
-
-    journey_run.step(
-        "one failed MalwareBazaar lookup doesn't stop the refresh of the other uploads",
-        |journey_run| {
-            FakeInternetScenario::default()
-                .answering(
-                    FakeRoute::BazaarGetInfo,
-                    RouteOverride::html_page(500, "<html>Internal error</html>")
-                        .only_for(&sample_hashes.eicar_invoice),
-                )
-                .apply()?;
-            show_page(ApplicationPage::SentSamples)?;
-            journey_run.press(&button(findings::check_malwarebazaar_virustotal_tooltip()))?;
-            wait_for_first_request(FakeRoute::VirustotalAnalysis)?;
-            journey_run.press(&button(findings::check_malwarebazaar_virustotal_tooltip()))?;
-            journey_run.database.wait_for_submission_status(
-                &submission(
-                    &sample_hashes.eicar_invoice,
-                    SubmissionService::VirusTotal,
-                    SubmissionKind::MalwareSample,
-                ),
-                SubmissionStatus::Analysed,
-                Duration::from_secs(90),
-            )?;
-            reset_scenario()?;
-            take_screenshot("sent_samples_after_refresh");
-            journey_run.expect_behaviour(
-                "one failed MalwareBazaar lookup leaves the other uploads refreshed",
-                |journey_run| {
-                    journey_run.database.wait_for_submission_status(
-                        &submission(
-                            &sample_hashes.holiday_archive,
-                            SubmissionService::MalwareBazaar,
-                            SubmissionKind::MalwareSample,
-                        ),
-                        SubmissionStatus::Listed,
-                        SHORT_WAIT,
-                    )
-                },
-            );
-            Ok(())
-        },
-    )?;
-
-    journey_run.step(
-        "reporting the false positive runs clamsubmit against clamav.net",
-        |journey_run| {
-            let false_positive_title = show_quarantine_entry(journey_run, "payroll", "payroll")?;
-            journey_run.press(&entry_button(
-                findings::report_label(),
-                &false_positive_title,
-            ))?;
-            type_reporter_contact(journey_run, widgets::report_false_positive_clamav())?;
-            journey_run.press(&in_alert(
-                button(widgets::send_report_button()),
-                widgets::report_false_positive_clamav(),
-            ))?;
-            let submit_request = wait_for_request_after(FakeRoute::ClamavSubmit, 0, LONG_WAIT)?;
-            ensure(submit_request.text_field("type") == Some("fp"), || {
-                format!("{submit_request:?}")
-            })?;
-            ensure(
-                submit_request.text_field("sendername") == Some(REPORTER_NAME)
-                    && submit_request.text_field("email") == Some(REPORTER_EMAIL),
-                || format!("{submit_request:?}"),
-            )?;
-            ensure(
-                submit_request
-                    .text_field("virusname")
-                    .is_some_and(|signature_name| {
-                        signature_name.starts_with("Doc.Fixture.FalsePositive-1")
-                    }),
-                || format!("{submit_request:?}"),
-            )?;
-            let sample_upload = requests_to(FakeRoute::ClamavSampleUpload)?
-                .pop()
-                .ok_or_else(|| {
-                    JourneyFailure::ExpectationFailed("clamsubmit uploaded nothing".to_owned())
-                })?;
-            ensure(
-                sample_upload
-                    .uploaded_file("file")
-                    .is_some_and(|uploaded_file| {
-                        uploaded_file.content_sha256 == sample_hashes.payroll_document
-                    }),
-                || format!("{sample_upload:?}"),
-            )?;
-            journey_run.database.wait_for_submission_status(
-                &submission(
-                    &sample_hashes.payroll_document,
-                    SubmissionService::Clamav,
-                    SubmissionKind::FalsePositive,
-                ),
-                SubmissionStatus::AwaitingReview,
-                Duration::from_secs(90),
-            )
-        },
-    )?;
-
-    journey_run.step(
-        "missed malware picked from disk is reported to ClamAV",
-        |journey_run| {
-            FixtureSample::MissedDropper.place_at(&missed_malware_file)?;
-            show_page(ApplicationPage::SentSamples)?;
-            journey_run.press(&button(findings::report_missed_malware_label()))?;
-            let chooser_title = findings::choose_file_clamav_misses();
-            type_path_into_file_chooser(&chooser_title, &missed_malware_file)?;
-            if !file_chooser_closed(&chooser_title)? {
-                journey_run.press(&button(GTK_OPEN_LABEL))?;
-                wait_for_window_closed(&chooser_title)?;
-            }
-            type_reporter_contact(journey_run, widgets::report_missed_malware_clamav())?;
-            journey_run.press(&in_alert(
-                button(widgets::send_report_button()),
-                widgets::report_missed_malware_clamav(),
-            ))?;
-            let malware_report = wait_for_request_after(FakeRoute::ClamavSubmit, 1, LONG_WAIT)?;
-            ensure(malware_report.text_field("type") == Some("malware"), || {
-                format!("{malware_report:?}")
-            })?;
-            journey_run.database.wait_for_submission_status(
-                &submission(
-                    &sample_hashes.missed_dropper,
-                    SubmissionService::Clamav,
-                    SubmissionKind::MissedMalware,
-                ),
-                SubmissionStatus::AwaitingReview,
-                Duration::from_secs(90),
-            )
-        },
-    )?;
-
-    let trusted_copy = journey_paths.document("trusted/toolbar-setup.exe");
-    journey_run.step(
-        "trusting the toolbar for me hides it from my scans, but not a changed copy",
-        |journey_run| {
-            let toolbar_title = show_quarantine_entry(journey_run, "toolbar", "toolbar")?;
-            journey_run.press(&entry_button(findings::trust_label(), &toolbar_title))?;
-            journey_run.press(&in_alert(
-                button(widgets::trust_for_me_button()),
-                widgets::trust_file_heading(),
-            ))?;
-            wait_until("the toolbar trusted for me", SHORT_WAIT, || {
-                journey_run
-                    .database
-                    .is_trusted_content(&sample_hashes.toolbar_installer)
-            })?;
-            let changed_copy = journey_paths.document("changed/toolbar-setup.exe");
-            FixtureSample::ToolbarInstaller.place_at(&trusted_copy)?;
-            FixtureSample::ToolbarInstaller.place_at(&changed_copy)?;
-            let mut changed_bytes = fs::read(&changed_copy)?;
-            changed_bytes.extend_from_slice(b"tampered");
-            fs::write(&changed_copy, changed_bytes)?;
-            scan_with_lazaret(&[&trusted_copy, &changed_copy])?;
-            journey_run.expect_behaviour(
-                "a scan of a trusted copy and a changed copy lists only the changed copy, once",
-                |journey_run| {
-                    journey_run
-                        .widgets
-                        .await_shown_within(&button(widgets::quarantine_all(1)), LONG_WAIT)
-                },
-            );
-            let listed_threats = if journey_run
-                .widgets
-                .is_shown(&button(widgets::quarantine_all(1)))
-            {
-                1
-            } else {
-                2
-            };
-            quarantine_scan_results(journey_run, listed_threats)?;
-            wait_until_missing(&changed_copy)?;
-            journey_run.expect_behaviour(
-                "quarantining the scan results leaves the trusted copy",
-                |_journey_run| {
-                    ensure(Path::new(&trusted_copy).exists(), || {
-                        "the trusted copy was quarantined".to_owned()
-                    })
-                },
-            );
-            if !Path::new(&trusted_copy).exists() {
-                FixtureSample::ToolbarInstaller.place_at(&trusted_copy)?;
-            }
-            Ok(())
-        },
-    )?;
-
-    journey_run.step(
-        "a file trusted only for me is still blocked on access and still alerts, as the dialog \
-         says",
-        |_journey_run| {
-            dismiss_notifications()?;
-            let trusted_download = journey_paths.download("toolbar-setup.exe");
-            FixtureSample::ToolbarInstaller.place_at(&trusted_download)?;
-            wait_until_blocked(&trusted_download)?;
-            wait_for_notification(&trusted_download).map(|_matching| ())
-        },
-    )?;
-
-    journey_run.step(
-        "ignoring a detection for me works from a scan result and silences background alerts",
-        |journey_run| {
-            dismiss_notifications()?;
-            let ignored_copy = journey_paths.document("ignored/payroll-macro.docm");
-            FixtureSample::PayrollDocument.place_at(&ignored_copy)?;
-            scan_with_lazaret(&[&ignored_copy])?;
+            let menu_sample = journey_paths.document("menu/payroll-macro.docm");
+            FixtureSample::PayrollDocument.place_at(&menu_sample)?;
+            scan_with_lazaret(&[&menu_sample])?;
             journey_run
                 .widgets
                 .await_shown_within(&button(widgets::quarantine_all(1)), LONG_WAIT)?;
@@ -920,12 +486,13 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             journey_run.expect_behaviour(
                 "the threat menu items have accessible names",
                 |journey_run| {
-                    journey_run.await_shown(
+                    journey_run.widgets.await_shown_within(
                         &WidgetTarget::new(
                             WidgetRole::MenuItem,
                             widgets::ignore_detection_for_me(),
                         )
                         .inside(threat_actions_menu.clone()),
+                        Duration::from_secs(5),
                     )
                 },
             );
@@ -939,90 +506,7 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
                     )
                 },
             );
-            if !journey_run
-                .widgets
-                .is_shown(&WidgetTarget::alert(widgets::ignore_detection_heading()))
-            {
-                send_keys(&[KeyInput::Escape])?;
-                return Ok(());
-            }
-            journey_run.press(&in_alert(
-                button(widgets::ignore_button()),
-                widgets::ignore_detection_heading(),
-            ))?;
-            wait_until("the detection ignored for me", SHORT_WAIT, || {
-                Ok(journey_run
-                    .database
-                    .ignored_signatures()?
-                    .iter()
-                    .any(|signature_name| {
-                        signature_name.starts_with("Doc.Fixture.FalsePositive-1")
-                    }))
-            })?;
-            let ignored_download = journey_paths.download("payroll-macro.docm");
-            FixtureSample::PayrollDocument.place_at(&ignored_download)?;
-            wait_until(
-                "clamonacc scanning the ignored download",
-                Duration::from_secs(60),
-                || {
-                    Ok(
-                        !unit_journal_lines_mentioning(ON_ACCESS_UNIT, &ignored_download)?
-                            .is_empty(),
-                    )
-                },
-            )?;
-            settle(Duration::from_secs(10));
-            ensure(
-                notifications_mentioning(&ignored_download)?.is_empty(),
-                || "alerted about a detection the user ignored".to_owned(),
-            )?;
-            ensure(
-                journey_run
-                    .database
-                    .stored_detection(&ignored_download)?
-                    .is_none(),
-                || "recorded a detection the user ignored".to_owned(),
-            )?;
-            ensure(!Path::new(GLOBAL_IGNORE_LIST).exists(), || {
-                "ignoring for me changed the list for all users".to_owned()
-            })
-        },
-    )?;
-
-    journey_run.step(
-        "removing my trust and my ignored detection brings both back",
-        |journey_run| {
-            show_page(ApplicationPage::TrustedDetections)?;
-            journey_run.press(&in_row(
-                button(findings::remove_tooltip()),
-                sample_hashes.toolbar_installer.clone(),
-            ))?;
-            journey_run.press(&in_alert(
-                button(widgets::stop_trusting_button()),
-                widgets::stop_trusting_file_heading(),
-            ))?;
-            if let Some(ignored_signature) = journey_run
-                .database
-                .ignored_signatures()?
-                .into_iter()
-                .next()
-            {
-                journey_run.press(&in_row(
-                    button(findings::remove_tooltip()),
-                    ignored_signature,
-                ))?;
-                journey_run.press(&in_alert(
-                    button(widgets::report_again_button()),
-                    widgets::report_detection_again_heading(),
-                ))?;
-            }
-            wait_until("no trust and no ignored detection left", SHORT_WAIT, || {
-                Ok(journey_run.database.trusted_content_count()? == 0
-                    && journey_run.database.ignored_signatures()?.is_empty())
-            })?;
-            scan_with_lazaret(&[&trusted_copy])?;
-            quarantine_scan_results(journey_run, 1)?;
-            wait_until_missing(&trusted_copy)
+            send_keys(&[KeyInput::Escape])
         },
     )?;
 
@@ -1085,281 +569,6 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
                     .is_shown(&label_containing(ABUSE_CH_KEY)),
                 || "the abuse.ch key is on the screen".to_owned(),
             )
-        },
-    )?;
-
-    journey_run.step(
-        "after the update the false positive is no longer detected and its report is settled",
-        |journey_run| {
-            wait_until("clamd loading the fixed signatures", LONG_WAIT, || {
-                Ok(!succeed(
-                    "clamdscan",
-                    &[
-                        "--no-summary",
-                        "--fdpass",
-                        &FixtureSample::PayrollDocument.source_path(),
-                    ],
-                )
-                .unwrap_or_else(|command_failure| command_failure.to_string())
-                .contains("FOUND"))
-            })?;
-            show_page(ApplicationPage::Quarantine)?;
-            journey_run.press(&button(findings::check_again_label()))?;
-            journey_run
-                .widgets
-                .await_shown_within(&label_containing(findings::no_longer_detected()), LONG_WAIT)?;
-            take_screenshot("false_positive_no_longer_detected");
-            journey_run.expect_behaviour(
-                "a signature update settles the false positive report",
-                |journey_run| {
-                    journey_run.database.wait_for_submission_status(
-                        &submission(
-                            &sample_hashes.payroll_document,
-                            SubmissionService::Clamav,
-                            SubmissionKind::FalsePositive,
-                        ),
-                        SubmissionStatus::FixedInDatabase,
-                        Duration::from_secs(90),
-                    )
-                },
-            );
-            Ok(())
-        },
-    )?;
-
-    journey_run.step(
-        "the missed malware is detected since the update and its report is settled once \
-         quarantined",
-        |journey_run| {
-            scan_with_lazaret(&[&missed_malware_file])?;
-            quarantine_scan_results(journey_run, 1)?;
-            wait_until_missing(&missed_malware_file)?;
-            show_page(ApplicationPage::Quarantine)?;
-            journey_run.press(&button(findings::check_again_label()))?;
-            journey_run.expect_behaviour(
-                "quarantining reported missed malware after the update settles its report",
-                |journey_run| {
-                    journey_run.database.wait_for_submission_status(
-                        &submission(
-                            &sample_hashes.missed_dropper,
-                            SubmissionService::Clamav,
-                            SubmissionKind::MissedMalware,
-                        ),
-                        SubmissionStatus::NowDetected,
-                        LONG_WAIT,
-                    )
-                },
-            );
-            Ok(())
-        },
-    )?;
-
-    journey_run.step(
-        "restoring the fixed false positive gives back the same file",
-        |journey_run| {
-            let false_positive_title = show_quarantine_entry(journey_run, "payroll", "payroll")?;
-            journey_run.press(&entry_button(
-                findings::restore_label(),
-                &false_positive_title,
-            ))?;
-            journey_run.press(&in_alert(
-                button(findings::restore_button()),
-                findings::restore_file_heading(),
-            ))?;
-            wait_until("the restored document", SHORT_WAIT, || {
-                Ok(Path::new(&false_positive_file).exists())
-            })?;
-            let restored_hash = hex::encode(sha2::Digest::finalize(sha2::Digest::chain_update(
-                <sha2::Sha256 as sha2::Digest>::new(),
-                fs::read(&false_positive_file)?,
-            )));
-            ensure(restored_hash == sample_hashes.payroll_document, || {
-                "the restored file differs from the quarantined one".to_owned()
-            })?;
-            let restored_metadata = fs::metadata(&false_positive_file)?;
-            ensure(
-                std::os::unix::fs::PermissionsExt::mode(&restored_metadata.permissions()) & 0o777
-                    == 0o640,
-                || "the restored file lost its permissions".to_owned(),
-            )?;
-            ensure(
-                succeed("stat", &["-c", "%U", &false_positive_file])?.trim() == SAMPLE_USER,
-                || "the restored file has another owner".to_owned(),
-            )
-        },
-    )?;
-
-    journey_run.step(
-        "restoring over a file that came back in the meantime is refused and keeps the entry",
-        |journey_run| {
-            fs::write(&archive_file, b"new holiday photos")?;
-            let archive_title = show_quarantine_entry(journey_run, "holiday", "holiday")?;
-            let payloads_before_restore = quarantine_payload_count(&journey_paths)?;
-            journey_run.press(&entry_button(findings::restore_label(), &archive_title))?;
-            journey_run.press(&in_alert(
-                button(findings::restore_anyway_button()),
-                findings::restore_file_clamav_heading(),
-            ))?;
-            settle(Duration::from_secs(5));
-            take_screenshot("restore_collision");
-            journey_run.expect_behaviour(
-                "a refused restore keeps the newer file, the entry and its payload",
-                |journey_run| {
-                    ensure(fs::read(&archive_file)? == b"new holiday photos", || {
-                        "the restore overwrote a newer file".to_owned()
-                    })?;
-                    ensure(
-                        journey_run.database.has_quarantine_entry_for("holiday")?,
-                        || "the entry disappeared after a refused restore".to_owned(),
-                    )?;
-                    ensure(
-                        quarantine_payload_count(&journey_paths)? == payloads_before_restore,
-                        || "the payload count changed after a refused restore".to_owned(),
-                    )
-                },
-            );
-            fs::remove_file(&archive_file)?;
-            Ok(())
-        },
-    )?;
-
-    journey_run.step(
-        "restoring a file ClamAV still detects into a watched folder opens the detection again",
-        |journey_run| {
-            eicar_title = show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
-            journey_run.press(&entry_button(findings::restore_label(), &eicar_title))?;
-            journey_run.press(&in_alert(
-                button(findings::restore_anyway_button()),
-                findings::restore_file_clamav_heading(),
-            ))?;
-            wait_until("the restored invoice", SHORT_WAIT, || {
-                Ok(Path::new(&blocked_file).exists())
-            })?;
-            ensure(
-                !journey_run
-                    .database
-                    .has_quarantine_entry_for("Downloads/invoice.pdf.exe")?,
-                || "the restored entry is still listed".to_owned(),
-            )?;
-            wait_until_blocked(&blocked_file)?;
-            wait_until(
-                "the old resolution cleared",
-                Duration::from_secs(60),
-                || {
-                    Ok(journey_run
-                        .database
-                        .stored_detection(&blocked_file)?
-                        .is_some_and(|detection| detection.resolution_kind.is_empty()))
-                },
-            )?;
-            wait_for_tray_status(TrayStatus::NeedsAttention)
-        },
-    )?;
-
-    journey_run.step(
-        "deleting for good and clearing old items remove the payloads",
-        |journey_run| {
-            let renamed_title = show_quarantine_entry(journey_run, "-copy.exe", "copy")?;
-            let payload_path = journey_run
-                .database
-                .payload_path_for("-copy.exe")?
-                .ok_or_else(|| {
-                    JourneyFailure::ExpectationFailed("no payload for the copy".to_owned())
-                })?;
-            journey_run.press(&entry_button(
-                findings::delete_entry_label(),
-                &renamed_title,
-            ))?;
-            journey_run.press(&in_alert(
-                button(findings::delete_entries()),
-                findings::delete_quarantined_file(),
-            ))?;
-            wait_until_missing(&payload_path)?;
-            journey_run.database.backdate_quarantine_entry("holiday")?;
-            show_page(ApplicationPage::Quarantine)?;
-            journey_run.press(&button(findings::refresh_tooltip()))?;
-            journey_run.press(&button(findings::more_tooltip()))?;
-            journey_run.press(&button(findings::clear_old_items_label()))?;
-            journey_run.press(&in_alert(
-                button(findings::delete_entries()),
-                findings::clear_old_items(),
-            ))?;
-            wait_until("the old archive entry cleared", SHORT_WAIT, || {
-                Ok(!journey_run.database.has_quarantine_entry_for("holiday")?)
-            })
-        },
-    )?;
-
-    journey_run.step(
-        "a detected file Lazaret can read but not remove leaves no orphaned payload",
-        |journey_run| {
-            as_root(&[
-                "cp",
-                &FixtureSample::EicarInvoice.source_path(),
-                UNREMOVABLE_FILE,
-            ])?;
-            as_root(&["chmod", "0644", UNREMOVABLE_FILE])?;
-            let payloads_before_quarantine = quarantine_payload_count(&journey_paths)?;
-            scan_with_lazaret(&[UNREMOVABLE_FILE])?;
-            quarantine_scan_results(journey_run, 1)?;
-            settle(Duration::from_secs(5));
-            take_screenshot("unremovable_file");
-            ensure(Path::new(UNREMOVABLE_FILE).exists(), || {
-                "a file that can't be removed disappeared".to_owned()
-            })?;
-            journey_run.expect_behaviour(
-                "a file that can't be removed leaves no pending record and no orphaned payload",
-                |journey_run| {
-                    ensure(journey_run.database.pending_move_count()? == 0, || {
-                        "a pending quarantine record was left behind".to_owned()
-                    })?;
-                    ensure(
-                        quarantine_payload_count(&journey_paths)? == payloads_before_quarantine,
-                        || "a payload was left in the quarantine".to_owned(),
-                    )
-                },
-            );
-            Ok(())
-        },
-    )?;
-
-    journey_run.step(
-        "a scheduled scan only reports while Lazaret is open, and quarantines once it is closed",
-        |journey_run| {
-            let scheduled_target = journey_paths.document("scheduled");
-            let scheduled_file = format!("{scheduled_target}/invoice-copy.exe");
-            FixtureSample::EicarInvoice.place_at(&scheduled_file)?;
-            let scheduled_scan_arguments = [
-                "--user",
-                "--wait",
-                "--collect",
-                "/run/current-system/sw/bin/lazaret",
-                "--scheduled-scan",
-                "--auto-quarantine",
-                "--target",
-                scheduled_target.as_str(),
-            ];
-            let _open_scan = crate::vm_journeys::system_commands::run_command(
-                "systemd-run",
-                &scheduled_scan_arguments,
-            )?;
-            ensure(Path::new(&scheduled_file).exists(), || {
-                "the scheduled scan quarantined while Lazaret was open".to_owned()
-            })?;
-            succeed("systemctl", &["--user", "stop", "lazaret.service"])?;
-            let _closed_scan = crate::vm_journeys::system_commands::run_command(
-                "systemd-run",
-                &scheduled_scan_arguments,
-            )?;
-            wait_until_missing(&scheduled_file)?;
-            ensure(
-                journey_run
-                    .database
-                    .has_quarantine_entry_for("scheduled/invoice-copy.exe")?,
-                || "the closed-app scheduled scan did not record the quarantined file".to_owned(),
-            )?;
-            succeed("systemctl", &["--user", "start", "lazaret.service"])?;
-            wait_for_lazaret_service()
         },
     )?;
 

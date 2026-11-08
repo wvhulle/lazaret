@@ -7,7 +7,6 @@ use crate::vm_journeys::{
     lazaret_database::LazaretDatabase, session_widgets::SessionWidgets,
 };
 
-pub const SAMPLE_USER: &str = "sample-user";
 pub const SAMPLE_PASSWORD: &str = "sample-password";
 pub const SAMPLE_HOME: &str = "/home/sample-user";
 

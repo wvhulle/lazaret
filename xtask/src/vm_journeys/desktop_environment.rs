@@ -39,7 +39,6 @@ pub enum ApplicationPage {
     Detections,
     Quarantine,
     TrustedDetections,
-    SentSamples,
     ScheduledScans,
     ScanEngine,
     SignatureSources,
@@ -51,7 +50,6 @@ impl ApplicationPage {
             Self::Detections => "detections",
             Self::Quarantine => "quarantine",
             Self::TrustedDetections => "trusted-detections",
-            Self::SentSamples => "sent-samples",
             Self::ScheduledScans => "scheduled-scans",
             Self::ScanEngine => "scan-engine",
             Self::SignatureSources => "signature-sources",
@@ -266,14 +264,12 @@ const TYPING_DELAY_MILLISECONDS: &str = "20";
 #[derive(Clone, Copy, Debug)]
 pub enum ChordKey {
     SelectAll,
-    Location,
 }
 
 impl ChordKey {
     const fn keycode(self) -> u16 {
         match self {
             Self::SelectAll => 30,
-            Self::Location => 38,
         }
     }
 }
@@ -356,27 +352,6 @@ pub fn dismiss_password_prompt() -> Result<(), JourneyFailure> {
     wait_for_focused_window(PASSWORD_PROMPT_TITLE)?;
     send_keys(&[KeyInput::Escape])?;
     wait_for_window_closed(PASSWORD_PROMPT_TITLE)
-}
-
-pub fn type_path_into_file_chooser(
-    dialog_title: &str,
-    chosen_path: &str,
-) -> Result<(), JourneyFailure> {
-    wait_for_focused_window(dialog_title)?;
-    send_keys(&[
-        KeyInput::ControlChord(ChordKey::Location),
-        KeyInput::TypedText(chosen_path),
-        KeyInput::Enter,
-    ])
-}
-
-pub fn file_chooser_closed(dialog_title: &str) -> Result<bool, JourneyFailure> {
-    let closing_outcome = wait_until(
-        &format!("the window titled {dialog_title:?} closing"),
-        Duration::from_secs(5),
-        || Ok(!window_titled_is_open(dialog_title)?),
-    );
-    Ok(closing_outcome.is_ok())
 }
 
 pub fn take_screenshot(screenshot_name: &str) {

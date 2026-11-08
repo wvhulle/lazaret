@@ -11,7 +11,6 @@ pub enum FixtureSample {
     HolidayArchive,
     PayrollDocument,
     ToolbarInstaller,
-    MissedDropper,
 }
 
 impl FixtureSample {
@@ -21,7 +20,6 @@ impl FixtureSample {
             Self::HolidayArchive => "holiday photos.zip",
             Self::PayrollDocument => "payroll-macro.docm",
             Self::ToolbarInstaller => "toolbar-setup.exe",
-            Self::MissedDropper => "dropper-2026.bin",
         }
     }
 
