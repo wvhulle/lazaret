@@ -10,7 +10,8 @@ use relm4::{
 use crate::{
     host_services::{
         activity_history::activity_history_database::{
-            ActivityRecord, FoundThreatCount, NewActivityEntry, ScanActivityStatus, ScanOrigin,
+            ActivityHistory, ActivityRecord, FoundThreatCount, NewActivityEntry,
+            ScanActivityStatus, ScanOrigin,
         },
         clamav_config::detection_options::read_host_clamscan_detection_arguments,
         clamav_scanner::{
@@ -18,14 +19,17 @@ use crate::{
             scan_progress_events::{ScanProgressEvent, ScanRequest, scan_progress_events},
             scanner_command_builder::{ScannerProgramPaths, choose_scanner_backend},
             scanner_process_events::ScanStartFailure,
+            user_trusted_threats::skipping_user_trusted_threats,
         },
         desktop::{
+            application_directories::application_data_directory,
             desktop_notifications::notify_outside_the_window,
             stored_settings::{
                 SHOW_LIVE_PROGRESS_KEY, application_settings, read_exclusion_entries,
                 scanner_backend_preference,
             },
         },
+        lazaret_database::locked_database_connection::lazaret_database_path,
     },
     shared_widgets::{
         component_streams::run_stream_then,
@@ -99,17 +103,27 @@ where
         let scanner_programs = ScannerProgramPaths::locate_trusted_programs_in_background().await?;
         let scanner_backend = choose_scanner_backend(backend_preference, &scanner_programs).await;
         let detection_arguments = read_host_clamscan_detection_arguments().await?;
-        Ok::<ScanRequest, ScanStartFailure>(ScanRequest {
-            scan_exclusions,
-            scan_targets,
-            scanner_backend,
-            scanner_programs,
-            file_list_directory,
-            detection_arguments,
-        })
+        let user_trust_loading =
+            ActivityHistory::at_database_path(lazaret_database_path(&application_data_directory()))
+                .load_user_trust()
+                .await;
+        Ok::<_, ScanStartFailure>((
+            ScanRequest {
+                scan_exclusions,
+                scan_targets,
+                scanner_backend,
+                scanner_programs,
+                file_list_directory,
+                detection_arguments,
+            },
+            user_trust_loading,
+        ))
     })
     .flat_map(|scan_request| match scan_request {
-        Ok(scan_request) => scan_progress_events(scan_request).left_stream(),
+        Ok((scan_request, user_trust_loading)) => {
+            skipping_user_trusted_threats(scan_progress_events(scan_request), user_trust_loading)
+                .left_stream()
+        }
         Err(start_failure) => stream::once(ready(ScanProgressEvent::ScanPhaseUnstartable(
             start_failure,
         )))

@@ -11,6 +11,12 @@ pub enum TrustRemoval {
 }
 
 #[derive(Clone, Debug)]
+pub enum TrustPromotion {
+    NotPromotable,
+    PromotableWith(TrustChoice),
+}
+
+#[derive(Clone, Debug)]
 pub struct TrustListRow {
     pub row_title: String,
     pub row_subtitle: String,
@@ -18,11 +24,13 @@ pub struct TrustListRow {
     pub needs_attention: bool,
     pub dimmed: bool,
     pub trust_removal: TrustRemoval,
+    pub trust_promotion: TrustPromotion,
 }
 
 #[derive(Debug)]
 pub enum TrustListRowOutput {
     RemovalRequested(TrustChoice),
+    PromotionRequested(TrustChoice),
 }
 
 impl TrustListRow {
@@ -34,11 +42,8 @@ impl TrustListRow {
             needs_attention: false,
             dimmed: true,
             trust_removal: TrustRemoval::NotRemovableHere,
+            trust_promotion: TrustPromotion::NotPromotable,
         }
-    }
-
-    fn is_removable(&self) -> bool {
-        matches!(self.trust_removal, TrustRemoval::RemovableWith(_))
     }
 
     fn row_style_classes(&self) -> Vec<&'static str> {
@@ -75,11 +80,24 @@ impl FactoryComponent for TrustListRow {
             },
 
             add_suffix = &gtk::Button {
+                set_icon_name: "system-users-symbolic",
+                set_tooltip_text: Some(&translated_messages::findings::trust_for_all_users_tooltip()),
+                set_valign: gtk::Align::Center,
+                add_css_class: "flat",
+                set_visible: matches!(self.trust_promotion, TrustPromotion::PromotableWith(_)),
+                connect_clicked[sender, trust_promotion = self.trust_promotion.clone()] => move |_clicked_button| {
+                    if let TrustPromotion::PromotableWith(promotion_choice) = &trust_promotion {
+                        let _page_closed = sender.output(TrustListRowOutput::PromotionRequested(promotion_choice.clone()));
+                    }
+                },
+            },
+
+            add_suffix = &gtk::Button {
                 set_icon_name: "user-trash-symbolic",
                 set_tooltip_text: Some(&translated_messages::findings::remove_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
-                set_visible: self.is_removable(),
+                set_visible: matches!(self.trust_removal, TrustRemoval::RemovableWith(_)),
                 connect_clicked[sender, trust_removal = self.trust_removal.clone()] => move |_clicked_button| {
                     if let TrustRemoval::RemovableWith(removal_choice) = &trust_removal {
                         let _page_closed = sender.output(TrustListRowOutput::RemovalRequested(removal_choice.clone()));

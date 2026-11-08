@@ -20,6 +20,7 @@ use crate::{
             scan_exclusion_rules::ScanExclusions,
             scan_progress_events::{CompletedScanOutcome, ScanRequest, scan_progress_events},
             scanner_command_builder::{ScannerProgramPaths, choose_scanner_backend},
+            user_trusted_threats::skipping_user_trusted_threats,
         },
         desktop::{
             application_directories::application_data_directory,
@@ -183,17 +184,21 @@ async fn run_scheduled_scan_async(scan_options: ScheduledScanOptions) -> ExitCod
     let scanner_programs = ScannerProgramPaths::locate_trusted_programs();
     let scanner_backend =
         choose_scanner_backend(scanner_backend_preference(&settings), &scanner_programs).await;
-    let scan_outcome = scan_progress_events(ScanRequest {
-        scan_targets: scan_targets.clone(),
-        scanner_backend,
-        scanner_programs,
-        file_list_directory: data_directory.clone(),
-        scan_exclusions: ScanExclusions::from_entries(
-            &read_exclusion_entries(&settings),
-            &glib::home_dir(),
-        ),
-        detection_arguments: host_clamscan_detection_arguments(),
-    })
+    let user_trust_loading = activity_history.load_user_trust().await;
+    let scan_outcome = skipping_user_trusted_threats(
+        scan_progress_events(ScanRequest {
+            scan_targets: scan_targets.clone(),
+            scanner_backend,
+            scanner_programs,
+            file_list_directory: data_directory.clone(),
+            scan_exclusions: ScanExclusions::from_entries(
+                &read_exclusion_entries(&settings),
+                &glib::home_dir(),
+            ),
+            detection_arguments: host_clamscan_detection_arguments(),
+        }),
+        user_trust_loading,
+    )
     .fold(
         CompletedScanOutcome::default(),
         |mut scan_outcome, progress_event| {

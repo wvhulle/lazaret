@@ -11,7 +11,7 @@ use crate::{
         EntryRowState, QuarantineRowInit, RowActivity, RowRecheckState, RowReputation,
     },
     host_services::{
-        clamav_admin_service::trust_requests::{FileFingerprint, TrustChoice},
+        clamav_admin_service::trust_requests::{FileFingerprint, TrustChoice, TrustScope},
         clamav_programs::clamav_report_submission::{ClamavReportKind, SubmittedContent},
         clamav_scanner::{
             content_verdict::ContentVerdict,
@@ -395,6 +395,7 @@ impl FactoryComponent for QuarantineEntryRow {
                         shown_path: sanitize_scanner_line(
                             &self.entry_record.original_path.to_string_lossy(),
                         ),
+                        trust_scope: TrustScope::OnlyThisUser,
                     },
                 ));
             }

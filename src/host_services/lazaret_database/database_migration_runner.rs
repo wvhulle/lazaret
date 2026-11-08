@@ -214,9 +214,11 @@ mod database_migration_runner_tests {
         apply_pending_migrations(&mut test_connection, LAZARET_MIGRATIONS)
             .await
             .expect("migrated");
-        assert_eq!(stored_user_version(&test_connection).await, 1);
+        assert_eq!(stored_user_version(&test_connection).await, 2);
         assert!(table_exists(&test_connection, "activity_entries").await);
         assert!(table_exists(&test_connection, "submissions").await);
+        assert!(table_exists(&test_connection, "trusted_contents").await);
+        assert!(table_exists(&test_connection, "ignored_signatures").await);
     }
 
     #[tokio::test]

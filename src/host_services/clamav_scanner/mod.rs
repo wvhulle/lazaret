@@ -8,3 +8,4 @@ pub mod scanner_command_builder;
 pub mod scanner_exit_classification;
 pub mod scanner_output_parser;
 pub mod scanner_process_events;
+pub mod user_trusted_threats;

@@ -38,7 +38,10 @@ pub fn describe_history_failure(history_failure: &ActivityHistoryFailure) -> Str
         | ActivityHistoryFailure::StoredDetectionUnreadable
         | ActivityHistoryFailure::StoredSubmissionUnreadable
         | ActivityHistoryFailure::StoredTimeInvalid(_)
-        | ActivityHistoryFailure::HistoryLockUnavailable(_) => history_failure.to_string(),
+        | ActivityHistoryFailure::HistoryLockUnavailable(_)
+        | ActivityHistoryFailure::TrustEntryRefused(_)
+        | ActivityHistoryFailure::ContentSizeUnstorable
+        | ActivityHistoryFailure::StoredTrustUnreadable => history_failure.to_string(),
     }
 }
 

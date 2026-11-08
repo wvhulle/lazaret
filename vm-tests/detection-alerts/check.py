@@ -117,3 +117,19 @@ with subtest("detections missed while closed are summarised once at the next sta
     wait_for_notification("while Lazaret wasn't running")
     assert not notifications_mentioning(SECOND_FILE), "alerted individually about a missed file"
     assert_lines_stay_at(ON_ACCESS_UNIT, SECOND_FILE, settle_seconds=10)
+
+with subtest("a detection the user ignored for themselves raises no alert"):
+    as_user("makoctl dismiss --all")
+    ignored_file = f"{DOWNLOADS}/ignored-for-me.exe"
+    as_user(
+        f"sqlite3 {LAZARET_DATABASE} "
+        "\"insert into ignored_signatures (signature_name, ignored_at_unix) values ('Win.Fixture.Agent-1', 0)\""
+    )
+    write_eicar_file(ignored_file)
+    machine.wait_until_succeeds(
+        f"journalctl -u {ON_ACCESS_UNIT} --no-pager | grep -q {ignored_file}", timeout=timedelta(seconds=60)
+    )
+    time.sleep(10)
+    assert not notifications_mentioning(ignored_file), "alerted about a detection the user ignored"
+    assert stored_detection(ignored_file).strip() == "", "recorded a detection the user ignored"
+    machine.fail("test -e /var/lib/clamav/lazaret-local.ign2")

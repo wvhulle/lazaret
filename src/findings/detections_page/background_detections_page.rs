@@ -32,7 +32,10 @@ use crate::{
         },
     },
     host_services::{
-        activity_history::activity_history_database::{ActivityHistory, ActivityHistoryFailure},
+        activity_history::{
+            activity_history_database::{ActivityHistory, ActivityHistoryFailure},
+            user_trust_store::UserTrustList,
+        },
         clamav_programs::distribution_install_guides::{
             DistributionFamily, detect_distribution_family,
         },
@@ -216,6 +219,66 @@ fn plain_text_toast(toast_text: &str) -> adw::Toast {
         .build()
 }
 
+fn records_not_ignored_by_user(
+    user_trust: &UserTrustList,
+    detection_records: Vec<JournalDetectionRecord>,
+) -> Vec<JournalDetectionRecord> {
+    detection_records
+        .into_iter()
+        .filter(|detection_record| !user_trust.ignores_signature(&detection_record.signature_name))
+        .collect()
+}
+
+async fn recorded_detection_commands(
+    activity_history: &ActivityHistory,
+    detection_records: &[JournalDetectionRecord],
+    last_cursor: &str,
+    journal_replay: JournalReplay,
+) -> BackgroundDetectionsPageCommand {
+    match activity_history
+        .record_detection_batch(detection_records, last_cursor)
+        .await
+    {
+        Ok(newly_opened) => BackgroundDetectionsPageCommand::DetectionsRecorded {
+            newly_opened,
+            journal_replay,
+        },
+        Err(recording_failure) => BackgroundDetectionsPageCommand::LoadingFailed(recording_failure),
+    }
+}
+
+async fn trust_filtered_commands(
+    activity_history: &ActivityHistory,
+    journal_batch: JournalBatch,
+    journal_replay: JournalReplay,
+) -> Vec<BackgroundDetectionsPageCommand> {
+    match activity_history.load_user_trust().await {
+        Ok(user_trust) => {
+            let untrusted_records =
+                records_not_ignored_by_user(&user_trust, journal_batch.detection_records);
+            vec![
+                recorded_detection_commands(
+                    activity_history,
+                    &untrusted_records,
+                    &journal_batch.last_cursor,
+                    journal_replay,
+                )
+                .await,
+            ]
+        }
+        Err(trust_failure) => vec![
+            BackgroundDetectionsPageCommand::LoadingFailed(trust_failure),
+            recorded_detection_commands(
+                activity_history,
+                &journal_batch.detection_records,
+                &journal_batch.last_cursor,
+                journal_replay,
+            )
+            .await,
+        ],
+    }
+}
+
 async fn recorded_batch_commands(
     activity_history: ActivityHistory,
     journal_batch: JournalBatch,
@@ -223,30 +286,19 @@ async fn recorded_batch_commands(
 ) -> Vec<BackgroundDetectionsPageCommand> {
     let access_commands = journal_batch
         .access_changes
-        .into_iter()
-        .map(BackgroundDetectionsPageCommand::JournalAccessChanged);
-    let recording_command = if journal_batch.detection_records.is_empty() {
-        None
+        .iter()
+        .cloned()
+        .map(BackgroundDetectionsPageCommand::JournalAccessChanged)
+        .collect::<Vec<_>>();
+    let recording_commands = if journal_batch.detection_records.is_empty() {
+        Vec::new()
     } else {
-        Some(
-            match activity_history
-                .record_detection_batch(
-                    &journal_batch.detection_records,
-                    &journal_batch.last_cursor,
-                )
-                .await
-            {
-                Ok(newly_opened) => BackgroundDetectionsPageCommand::DetectionsRecorded {
-                    newly_opened,
-                    journal_replay,
-                },
-                Err(recording_failure) => {
-                    BackgroundDetectionsPageCommand::LoadingFailed(recording_failure)
-                }
-            },
-        )
+        trust_filtered_commands(&activity_history, journal_batch, journal_replay).await
     };
-    access_commands.chain(recording_command).collect()
+    access_commands
+        .into_iter()
+        .chain(recording_commands)
+        .collect()
 }
 
 fn recorded_detection_updates(

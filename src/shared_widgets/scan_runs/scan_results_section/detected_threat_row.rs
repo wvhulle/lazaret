@@ -42,7 +42,7 @@ pub fn ignore_signature_choice(threat_identity: &ThreatIdentity) -> Option<Trust
     threat_identity
         .matched_signature_name()
         .filter(|signature_name| signature_can_be_ignored(signature_name))
-        .map(|signature_name| TrustChoice::IgnoreSignature {
+        .map(|signature_name| TrustChoice::IgnoreSignatureForThisUser {
             signature_name: signature_of_detection(signature_name),
         })
 }
@@ -70,7 +70,7 @@ fn threat_actions_menu(detected_threat: &DetectedThreat) -> gio::Menu {
     );
     if ignore_signature_choice(&detected_threat.threat_identity).is_some() {
         trust_section.append(
-            Some(&translated_messages::widgets::ignore_detection_everywhere()),
+            Some(&translated_messages::widgets::ignore_detection_for_me()),
             Some("threat-row.ignore-signature"),
         );
     }
@@ -336,7 +336,7 @@ mod detected_threat_row_tests {
         let detected_threat = detected_signature("Sanesecurity.Foo.UNOFFICIAL");
         assert_eq!(
             ignore_signature_choice(&detected_threat.threat_identity),
-            Some(TrustChoice::IgnoreSignature {
+            Some(TrustChoice::IgnoreSignatureForThisUser {
                 signature_name: "Sanesecurity.Foo".to_owned(),
             })
         );

@@ -43,6 +43,7 @@ use crate::host_services::{
         scanner_process_events::{
             RetainedScannerFiles, ScanStartFailure, ScannerProcessEvent, scanner_process_events,
         },
+        user_trusted_threats::UserTrustedThreat,
     },
     desktop::flatpak_sandbox::scanner_visible_path,
 };
@@ -77,6 +78,10 @@ pub enum ScanProgressEvent {
         file_path: PathBuf,
     },
     ThreatDetected(DetectedThreat),
+    UserTrustedThreatSkipped(UserTrustedThreat),
+    UserTrustUnreadable {
+        failure_text: String,
+    },
     FilesLeftUnscanned {
         unscanned_paths: Vec<PathBuf>,
         unscanned_cause: UnscannedFileCause,
@@ -104,6 +109,9 @@ pub enum ScanProblem {
     },
     ScanPhaseUnstartable(ScanStartFailure),
     TargetRejected(ScanTargetFailure),
+    UserTrustUnreadable {
+        failure_text: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -177,6 +185,7 @@ pub struct CompletedScanOutcome {
     pub scanned_directory_count: u64,
     pub excluded_entry_count: u64,
     pub threat_findings: ThreatFindings,
+    pub user_trusted_threats: Vec<UserTrustedThreat>,
     pub scan_notices: Vec<ScanNotice>,
     pub scan_problems: Vec<ScanProblem>,
     pub skipped_paths: Vec<String>,
@@ -203,6 +212,13 @@ impl CompletedScanOutcome {
             ScanProgressEvent::ThreatDetected(detected_threat) => {
                 self.threat_findings
                     .record_attributed_threat(detected_threat);
+            }
+            ScanProgressEvent::UserTrustedThreatSkipped(trusted_threat) => {
+                self.user_trusted_threats.push(trusted_threat);
+            }
+            ScanProgressEvent::UserTrustUnreadable { failure_text } => {
+                self.scan_problems
+                    .push(ScanProblem::UserTrustUnreadable { failure_text });
             }
             ScanProgressEvent::FilesLeftUnscanned {
                 unscanned_paths,
@@ -241,7 +257,10 @@ impl CompletedScanOutcome {
         }
         match interpreted_scan.scan_verdict {
             ScanVerdict::NoThreatsFound => {}
-            ScanVerdict::ThreatsFound => self.threat_findings.record_unattributed_report(),
+            ScanVerdict::ThreatsFound if self.user_trusted_threats.is_empty() => {
+                self.threat_findings.record_unattributed_report();
+            }
+            ScanVerdict::ThreatsFound => {}
             ScanVerdict::ScanFailed(failure_reason) => self
                 .scan_problems
                 .push(ScanProblem::ScannerFailed(failure_reason)),

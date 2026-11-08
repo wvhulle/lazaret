@@ -9,8 +9,8 @@ use relm4::{
 use crate::{
     host_services::{
         clamav_admin_service::trust_requests::{
-            FileFingerprint, TrustChoice, TrustOutcome, fingerprint_file, request_trust_change,
-            trust_outcome_text,
+            FileFingerprint, TrustChoice, TrustOutcome, TrustScope, fingerprint_file,
+            request_trust_change, trust_outcome_text,
         },
         clamav_programs::clamav_report_submission::ClamavReportRequest,
         clamav_scanner::{
@@ -532,6 +532,7 @@ impl Component for ScanResultsSection {
                     TrustChoice::TrustFile {
                         file_fingerprint,
                         shown_path,
+                        trust_scope: TrustScope::OnlyThisUser,
                     },
                     sender.input_sender().clone(),
                     ScanResultsSectionInput::TrustChangeConfirmed,

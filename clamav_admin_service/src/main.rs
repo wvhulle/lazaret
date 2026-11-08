@@ -317,18 +317,6 @@ impl ClamavAdminService {
         .await
     }
 
-    async fn ignore_signature(
-        &self,
-        #[zbus(header)] message_header: Header<'_>,
-        signature_name: String,
-    ) -> fdo::Result<String> {
-        self.handle_trust_request(
-            &message_header,
-            TrustRequest::IgnoreSignature { signature_name },
-        )
-        .await
-    }
-
     async fn forget_trusted_file(
         &self,
         #[zbus(header)] message_header: Header<'_>,

@@ -793,11 +793,16 @@ findings-no-trusted-files = No trusted files
 findings-no-ignored-detections = No ignored detections
 findings-lazaret-cannot-read-signature = { -brand-name } can't read the signature folder
 findings-trusted-detections-title = Trusted Detections
-findings-clamav-never-reports-description = ClamAV never reports what is listed here, in any scan on this computer. Every change needs your administrator password and is recorded in the system journal, where software running as you can't remove the record.
-findings-trusted-files-title = Trusted Files
-findings-files-trusted-sha-description = Files trusted by their SHA-256 hash. Any change to such a file makes ClamAV check it again.
+findings-trusted-by-you-title = Trusted by You
+findings-trusted-by-you-description = Your scans don't show you these files, and neither your scans nor background alerts show these detections. ClamAV itself still detects them, so on-access scanning can still block the files and other users still see them. Any change to a trusted file makes it show up again.
+findings-nothing-trusted-by-you = You haven't trusted anything
+findings-trust-by-you-unreadable = { -brand-name } can't read what you trusted: { $error }
+findings-file-trusted-by-you = A file you trusted
+findings-trust-for-all-users-tooltip = Trust for All Users…
+findings-trusted-for-all-users-title = Trusted for All Users
+findings-clamav-never-reports-description = ClamAV never reports what is listed here, for any user and in any scan on this computer. Every change needs an administrator password and is recorded in the system journal, where software running as you can't remove the record.
 findings-ignored-detections-title = Ignored Detections
-findings-detection-names-clamav-description = Detection names that ClamAV ignores in every file.
+findings-detection-names-clamav-description = Detection names that ClamAV ignores in every file, for every user. { -brand-name } no longer adds these, because they hide every file with that detection; remove them and trust files by their hash instead.
 findings-other-allowlists-title = Other Allowlists
 findings-allowlist-files-signature-description = Allowlist files in the signature folder that { -brand-name } didn't write. Check that you or your administrator added them on purpose.
 
@@ -1131,7 +1136,7 @@ widgets-finding-files =
        *[other] Finding files… { $count } found
     }
 widgets-trust-file = Trust This File…
-widgets-ignore-detection-everywhere = Ignore This Detection Everywhere…
+widgets-ignore-detection-for-me = Ignore This Detection for Me…
 widgets-report-false-positive = Report False Positive…
 widgets-skip-path-lazaret-scans = Skip This Path in { -brand-name } Scans
 widgets-copy-path = Copy Path
@@ -1333,21 +1338,29 @@ widgets-system-changes-cannot-title = System changes can't be read
 widgets-loading-system-changes = Loading system changes…
 widgets-trust-file-heading = Trust This File?
 widgets-clamav-never-report-body =
-    ClamAV will never report a file with exactly this content again, wherever it is on this computer and whichever scan finds it. Your administrator password is needed, and the password prompt shows the same SHA-256 hash as below.
+    ClamAV will never report a file with exactly this content again, for any user, wherever it is on this computer and whichever scan finds it, and on-access scanning stops blocking it. Your administrator password is needed, and the password prompt shows the same SHA-256 hash as below.
     
     { $path }
+widgets-stop-showing-file-body =
+    { -brand-name } will stop showing you a file with exactly this content in the scans you run, wherever it is. ClamAV itself still detects it, so on-access scanning can still block it and alert you, and other users still see it. Trust for All Users stops ClamAV detecting it for everyone and needs your administrator password.
+    
+    { $path }
+widgets-trust-for-me-button = Trust for Me
+widgets-user-trust-unreadable = The files and detections you trusted couldn't be read, so this scan shows every detection: { $error }
+widgets-trust-for-all-users-button = Trust for All Users…
 widgets-sha-256-hash-size =
     SHA-256 { $hash }
     { $size }
-widgets-trust-button = Trust
 widgets-ignore-detection-heading = Ignore This Detection?
-widgets-clamav-stop-reporting-body = ClamAV will stop reporting every file with this detection, not just this one. Trusting the file by its hash is safer when only one file is a false positive.
+widgets-stop-showing-detection-body = { -brand-name } will stop showing you every file with this detection, not just this one. ClamAV itself and other users still see them. Trusting the file by its hash is safer when only one file is a false positive.
 widgets-ignore-button = Ignore
 widgets-stop-trusting-file-heading = Stop Trusting This File?
-widgets-clamav-report-file-body = ClamAV will report this file again when it matches a signature.
+widgets-clamav-report-file-body = ClamAV will report this file again to every user when it matches a signature.
+widgets-show-file-again-body = { -brand-name } will show you this file again when ClamAV detects it.
 widgets-stop-trusting-button = Stop Trusting
 widgets-report-detection-again-heading = Report This Detection Again?
-widgets-clamav-report-files-body = ClamAV will report files with this detection again.
+widgets-clamav-report-files-body = ClamAV will report files with this detection again to every user.
+widgets-show-detection-again-body = { -brand-name } will show you files with this detection again.
 widgets-report-again-button = Report Again
 widgets-cancel-trust = Cancel
 
@@ -1370,6 +1383,7 @@ host-key-now-current-new =
     New: { $new }
 host-system-records-change-reduced = The system records that this change reduced protection, and the sidebar keeps flagging the page of the changed setting until you undo it.
 host-trust-applied = ClamAV loaded the change
+host-trust-recorded-for-you = { -brand-name } no longer shows this to you. ClamAV itself, on-access blocking and other users still see it.
 host-applied-reload-pending = Saved. clamd didn't answer, so it picks up the change when it next reloads its signatures
 host-authorization-refused-outcome = Nothing changed without your password
 host-admin-service-missing = This installation has no ClamAV admin service, so ClamAV's trust list can't be changed from { -brand-name }

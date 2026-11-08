@@ -8,5 +8,6 @@ pub mod override_reports;
 pub mod protection_rules;
 pub mod setting_kinds;
 pub mod setting_values;
+pub mod trust_entry_names;
 pub mod tunable_allowlist;
 pub mod tunable_record;

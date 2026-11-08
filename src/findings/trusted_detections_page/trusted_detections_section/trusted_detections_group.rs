@@ -8,17 +8,27 @@ use crate::{
             AllowlistEntries, ForeignAllowlistFile, LazaretListReading, TrustListReadFailure,
             TrustListReading, TrustedFileEntry, read_configured_trust_list,
         },
-        trust_list_row::{TrustListRow, TrustListRowOutput, TrustRemoval},
+        trust_list_row::{TrustListRow, TrustListRowOutput, TrustPromotion, TrustRemoval},
     },
     host_services::{
+        activity_history::{
+            activity_history_database::ActivityHistory, user_trust_store::UserTrustList,
+        },
         clamav_admin_service::{
             admin_audit_records::{
                 AdminAuditEntry, AuditedAction, Requester, latest_applied_entry,
                 newest_admin_audit_entries,
             },
-            trust_requests::{TrustChoice, TrustOutcome, request_trust_change, trust_outcome_text},
+            trust_requests::{
+                FileFingerprint, SystemWideTrust, TrustChoice, TrustOutcome, TrustScope,
+                request_trust_change, system_wide_trust, trust_outcome_text,
+            },
         },
-        desktop::locale_formatting::{byte_size_text, exact_local_time_text},
+        desktop::{
+            application_directories::application_data_directory,
+            locale_formatting::{byte_size_text, exact_local_time_text},
+        },
+        lazaret_database::locked_database_connection::lazaret_database_path,
         systemd_journal::unit_journal_reader::{UnitJournalReadFailure, read_journal_off_thread},
     },
     shared_widgets::{
@@ -37,7 +47,14 @@ pub enum AuditHistoryReading {
 }
 
 #[derive(Clone, Debug)]
+pub enum UserTrustReading {
+    UserTrustRead(UserTrustList),
+    UserTrustUnreadable { failure_text: String },
+}
+
+#[derive(Clone, Debug)]
 pub struct TrustedDetectionsSnapshot {
+    pub user_trust: UserTrustReading,
     pub trust_list: TrustListReading,
     pub audit_history: AuditHistoryReading,
 }
@@ -63,8 +80,21 @@ impl TrustedDetectionsState {
     }
 }
 
+async fn load_user_trust_reading() -> UserTrustReading {
+    ActivityHistory::at_database_path(lazaret_database_path(&application_data_directory()))
+        .load_user_trust()
+        .await
+        .map_or_else(
+            |store_failure| UserTrustReading::UserTrustUnreadable {
+                failure_text: store_failure.to_string(),
+            },
+            UserTrustReading::UserTrustRead,
+        )
+}
+
 pub async fn load_trusted_detections() -> TrustedDetectionsSnapshot {
     TrustedDetectionsSnapshot {
+        user_trust: load_user_trust_reading().await,
         trust_list: read_configured_trust_list().await,
         audit_history: read_journal_off_thread(|| newest_admin_audit_entries(AUDIT_ENTRY_LIMIT))
             .await
@@ -112,6 +142,7 @@ fn added_text(audit_history: &AuditHistoryReading, adding_action: &AuditedAction
 
 pub struct TrustedDetectionsSection {
     trusted_detections_state: TrustedDetectionsState,
+    user_trust_rows: FactoryVecDeque<TrustListRow>,
     trusted_file_rows: FactoryVecDeque<TrustListRow>,
     ignored_signature_rows: FactoryVecDeque<TrustListRow>,
     foreign_allowlist_rows: FactoryVecDeque<TrustListRow>,
@@ -120,8 +151,8 @@ pub struct TrustedDetectionsSection {
 #[derive(Debug)]
 pub enum TrustedDetectionsSectionInput {
     ReloadRequested,
-    RemovalRequested(TrustChoice),
-    RemovalConfirmed(TrustChoice),
+    TrustChangeRequested(TrustChoice),
+    TrustChangeConfirmed(TrustChoice),
 }
 
 #[derive(Debug)]
@@ -133,7 +164,7 @@ pub enum TrustedDetectionsSectionOutput {
 #[derive(Debug)]
 pub enum TrustedDetectionsSectionCommand {
     SnapshotLoaded(TrustedDetectionsSnapshot),
-    RemovalFinished(TrustOutcome),
+    TrustChangeFinished(TrustOutcome),
 }
 
 fn trust_list_rows(
@@ -147,8 +178,9 @@ fn trust_list_rows(
                 .build(),
         )
         .forward(sender.input_sender(), |row_output| match row_output {
-            TrustListRowOutput::RemovalRequested(removal_choice) => {
-                TrustedDetectionsSectionInput::RemovalRequested(removal_choice)
+            TrustListRowOutput::RemovalRequested(trust_choice)
+            | TrustListRowOutput::PromotionRequested(trust_choice) => {
+                TrustedDetectionsSectionInput::TrustChangeRequested(trust_choice)
             }
         })
 }
@@ -174,7 +206,81 @@ fn trusted_file_row(
         dimmed: false,
         trust_removal: TrustRemoval::RemovableWith(TrustChoice::ForgetTrustedFile {
             sha256_hex: trusted_file.sha256_hex.clone(),
+            trust_scope: TrustScope::EveryUser,
         }),
+        trust_promotion: TrustPromotion::NotPromotable,
+    }
+}
+
+fn user_trusted_file_row(sha256_hex: &str, byte_size: u64) -> TrustListRow {
+    let file_size = bytesize::ByteSize::b(byte_size);
+    TrustListRow {
+        row_title: sha256_hex.to_owned(),
+        row_subtitle: byte_size_text(file_size),
+        shows_hash: true,
+        needs_attention: false,
+        dimmed: false,
+        trust_removal: TrustRemoval::RemovableWith(TrustChoice::ForgetTrustedFile {
+            sha256_hex: sha256_hex.to_owned(),
+            trust_scope: TrustScope::OnlyThisUser,
+        }),
+        trust_promotion: match system_wide_trust() {
+            SystemWideTrust::OfferedOutsideSandbox => {
+                TrustPromotion::PromotableWith(TrustChoice::TrustFile {
+                    file_fingerprint: FileFingerprint {
+                        sha256_hex: sha256_hex.to_owned(),
+                        file_size,
+                    },
+                    shown_path: translated_messages::findings::file_trusted_by_you(),
+                    trust_scope: TrustScope::EveryUser,
+                })
+            }
+            SystemWideTrust::UnavailableInFlatpak => TrustPromotion::NotPromotable,
+        },
+    }
+}
+
+fn user_ignored_signature_row(signature_name: &str) -> TrustListRow {
+    TrustListRow {
+        row_title: signature_name.to_owned(),
+        row_subtitle: String::new(),
+        shows_hash: false,
+        needs_attention: false,
+        dimmed: false,
+        trust_removal: TrustRemoval::RemovableWith(TrustChoice::StopIgnoringSignature {
+            signature_name: signature_name.to_owned(),
+            trust_scope: TrustScope::OnlyThisUser,
+        }),
+        trust_promotion: TrustPromotion::NotPromotable,
+    }
+}
+
+fn user_trust_rows(user_trust: &UserTrustReading) -> Vec<TrustListRow> {
+    match user_trust {
+        UserTrustReading::UserTrustRead(user_trust_list) => rows_or_empty_notice(
+            user_trust_list
+                .trusted_content_sizes
+                .iter()
+                .map(|(sha256_hex, byte_size)| user_trusted_file_row(sha256_hex, *byte_size))
+                .chain(
+                    user_trust_list
+                        .ignored_signatures
+                        .iter()
+                        .map(String::as_str)
+                        .map(user_ignored_signature_row),
+                )
+                .collect(),
+            translated_messages::findings::nothing_trusted_by_you(),
+        ),
+        UserTrustReading::UserTrustUnreadable { failure_text } => vec![TrustListRow {
+            row_title: translated_messages::findings::trust_by_you_unreadable(failure_text),
+            row_subtitle: String::new(),
+            shows_hash: false,
+            needs_attention: true,
+            dimmed: false,
+            trust_removal: TrustRemoval::NotRemovableHere,
+            trust_promotion: TrustPromotion::NotPromotable,
+        }],
     }
 }
 
@@ -195,7 +301,9 @@ fn ignored_signature_row(
         dimmed: false,
         trust_removal: TrustRemoval::RemovableWith(TrustChoice::StopIgnoringSignature {
             signature_name: signature_name.to_owned(),
+            trust_scope: TrustScope::EveryUser,
         }),
+        trust_promotion: TrustPromotion::NotPromotable,
     }
 }
 
@@ -216,6 +324,7 @@ fn foreign_allowlist_row(foreign_allowlist: &ForeignAllowlistFile) -> TrustListR
         needs_attention: true,
         dimmed: false,
         trust_removal: TrustRemoval::NotRemovableHere,
+        trust_promotion: TrustPromotion::NotPromotable,
     }
 }
 
@@ -227,6 +336,7 @@ fn unreadable_row(row_title: String, read_failure: &TrustListReadFailure) -> Tru
         needs_attention: true,
         dimmed: false,
         trust_removal: TrustRemoval::NotRemovableHere,
+        trust_promotion: TrustPromotion::NotPromotable,
     }
 }
 
@@ -320,6 +430,10 @@ impl TrustedDetectionsSection {
             ignored_signature_rows,
             foreign_allowlist_rows,
         } = trust_list_group_rows(&snapshot);
+        replace_rows(
+            &mut self.user_trust_rows,
+            user_trust_rows(&snapshot.user_trust),
+        );
         replace_rows(&mut self.trusted_file_rows, trusted_file_rows);
         replace_rows(&mut self.ignored_signature_rows, ignored_signature_rows);
         replace_rows(&mut self.foreign_allowlist_rows, foreign_allowlist_rows);
@@ -343,7 +457,6 @@ impl Component for TrustedDetectionsSection {
     view! {
         adw::PreferencesGroup {
             set_title: &translated_messages::findings::trusted_detections_title(),
-            set_description: Some(&translated_messages::findings::clamav_never_reports_description()),
             connect_map => TrustedDetectionsSectionInput::ReloadRequested,
 
             gtk::Box {
@@ -351,8 +464,15 @@ impl Component for TrustedDetectionsSection {
                 set_spacing: 24,
 
                 adw::PreferencesGroup {
-                    set_title: &translated_messages::findings::trusted_files_title(),
-                    set_description: Some(&translated_messages::findings::files_trusted_sha_description()),
+                    set_title: &translated_messages::findings::trusted_by_you_title(),
+                    set_description: Some(&translated_messages::findings::trusted_by_you_description()),
+                    #[local_ref]
+                    user_trust_list -> gtk::ListBox {},
+                },
+
+                adw::PreferencesGroup {
+                    set_title: &translated_messages::findings::trusted_for_all_users_title(),
+                    set_description: Some(&translated_messages::findings::clamav_never_reports_description()),
                     #[local_ref]
                     trusted_file_list -> gtk::ListBox {},
                 },
@@ -383,10 +503,12 @@ impl Component for TrustedDetectionsSection {
     ) -> ComponentParts<Self> {
         let model = Self {
             trusted_detections_state: TrustedDetectionsState::SnapshotLoading,
+            user_trust_rows: trust_list_rows(&sender),
             trusted_file_rows: trust_list_rows(&sender),
             ignored_signature_rows: trust_list_rows(&sender),
             foreign_allowlist_rows: trust_list_rows(&sender),
         };
+        let user_trust_list = model.user_trust_rows.widget();
         let trusted_file_list = model.trusted_file_rows.widget();
         let ignored_signature_list = model.ignored_signature_rows.widget();
         let foreign_allowlist_list = model.foreign_allowlist_rows.widget();
@@ -402,17 +524,17 @@ impl Component for TrustedDetectionsSection {
     ) {
         match page_input {
             TrustedDetectionsSectionInput::ReloadRequested => Self::reload_snapshot(&sender),
-            TrustedDetectionsSectionInput::RemovalRequested(removal_choice) => {
+            TrustedDetectionsSectionInput::TrustChangeRequested(trust_choice) => {
                 present_trust_confirmation(
                     root,
-                    removal_choice,
+                    trust_choice,
                     sender.input_sender().clone(),
-                    TrustedDetectionsSectionInput::RemovalConfirmed,
+                    TrustedDetectionsSectionInput::TrustChangeConfirmed,
                 );
             }
-            TrustedDetectionsSectionInput::RemovalConfirmed(confirmed_choice) => {
+            TrustedDetectionsSectionInput::TrustChangeConfirmed(confirmed_choice) => {
                 sender.oneshot_command(async move {
-                    TrustedDetectionsSectionCommand::RemovalFinished(
+                    TrustedDetectionsSectionCommand::TrustChangeFinished(
                         request_trust_change(confirmed_choice).await,
                     )
                 });
@@ -430,7 +552,7 @@ impl Component for TrustedDetectionsSection {
             TrustedDetectionsSectionCommand::SnapshotLoaded(snapshot) => {
                 self.show_snapshot(snapshot)
             }
-            TrustedDetectionsSectionCommand::RemovalFinished(trust_outcome) => {
+            TrustedDetectionsSectionCommand::TrustChangeFinished(trust_outcome) => {
                 let _page_closed = sender.output(TrustedDetectionsSectionOutput::ToastRequested(
                     trust_outcome_text(&trust_outcome),
                 ));

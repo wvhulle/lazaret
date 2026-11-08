@@ -77,13 +77,12 @@ impl AuditedAction<'_> {
                 TrustRequest::TrustFile { sha256_hex, .. }
                 | TrustRequest::ForgetTrustedFile { sha256_hex },
             ) => vec![JournalField::new(SHA256_FIELD, sha256_hex.clone())],
-            Self::TrustChange(
-                TrustRequest::IgnoreSignature { signature_name }
-                | TrustRequest::StopIgnoringSignature { signature_name },
-            ) => vec![JournalField::new(
-                SIGNATURE_NAME_FIELD,
-                signature_name.clone(),
-            )],
+            Self::TrustChange(TrustRequest::StopIgnoringSignature { signature_name }) => {
+                vec![JournalField::new(
+                    SIGNATURE_NAME_FIELD,
+                    signature_name.clone(),
+                )]
+            }
         }
     }
 }
@@ -278,15 +277,15 @@ mod admin_audit_journal_tests {
 
     #[test]
     fn signature_requests_record_the_exact_signature_name() {
-        let trust_request = TrustRequest::IgnoreSignature {
+        let trust_request = TrustRequest::StopIgnoringSignature {
             signature_name: "Win.Test-1".to_owned(),
         };
         let recorded_fields = journal_fields(&AdminAuditRecord {
             audited_action: AuditedAction::TrustChange(&trust_request),
-            action_subject: "ignore every detection named Win.Test-1",
+            action_subject: "report detections named Win.Test-1 again",
             requesting_user: RequestingUser::KnownUser { user_id: 1000 },
             audit_outcome: AuditOutcome::ActionApplied,
-            protection_reduction: ProtectionReduction::DetectionTrusted,
+            protection_reduction: ProtectionReduction::NoReduction,
         });
         assert_eq!(
             field_value(&recorded_fields, SIGNATURE_NAME_FIELD).as_deref(),

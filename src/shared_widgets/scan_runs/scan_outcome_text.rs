@@ -64,6 +64,9 @@ fn describe_scan_problem(scan_problem: &ScanProblem) -> String {
         ),
         ScanProblem::ScanPhaseUnstartable(start_failure) => describe_start_failure(start_failure),
         ScanProblem::TargetRejected(target_failure) => describe_target_failure(target_failure),
+        ScanProblem::UserTrustUnreadable { failure_text } => {
+            translated_messages::widgets::user_trust_unreadable(sanitize_scanner_text(failure_text))
+        }
     }
 }
 

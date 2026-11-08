@@ -59,6 +59,12 @@ pub enum ActivityHistoryFailure {
     HistoryLockUnavailable(#[from] std::io::Error),
     #[error("the history database could not be prepared: {0}")]
     HistorySchemaUnusable(#[from] DatabaseMigrationFailure),
+    #[error(transparent)]
+    TrustEntryRefused(#[from] clamd_configuration::trust_entry_names::TrustEntryRefusal),
+    #[error("the file is too large to record")]
+    ContentSizeUnstorable,
+    #[error("a stored trusted file has an impossible size")]
+    StoredTrustUnreadable,
 }
 
 impl From<DatabasePathNotUtf8> for ActivityHistoryFailure {
@@ -945,7 +951,11 @@ mod activity_history_database_tests {
                     .is_empty()
             );
         });
-        assert_eq!(raw_count(&database_path, "PRAGMA user_version"), 1);
+        assert_eq!(
+            raw_count(&database_path, "PRAGMA user_version"),
+            crate::host_services::lazaret_database::embedded_migration_lists::LAZARET_MIGRATIONS
+                .len() as i64
+        );
     }
 
     fn raw_count(database_path: &std::path::Path, count_query: &str) -> i64 {

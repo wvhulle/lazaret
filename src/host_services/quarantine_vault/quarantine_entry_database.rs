@@ -45,9 +45,10 @@ const PENDING_QUERY: &str = "
         ON pending_signatures.quarantine_path = quarantine_pending.quarantine_path
     LEFT JOIN pending_payload_hashes
         ON pending_payload_hashes.quarantine_path = quarantine_pending.quarantine_path";
-const ORPHANED_CONTENT_REMOVAL: &str = "DELETE FROM file_contents WHERE NOT EXISTS (SELECT 1 FROM \
-                                        quarantine WHERE quarantine.content_sha256 = \
-                                        file_contents.content_sha256)";
+const ORPHANED_CONTENT_REMOVAL: &str =
+    "DELETE FROM file_contents WHERE NOT EXISTS (SELECT 1 FROM quarantine WHERE \
+     quarantine.content_sha256 = file_contents.content_sha256) AND NOT EXISTS (SELECT 1 FROM \
+     trusted_contents WHERE trusted_contents.content_sha256 = file_contents.content_sha256)";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StoredDetectionDate {
@@ -1144,7 +1145,11 @@ mod quarantine_entry_database_tests {
         let stored_version: i64 = shared_connection
             .query_row("PRAGMA user_version", [], |version_row| version_row.get(0))
             .expect("version");
-        assert_eq!(stored_version, 1);
+        assert_eq!(
+            stored_version,
+            crate::host_services::lazaret_database::embedded_migration_lists::LAZARET_MIGRATIONS
+                .len() as i64
+        );
     }
 
     fn applied_update_entry() -> NewActivityEntry {

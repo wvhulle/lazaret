@@ -5,7 +5,15 @@ use sha2::{Digest, Sha256};
 use zbus::{Connection, proxy};
 
 use crate::{
-    host_services::clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+    host_services::{
+        activity_history::activity_history_database::{ActivityHistory, ActivityHistoryFailure},
+        clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+        desktop::{
+            application_directories::application_data_directory,
+            flatpak_sandbox::running_in_flatpak,
+        },
+        lazaret_database::locked_database_connection::lazaret_database_path,
+    },
     translated_messages,
 };
 
@@ -24,8 +32,6 @@ const ACCESS_DENIED_ERROR: &str = "org.freedesktop.DBus.Error.AccessDenied";
 trait DetectionTrustAdmin {
     fn trust_file(&self, sha256_hex: &str, file_size: u64) -> zbus::Result<String>;
 
-    fn ignore_signature(&self, signature_name: &str) -> zbus::Result<String>;
-
     fn forget_trusted_file(&self, sha256_hex: &str) -> zbus::Result<String>;
 
     fn stop_ignoring_signature(&self, signature_name: &str) -> zbus::Result<String>;
@@ -37,25 +43,52 @@ pub struct FileFingerprint {
     pub file_size: ByteSize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrustScope {
+    OnlyThisUser,
+    EveryUser,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TrustChoice {
     TrustFile {
         file_fingerprint: FileFingerprint,
         shown_path: String,
+        trust_scope: TrustScope,
     },
-    IgnoreSignature {
+    IgnoreSignatureForThisUser {
         signature_name: String,
     },
     ForgetTrustedFile {
         sha256_hex: String,
+        trust_scope: TrustScope,
     },
     StopIgnoringSignature {
         signature_name: String,
+        trust_scope: TrustScope,
     },
+}
+
+impl TrustChoice {
+    pub fn for_every_user(self) -> Self {
+        match self {
+            Self::TrustFile {
+                file_fingerprint,
+                shown_path,
+                ..
+            } => Self::TrustFile {
+                file_fingerprint,
+                shown_path,
+                trust_scope: TrustScope::EveryUser,
+            },
+            other_choice => other_choice,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TrustOutcome {
+    RecordedForThisUser,
     TrustApplied,
     AppliedReloadPending,
     AuthorizationRefused,
@@ -71,6 +104,8 @@ pub enum TrustChangeFailure {
     ReportedByAdminService { admin_service_message: String },
     #[error(transparent)]
     AdminServiceCallFailed(#[from] zbus::Error),
+    #[error("the trust list in your history could not be changed: {store_failure_text}")]
+    UserTrustNotRecorded { store_failure_text: String },
 }
 
 pub fn fingerprint_file(file_path: &Path) -> io::Result<FileFingerprint> {
@@ -132,28 +167,102 @@ fn outcome_of_answer(admin_service_answer: zbus::Result<String>) -> TrustOutcome
     }
 }
 
-pub async fn request_trust_change(trust_choice: TrustChoice) -> TrustOutcome {
+async fn record_trust_for_this_user(
+    activity_history: &ActivityHistory,
+    trust_choice: &TrustChoice,
+) -> Result<(), ActivityHistoryFailure> {
+    match trust_choice {
+        TrustChoice::TrustFile {
+            file_fingerprint, ..
+        } => {
+            activity_history
+                .trust_content_for_user(
+                    &file_fingerprint.sha256_hex,
+                    file_fingerprint.file_size.as_u64(),
+                )
+                .await
+        }
+        TrustChoice::IgnoreSignatureForThisUser { signature_name } => {
+            activity_history
+                .ignore_signature_for_user(signature_name)
+                .await
+        }
+        TrustChoice::ForgetTrustedFile { sha256_hex, .. } => {
+            activity_history.forget_content_for_user(sha256_hex).await
+        }
+        TrustChoice::StopIgnoringSignature { signature_name, .. } => {
+            activity_history
+                .stop_ignoring_signature_for_user(signature_name)
+                .await
+        }
+    }
+}
+
+enum AdminTrustCall<'choice> {
+    TrustFile {
+        sha256_hex: &'choice str,
+        file_size: u64,
+    },
+    ForgetTrustedFile {
+        sha256_hex: &'choice str,
+    },
+    StopIgnoringSignature {
+        signature_name: &'choice str,
+    },
+}
+
+enum TrustRoute<'choice> {
+    ThisUserHistory,
+    AdminService(AdminTrustCall<'choice>),
+}
+
+fn trust_route(trust_choice: &TrustChoice) -> TrustRoute<'_> {
+    match trust_choice {
+        TrustChoice::TrustFile {
+            file_fingerprint,
+            trust_scope: TrustScope::EveryUser,
+            ..
+        } => TrustRoute::AdminService(AdminTrustCall::TrustFile {
+            sha256_hex: &file_fingerprint.sha256_hex,
+            file_size: file_fingerprint.file_size.as_u64(),
+        }),
+        TrustChoice::ForgetTrustedFile {
+            sha256_hex,
+            trust_scope: TrustScope::EveryUser,
+        } => TrustRoute::AdminService(AdminTrustCall::ForgetTrustedFile { sha256_hex }),
+        TrustChoice::StopIgnoringSignature {
+            signature_name,
+            trust_scope: TrustScope::EveryUser,
+        } => TrustRoute::AdminService(AdminTrustCall::StopIgnoringSignature { signature_name }),
+        TrustChoice::TrustFile {
+            trust_scope: TrustScope::OnlyThisUser,
+            ..
+        }
+        | TrustChoice::ForgetTrustedFile {
+            trust_scope: TrustScope::OnlyThisUser,
+            ..
+        }
+        | TrustChoice::StopIgnoringSignature {
+            trust_scope: TrustScope::OnlyThisUser,
+            ..
+        }
+        | TrustChoice::IgnoreSignatureForThisUser { .. } => TrustRoute::ThisUserHistory,
+    }
+}
+
+async fn call_admin_service(admin_trust_call: AdminTrustCall<'_>) -> TrustOutcome {
     let admin_service_answer = async {
         let trust_admin_service =
             DetectionTrustAdminProxy::new(&Connection::system().await?).await?;
-        match &trust_choice {
-            TrustChoice::TrustFile {
-                file_fingerprint, ..
-            } => {
-                trust_admin_service
-                    .trust_file(
-                        &file_fingerprint.sha256_hex,
-                        file_fingerprint.file_size.as_u64(),
-                    )
-                    .await
-            }
-            TrustChoice::IgnoreSignature { signature_name } => {
-                trust_admin_service.ignore_signature(signature_name).await
-            }
-            TrustChoice::ForgetTrustedFile { sha256_hex } => {
+        match admin_trust_call {
+            AdminTrustCall::TrustFile {
+                sha256_hex,
+                file_size,
+            } => trust_admin_service.trust_file(sha256_hex, file_size).await,
+            AdminTrustCall::ForgetTrustedFile { sha256_hex } => {
                 trust_admin_service.forget_trusted_file(sha256_hex).await
             }
-            TrustChoice::StopIgnoringSignature { signature_name } => {
+            AdminTrustCall::StopIgnoringSignature { signature_name } => {
                 trust_admin_service
                     .stop_ignoring_signature(signature_name)
                     .await
@@ -163,8 +272,42 @@ pub async fn request_trust_change(trust_choice: TrustChoice) -> TrustOutcome {
     outcome_of_answer(admin_service_answer.await)
 }
 
+pub async fn request_trust_change(trust_choice: TrustChoice) -> TrustOutcome {
+    match trust_route(&trust_choice) {
+        TrustRoute::AdminService(admin_trust_call) => call_admin_service(admin_trust_call).await,
+        TrustRoute::ThisUserHistory => {
+            let activity_history = ActivityHistory::at_database_path(lazaret_database_path(
+                &application_data_directory(),
+            ));
+            match record_trust_for_this_user(&activity_history, &trust_choice).await {
+                Ok(()) => TrustOutcome::RecordedForThisUser,
+                Err(store_failure) => {
+                    TrustOutcome::TrustFailed(TrustChangeFailure::UserTrustNotRecorded {
+                        store_failure_text: store_failure.to_string(),
+                    })
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SystemWideTrust {
+    OfferedOutsideSandbox,
+    UnavailableInFlatpak,
+}
+
+pub fn system_wide_trust() -> SystemWideTrust {
+    if running_in_flatpak() {
+        SystemWideTrust::UnavailableInFlatpak
+    } else {
+        SystemWideTrust::OfferedOutsideSandbox
+    }
+}
+
 pub fn trust_outcome_text(trust_outcome: &TrustOutcome) -> String {
     match trust_outcome {
+        TrustOutcome::RecordedForThisUser => translated_messages::host::trust_recorded_for_you(),
         TrustOutcome::TrustApplied => translated_messages::host::trust_applied(),
         TrustOutcome::AppliedReloadPending => translated_messages::host::applied_reload_pending(),
         TrustOutcome::AuthorizationRefused => {
@@ -187,6 +330,9 @@ fn trust_change_failure_text(change_failure: &TrustChangeFailure) -> String {
         } => sanitize_scanner_line(admin_service_message),
         TrustChangeFailure::AdminServiceCallFailed(call_failure) => {
             sanitize_scanner_line(&call_failure.to_string())
+        }
+        TrustChangeFailure::UserTrustNotRecorded { store_failure_text } => {
+            sanitize_scanner_line(store_failure_text)
         }
     }
 }
