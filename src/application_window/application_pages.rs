@@ -18,10 +18,10 @@ pub enum ApplicationPage {
 pub const ALL_APPLICATION_PAGES: [ApplicationPage; 11] = [
     ApplicationPage::SignatureSources,
     ApplicationPage::DatabaseUpdates,
+    ApplicationPage::ManualScan,
     ApplicationPage::ScanEngine,
     ApplicationPage::OnAccessScanning,
     ApplicationPage::ScheduledScans,
-    ApplicationPage::ManualScan,
     ApplicationPage::RemovableDrives,
     ApplicationPage::Detections,
     ApplicationPage::Quarantine,

@@ -11,7 +11,7 @@ Lazaret is a hard fork of [ClamUI](https://github.com/linx-systems/clamui).
 The sidebar groups the pages the way a detection travels, and each entry shows its own status:
 
 - **Signatures**: Signature Sources, Database Updates.
-- **Scans**: Scan Files…, Scan Engine, On-Access Scanning, Scheduled Scans, Manual Scan, Removable Drives.
+- **Scans**: Manual Scan, Scan Engine, On-Access Scanning, Scheduled Scans, Removable Drives.
 - **Findings**: Detections, Quarantine, Trusted Detections, Sent Samples.
 
 Recordings of every page are in [usage](https://codeberg.org/wvhulle/lazaret/src/branch/main/docs/usage.md).

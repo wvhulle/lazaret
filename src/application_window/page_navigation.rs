@@ -12,8 +12,8 @@ use crate::{
     application_window::{
         application_actions::{
             ClearHistoryAction, ExportHistoryAction, OpenDetectionAction, OpenDetectionsAction,
-            QuickScanAction, ScanFilesAction, ScanPathsAction, ShowPageAction,
-            UpdateDefinitionsAction, register_application_action, register_window_action,
+            QuickScanAction, ScanPathsAction, ShowPageAction, UpdateDefinitionsAction,
+            register_application_action, register_window_action,
         },
         application_pages::{ALL_APPLICATION_PAGES, ApplicationPage},
         history_menu_actions::{
@@ -193,7 +193,6 @@ pub enum PageNavigationInput {
     UploadNoticeReceived(String),
     EntrySubmissionRequested { entry_id: i64 },
     QuarantinedFileSubmissionRequested(PathBuf),
-    ScanFilesRequested,
     HistoryExportRequested,
     HistoryExportFormatChosen(HistoryExportFormat),
     HistoryClearRequested,
@@ -409,13 +408,6 @@ fn register_page_actions(
         window_root,
         RelmAction::<ClearHistoryAction>::new_stateless(move |_action| {
             clear_sender.input(PageNavigationInput::HistoryClearRequested);
-        }),
-    );
-    let scan_files_sender = sender.clone();
-    register_window_action(
-        window_root,
-        RelmAction::<ScanFilesAction>::new_stateless(move |_action| {
-            scan_files_sender.input(PageNavigationInput::ScanFilesRequested);
         }),
     );
     let quick_scan_sender = sender.clone();
@@ -966,10 +958,6 @@ impl Component for PageNavigation {
             }
             PageNavigationInput::UploadNoticeReceived(notice_text) => {
                 self.show_plain_toast(notice_text);
-            }
-            PageNavigationInput::ScanFilesRequested => {
-                self.show_page(ApplicationPage::ManualScan);
-                self.scan_page.emit(ScanPageInput::ChooseFilesRequested);
             }
             PageNavigationInput::HistoryExportRequested => {
                 deliver_local_outcome(

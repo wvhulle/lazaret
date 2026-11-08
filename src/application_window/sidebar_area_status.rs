@@ -931,10 +931,10 @@ mod application_page_status_tests {
             vec![
                 "Official signatures only",
                 "Definitions from 5 hours ago",
+                "Ready to scan",
                 "clamd answering",
                 "Blocking ~/Downloads",
                 "Next scan in 6 hours",
-                "Ready to scan",
                 "Scans drives up to 32.0\u{a0}GB",
                 "Nothing to decide",
                 "Empty",

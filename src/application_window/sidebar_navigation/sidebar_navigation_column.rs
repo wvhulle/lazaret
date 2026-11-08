@@ -9,7 +9,7 @@ use crate::application_window::{
     history_menu_actions::primary_menu_entries,
     sidebar_area_status::SidebarAreaSummary,
     sidebar_navigation::{
-        sidebar_entry_presentation::{EntrySummary, SidebarGroup, SidebarRowKind},
+        sidebar_entry_presentation::{EntrySummary, SidebarGroup},
         sidebar_entry_row::SidebarEntryRow,
     },
 };
@@ -41,9 +41,12 @@ fn launched_group_rows(sidebar_group: SidebarGroup) -> FactoryVecDeque<SidebarEn
     let mut group_rows = FactoryVecDeque::builder()
         .launch(gtk::ListBox::default())
         .detach();
-    sidebar_group.group_rows().into_iter().for_each(|row_kind| {
-        group_rows.guard().push_back(row_kind);
-    });
+    sidebar_group
+        .group_rows()
+        .into_iter()
+        .for_each(|application_page| {
+            group_rows.guard().push_back(application_page);
+        });
     group_rows
 }
 
@@ -61,15 +64,10 @@ fn show_area_summaries(
     group_rows: &mut FactoryVecDeque<SidebarEntryRow>,
     area_summaries: &[SidebarAreaSummary],
 ) {
-    group_rows
-        .guard()
-        .iter_mut()
-        .for_each(|entry_row| match entry_row.row_kind {
-            SidebarRowKind::PageEntry(application_page) => {
-                entry_row.entry_summary = EntrySummary::for_page(application_page, area_summaries);
-            }
-            SidebarRowKind::ScanFilesAction => {}
-        });
+    group_rows.guard().iter_mut().for_each(|entry_row| {
+        entry_row.entry_summary =
+            EntrySummary::for_page(entry_row.application_page, area_summaries);
+    });
 }
 
 #[relm4::component(pub)]

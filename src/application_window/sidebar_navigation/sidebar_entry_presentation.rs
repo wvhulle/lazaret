@@ -5,19 +5,11 @@ use crate::application_window::{
     sidebar_area_status::{AreaStatus, AreaSummary, SidebarAreaSummary},
 };
 
-pub const SCAN_FILES_ACTION: &str = "win.scan-files";
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SidebarGroup {
     SignaturesGroup,
     ScansGroup,
     FindingsGroup,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SidebarRowKind {
-    ScanFilesAction,
-    PageEntry(ApplicationPage),
 }
 
 impl SidebarGroup {
@@ -37,25 +29,24 @@ impl SidebarGroup {
         }
     }
 
-    pub fn group_rows(self) -> Vec<SidebarRowKind> {
+    pub fn group_rows(self) -> Vec<ApplicationPage> {
         match self {
             Self::SignaturesGroup => vec![
-                SidebarRowKind::PageEntry(ApplicationPage::SignatureSources),
-                SidebarRowKind::PageEntry(ApplicationPage::DatabaseUpdates),
+                ApplicationPage::SignatureSources,
+                ApplicationPage::DatabaseUpdates,
             ],
             Self::ScansGroup => vec![
-                SidebarRowKind::ScanFilesAction,
-                SidebarRowKind::PageEntry(ApplicationPage::ScanEngine),
-                SidebarRowKind::PageEntry(ApplicationPage::OnAccessScanning),
-                SidebarRowKind::PageEntry(ApplicationPage::ScheduledScans),
-                SidebarRowKind::PageEntry(ApplicationPage::ManualScan),
-                SidebarRowKind::PageEntry(ApplicationPage::RemovableDrives),
+                ApplicationPage::ManualScan,
+                ApplicationPage::ScanEngine,
+                ApplicationPage::OnAccessScanning,
+                ApplicationPage::ScheduledScans,
+                ApplicationPage::RemovableDrives,
             ],
             Self::FindingsGroup => vec![
-                SidebarRowKind::PageEntry(ApplicationPage::Detections),
-                SidebarRowKind::PageEntry(ApplicationPage::Quarantine),
-                SidebarRowKind::PageEntry(ApplicationPage::TrustedDetections),
-                SidebarRowKind::PageEntry(ApplicationPage::SentSamples),
+                ApplicationPage::Detections,
+                ApplicationPage::Quarantine,
+                ApplicationPage::TrustedDetections,
+                ApplicationPage::SentSamples,
             ],
         }
     }
@@ -63,7 +54,7 @@ impl SidebarGroup {
     pub fn row_position_of(self, application_page: ApplicationPage) -> Option<i32> {
         self.group_rows()
             .into_iter()
-            .position(|row_kind| row_kind == SidebarRowKind::PageEntry(application_page))
+            .position(|grouped_page| grouped_page == application_page)
             .and_then(|row_position| i32::try_from(row_position).ok())
     }
 }
@@ -149,32 +140,22 @@ pub struct SidebarRowPresentation {
 }
 
 pub fn sidebar_row_presentation(
-    row_kind: SidebarRowKind,
+    application_page: ApplicationPage,
     entry_summary: &EntrySummary,
 ) -> SidebarRowPresentation {
-    match (row_kind, entry_summary) {
-        (SidebarRowKind::ScanFilesAction, _) => SidebarRowPresentation {
-            row_title: gettext("Scan Files…"),
-            row_subtitle: gettext("Choose files or folders to check now"),
-            prefix_icon: "document-open-symbolic",
+    match entry_summary {
+        EntrySummary::SummaryPending => SidebarRowPresentation {
+            row_title: application_page.page_title(),
+            row_subtitle: gettext("Checking…"),
+            prefix_icon: application_page.page_icon(),
             status_image: SidebarStatusImage::NoStatusImage,
         },
-        (SidebarRowKind::PageEntry(application_page), EntrySummary::SummaryPending) => {
-            SidebarRowPresentation {
-                row_title: application_page.page_title(),
-                row_subtitle: gettext("Checking…"),
-                prefix_icon: application_page.page_icon(),
-                status_image: SidebarStatusImage::NoStatusImage,
-            }
-        }
-        (SidebarRowKind::PageEntry(application_page), EntrySummary::SummaryKnown(area_summary)) => {
-            SidebarRowPresentation {
-                row_title: application_page.page_title(),
-                row_subtitle: area_summary.live_state_text.clone(),
-                prefix_icon: application_page.page_icon(),
-                status_image: SidebarStatusImage::for_area_status(area_summary.area_status),
-            }
-        }
+        EntrySummary::SummaryKnown(area_summary) => SidebarRowPresentation {
+            row_title: application_page.page_title(),
+            row_subtitle: area_summary.live_state_text.clone(),
+            prefix_icon: application_page.page_icon(),
+            status_image: SidebarStatusImage::for_area_status(area_summary.area_status),
+        },
     }
 }
 
@@ -201,10 +182,6 @@ mod sidebar_entry_presentation_tests {
         let grouped_pages = ALL_SIDEBAR_GROUPS
             .into_iter()
             .flat_map(SidebarGroup::group_rows)
-            .filter_map(|row_kind| match row_kind {
-                SidebarRowKind::PageEntry(application_page) => Some(application_page),
-                SidebarRowKind::ScanFilesAction => None,
-            })
             .collect::<Vec<_>>();
         assert_eq!(grouped_pages, ALL_APPLICATION_PAGES.to_vec());
     }
@@ -227,15 +204,15 @@ mod sidebar_entry_presentation_tests {
         );
         assert_eq!(
             SidebarGroup::ScansGroup.group_rows()[0],
-            SidebarRowKind::ScanFilesAction
+            ApplicationPage::ManualScan
         );
         assert_eq!(
             SidebarGroup::FindingsGroup.group_rows(),
             vec![
-                SidebarRowKind::PageEntry(ApplicationPage::Detections),
-                SidebarRowKind::PageEntry(ApplicationPage::Quarantine),
-                SidebarRowKind::PageEntry(ApplicationPage::TrustedDetections),
-                SidebarRowKind::PageEntry(ApplicationPage::SentSamples),
+                ApplicationPage::Detections,
+                ApplicationPage::Quarantine,
+                ApplicationPage::TrustedDetections,
+                ApplicationPage::SentSamples,
             ]
         );
     }
@@ -260,7 +237,7 @@ mod sidebar_entry_presentation_tests {
     fn each_area_status_has_its_status_image() {
         let presented_image = |area_status| {
             sidebar_row_presentation(
-                SidebarRowKind::PageEntry(ApplicationPage::ScanEngine),
+                ApplicationPage::ScanEngine,
                 &known_summary(area_status, "clamd answering"),
             )
             .status_image
@@ -291,7 +268,7 @@ mod sidebar_entry_presentation_tests {
     fn a_page_row_shows_its_title_icon_and_live_state() {
         assert_eq!(
             sidebar_row_presentation(
-                SidebarRowKind::PageEntry(ApplicationPage::Detections),
+                ApplicationPage::Detections,
                 &known_summary(AreaStatus::AreaNeedsReview, "2 need a decision"),
             ),
             SidebarRowPresentation {
@@ -301,20 +278,10 @@ mod sidebar_entry_presentation_tests {
                 status_image: SidebarStatusImage::WarningImage,
             }
         );
-        let pending_row = sidebar_row_presentation(
-            SidebarRowKind::PageEntry(ApplicationPage::Quarantine),
-            &EntrySummary::SummaryPending,
-        );
+        let pending_row =
+            sidebar_row_presentation(ApplicationPage::Quarantine, &EntrySummary::SummaryPending);
         assert_eq!(pending_row.row_subtitle, "Checking…");
         assert_eq!(pending_row.status_image, SidebarStatusImage::NoStatusImage);
-        assert_eq!(
-            sidebar_row_presentation(
-                SidebarRowKind::ScanFilesAction,
-                &EntrySummary::SummaryPending
-            )
-            .row_title,
-            "Scan Files…"
-        );
     }
 
     #[test]

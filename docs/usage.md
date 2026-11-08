@@ -9,7 +9,7 @@ Lazaret works the same on every system. Where something depends on how you insta
 The sidebar follows the way a detection travels, in three groups:
 
 - **Signatures**, where detections come from: Signature Sources and Database Updates.
-- **Scans**, how files get checked: Scan Files…, Scan Engine, On-Access Scanning, Scheduled Scans, Manual Scan and Removable Drives.
+- **Scans**, how files get checked: Manual Scan, Scan Engine, On-Access Scanning, Scheduled Scans and Removable Drives.
 - **Findings**, what was found and what you did about it: Detections, Quarantine, Trusted Detections and Sent Samples.
 
 Each entry shows its current state underneath, such as "Blocking ~/Downloads", "Next scan in 6 hours" or "2 need a decision". A warning icon means the area needs your review or its state is unknown, an error icon means it doesn't work, and a dimmed icon means it waits for another part, for example on-access scanning waiting for clamd. When you start Lazaret without choosing a page, it opens on the first entry that needs attention, or on Detections when everything is fine. It doesn't move once you have picked a page yourself.
@@ -30,9 +30,19 @@ Signature Sources lists where ClamAV's signatures come from and which other sour
 
 Database Updates shows how old the signatures are, when freshclam and fangfrisch last ran, and whether the freshclam that Lazaret runs can be trusted. To download new signatures right away, expand **Signatures current** and choose **Update Now**. The step shows the updater's output while it runs and the result when it is done. Below it, the update history lists every update started from Lazaret, newest first; select one to read its full transcript. The freshclam settings are on the same page.
 
-## Scan Files…
+## Manual Scan
 
-The first row of the Scans group opens a file chooser and adds what you pick to a manual scan.
+<img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/manual-scan.webp" width="800" alt="Recording of the Manual Scan page, then the profile manager opened with Manage Profiles">
+
+Drop files or folders on Manual Scan, or add them with the buttons, and press **Start Scan**. You can also pass paths on the command line, `lazaret /path/to/folder`, or use the context-menu action of your file manager (Nautilus, Dolphin and Nemo, turned on under **Preferences**). Lazaret scans with clamd when it is running, which is faster because its signatures are already loaded, and uses the standalone scanner otherwise.
+
+A profile picks targets and exclusions in one go. Manage them with **Manage Profiles**. Exclusions skip folders and patterns in every scan; home scans skip package and toolchain caches by default:
+
+<img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/scan-exclusions.webp" width="800" alt="Recording of opening the exclusions from the Manual Scan page, with folders and patterns that scans skip">
+
+After a scan, the results show how many files were scanned out of how many were planned, how long it took, and every threat with its severity. Files the scanner never reported on are listed as a problem rather than silently counted as clean. From a threat you can copy its path, exclude it from future scans, trust it, report it, or quarantine it. **Quarantine** asks for confirmation, then moves each file into Lazaret's quarantine. Recent scans lists the manual scans, newest first, and stays hidden until there is one.
+
+<img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/scan-results.webp" width="800" alt="Recording of a finished scan with two threats, the quarantine confirmation and the results after both files moved to quarantine">
 
 ## Scan Engine
 
@@ -51,20 +61,6 @@ On-Access Scanning shows whether clamonacc runs, which folders and mounts it wat
 <img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/scheduled-scans.webp" width="800" alt="Recording of the Scheduled Scans page with the schedule and its next run">
 
 When the system has a scan timer, Scheduled Scans shows it, its next run and how the last one ended, and **Run Now** starts its scan service on demand. Otherwise choose how often Lazaret scans (hourly, daily, weekly or monthly), which targets, and whether to skip the scan on battery or quarantine detections automatically. Scans run even when Lazaret is closed, and a scan missed while the computer was off runs once it is back on. Below, the history lists every scheduled run.
-
-## Manual Scan
-
-<img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/manual-scan.webp" width="800" alt="Recording of the Manual Scan page, then the profile manager opened with Manage Profiles">
-
-Drop files or folders on Manual Scan, or add them with the buttons, and press **Start Scan**. You can also pass paths on the command line, `lazaret /path/to/folder`, or use the context-menu action of your file manager (Nautilus, Dolphin and Nemo, turned on under **Preferences**). Lazaret scans with clamd when it is running, which is faster because its signatures are already loaded, and uses the standalone scanner otherwise.
-
-A profile picks targets and exclusions in one go. Manage them with **Manage Profiles**. Exclusions skip folders and patterns in every scan; home scans skip package and toolchain caches by default:
-
-<img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/scan-exclusions.webp" width="800" alt="Recording of opening the exclusions from the Manual Scan page, with folders and patterns that scans skip">
-
-After a scan, the results show how many files were scanned out of how many were planned, how long it took, and every threat with its severity. Files the scanner never reported on are listed as a problem rather than silently counted as clean. From a threat you can copy its path, exclude it from future scans, trust it, report it, or quarantine it. **Quarantine** asks for confirmation, then moves each file into Lazaret's quarantine. Recent scans lists the manual scans, newest first, and stays hidden until there is one.
-
-<img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/scan-results.webp" width="800" alt="Recording of a finished scan with two threats, the quarantine confirmation and the results after both files moved to quarantine">
 
 ## Removable Drives
 
