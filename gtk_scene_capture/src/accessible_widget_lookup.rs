@@ -7,6 +7,7 @@ use atspi::{
         action::ActionProxy,
         component::ComponentProxy,
         editable_text::EditableTextProxy,
+        text::TextProxy,
     },
     zbus,
 };
@@ -568,6 +569,38 @@ impl AccessibleTree {
         } else {
             WidgetSensitivity::RefusesInput
         })
+    }
+
+    pub async fn describe_widget_input(
+        &self,
+        located_widget: &LocatedWidget,
+    ) -> Result<String, WidgetLookupFailure> {
+        let object_reference = &located_widget.object_reference;
+        let destination_name = object_reference
+            .name()
+            .cloned()
+            .ok_or(atspi::AtspiError::MissingName)?;
+        let widget_state = proxy_for(self.bus_connection(), object_reference)
+            .await?
+            .get_state()
+            .await?;
+        let text_proxy = TextProxy::builder(self.bus_connection())
+            .destination(destination_name)?
+            .path(object_reference.path().clone())?
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await?;
+        let shown_text = match text_proxy.character_count().await {
+            Ok(character_count) => text_proxy
+                .get_text(0, character_count)
+                .await
+                .unwrap_or_else(|text_failure| format!("<text unreadable: {text_failure}>")),
+            Err(text_failure) => format!("<no text interface: {text_failure}>"),
+        };
+        Ok(format!(
+            "focused: {}, text: {shown_text:?}",
+            widget_state.contains(State::Focused)
+        ))
     }
 
     pub async fn replace_widget_text(

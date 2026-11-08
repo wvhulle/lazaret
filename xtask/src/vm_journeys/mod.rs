@@ -1,17 +1,13 @@
-mod administrator_journey;
-mod desktop_environment;
-mod desktop_user_journey;
-mod fake_internet;
-mod fixture_corpus;
-mod journey_failure;
-mod journey_run;
-mod lazaret_database;
-mod session_widgets;
-mod system_commands;
-mod ui_messages;
+mod harness;
+mod journeys;
+mod remote_nodes;
 
 use clap::ValueEnum;
-pub use journey_failure::JourneyFailure;
+pub use harness::journey_failure::JourneyFailure;
+pub use remote_nodes::{
+    fake_internet_server::{FakeInternetFailure, FakeInternetServerOptions, serve_fake_internet},
+    team_share_server::{TeamSharePlacementOptions, serve_team_share_placement},
+};
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum JourneyName {
@@ -21,11 +17,15 @@ pub enum JourneyName {
 
 pub fn run_vm_journey(journey_name: JourneyName) -> Result<(), JourneyFailure> {
     match journey_name {
-        JourneyName::DesktopUserJourney => desktop_user_journey::run_desktop_user_journey(),
-        JourneyName::AdministratorJourney => administrator_journey::run_administrator_journey(),
+        JourneyName::DesktopUserJourney => {
+            journeys::desktop_user_journey::run_desktop_user_journey()
+        }
+        JourneyName::AdministratorJourney => {
+            journeys::administrator_journey::run_administrator_journey()
+        }
     }
 }
 
 pub fn describe_session_widgets() -> Result<Vec<String>, JourneyFailure> {
-    Ok(session_widgets::SessionWidgets::connect()?.describe_shown_widgets())
+    Ok(harness::session_widgets::SessionWidgets::connect()?.describe_shown_widgets())
 }

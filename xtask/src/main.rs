@@ -34,7 +34,10 @@ use crate::{
     screenshot_publishing::publish_screenshots,
     task_failure::TaskFailure,
     vm_fixture_corpus::build_vm_fixture_corpus,
-    vm_journeys::{JourneyName, describe_session_widgets, run_vm_journey},
+    vm_journeys::{
+        FakeInternetServerOptions, JourneyName, TeamSharePlacementOptions,
+        describe_session_widgets, run_vm_journey, serve_fake_internet, serve_team_share_placement,
+    },
 };
 
 #[derive(Parser)]
@@ -112,6 +115,8 @@ enum RepositoryTask {
         journey_name: JourneyName,
     },
     DescribeSessionWidgets,
+    ServeFakeInternet(FakeInternetServerOptions),
+    ServeTeamSharePlacement(TeamSharePlacementOptions),
 }
 
 fn run_repository_task(repository_task: RepositoryTask) -> Result<(), TaskFailure> {
@@ -159,6 +164,12 @@ fn run_repository_task(repository_task: RepositoryTask) -> Result<(), TaskFailur
             build_vm_fixture_corpus(&output_directory)
         }
         RepositoryTask::VmJourney { journey_name } => Ok(run_vm_journey(journey_name)?),
+        RepositoryTask::ServeFakeInternet(server_options) => {
+            Ok(serve_fake_internet(server_options)?)
+        }
+        RepositoryTask::ServeTeamSharePlacement(placement_options) => {
+            Ok(serve_team_share_placement(placement_options)?)
+        }
         RepositoryTask::DescribeSessionWidgets => {
             describe_session_widgets()?
                 .iter()

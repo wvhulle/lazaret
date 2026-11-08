@@ -232,7 +232,7 @@ pub fn build_vm_fixture_corpus(output_directory: &Path) -> Result<(), TaskFailur
     write_signatures(&corpus_directories.signatures)?;
     write_transport_security(&corpus_directories.transport_security)?;
     Ok(fs::write(
-        output_directory.join("fake-internet-hosts"),
-        format!("127.0.0.1 {}\n", FAKE_INTERNET_HOSTS.join(" ")),
+        output_directory.join("fake-internet-host-names"),
+        format!("{}\n", FAKE_INTERNET_HOSTS.join(" ")),
     )?)
 }
