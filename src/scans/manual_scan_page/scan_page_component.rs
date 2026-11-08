@@ -294,15 +294,21 @@ impl ScanPage {
             .collect()
     }
 
-    fn add_scan_targets(&mut self, added_targets: Vec<PathBuf>) {
-        let known_targets = self.chosen_scan_targets();
+    fn place_scan_targets(
+        &mut self,
+        incoming_targets: Vec<PathBuf>,
+        targets_placement: IncomingTargetsPlacement,
+    ) {
+        let placed_targets = placed_scan_targets(
+            self.chosen_scan_targets(),
+            incoming_targets,
+            targets_placement,
+        );
         let mut target_rows_guard = self.scan_target_rows.guard();
-        added_targets
-            .into_iter()
-            .filter(|added_target| !known_targets.contains(added_target))
-            .for_each(|added_target| {
-                target_rows_guard.push_back(added_target);
-            });
+        target_rows_guard.clear();
+        placed_targets.into_iter().for_each(|placed_target| {
+            target_rows_guard.push_back(placed_target);
+        });
     }
 
     fn scanner_backend_text(&self) -> String {
@@ -415,11 +421,10 @@ impl ScanPage {
             TargetRowsChange::KeepTargetRows => {}
             TargetRowsChange::ClearTargetRows => self.scan_target_rows.guard().clear(),
             TargetRowsChange::ReplaceTargetRows { profile_targets } => {
-                self.scan_target_rows.guard().clear();
-                self.add_scan_targets(expanded_profile_targets(
-                    &profile_targets,
-                    &glib::home_dir(),
-                ));
+                self.place_scan_targets(
+                    expanded_profile_targets(&profile_targets, &glib::home_dir()),
+                    IncomingTargetsPlacement::ReplaceKnownTargets,
+                );
             }
         }
     }
@@ -904,12 +909,17 @@ impl Component for ScanPage {
                 },
             ),
             ScanPageInput::ScanTargetsChosen(scan_targets) => {
-                self.scan_target_rows.guard().clear();
-                self.add_scan_targets(scan_targets);
+                self.place_scan_targets(
+                    scan_targets,
+                    IncomingTargetsPlacement::ReplaceKnownTargets,
+                );
                 self.start_chosen_targets_scan(&sender);
             }
             ScanPageInput::ScanTargetsAdded(added_targets) => {
-                self.add_scan_targets(added_targets);
+                self.place_scan_targets(
+                    added_targets,
+                    IncomingTargetsPlacement::AppendToKnownTargets,
+                );
                 self.scan_page_state.return_to_targets();
             }
             ScanPageInput::ProfileRowSelected { row_position } => {
@@ -1083,5 +1093,69 @@ impl Component for ScanPage {
             }
         }
         self.report_scan_activity(&sender);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum IncomingTargetsPlacement {
+    ReplaceKnownTargets,
+    AppendToKnownTargets,
+}
+
+fn placed_scan_targets(
+    known_targets: Vec<PathBuf>,
+    incoming_targets: Vec<PathBuf>,
+    targets_placement: IncomingTargetsPlacement,
+) -> Vec<PathBuf> {
+    let kept_targets = match targets_placement {
+        IncomingTargetsPlacement::ReplaceKnownTargets => Vec::new(),
+        IncomingTargetsPlacement::AppendToKnownTargets => known_targets,
+    };
+    incoming_targets
+        .into_iter()
+        .fold(kept_targets, |mut placed_targets, incoming_target| {
+            if !placed_targets.contains(&incoming_target) {
+                placed_targets.push(incoming_target);
+            }
+            placed_targets
+        })
+}
+
+#[cfg(test)]
+mod scan_target_placement_tests {
+    use std::path::PathBuf;
+
+    use super::{IncomingTargetsPlacement, placed_scan_targets};
+
+    fn target_paths(path_texts: &[&str]) -> Vec<PathBuf> {
+        path_texts.iter().map(PathBuf::from).collect()
+    }
+
+    #[test]
+    fn handed_over_targets_replace_the_earlier_ones() {
+        assert_eq!(
+            placed_scan_targets(
+                target_paths(&["/home/sample/Documents"]),
+                target_paths(&["/home/sample/Downloads/invoice.exe"]),
+                IncomingTargetsPlacement::ReplaceKnownTargets,
+            ),
+            target_paths(&["/home/sample/Downloads/invoice.exe"])
+        );
+    }
+
+    #[test]
+    fn added_targets_follow_the_earlier_ones_without_repeating_any() {
+        assert_eq!(
+            placed_scan_targets(
+                target_paths(&["/home/sample/Documents"]),
+                target_paths(&[
+                    "/home/sample/Music",
+                    "/home/sample/Documents",
+                    "/home/sample/Music",
+                ]),
+                IncomingTargetsPlacement::AppendToKnownTargets,
+            ),
+            target_paths(&["/home/sample/Documents", "/home/sample/Music"])
+        );
     }
 }
