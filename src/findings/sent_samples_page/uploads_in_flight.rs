@@ -1,7 +1,8 @@
-use gettextrs::gettext;
-
-use crate::host_services::activity_history::submission_history_store::{
-    SubmissionKind, SubmissionService, SubmissionTarget,
+use crate::{
+    host_services::activity_history::submission_history_store::{
+        SubmissionKind, SubmissionService, SubmissionTarget,
+    },
+    translated_messages,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,10 +65,9 @@ impl UploadsInFlight {
 
 pub fn upload_refusal_text(upload_refusal: &UploadRefusal) -> String {
     match upload_refusal {
-        UploadRefusal::SameUploadRunning(_) => gettext(
-            "This file is already being sent to this service. Wait for that to finish before \
-             sending it again.",
-        ),
+        UploadRefusal::SameUploadRunning(_) => {
+            translated_messages::findings::file_already_sent_service()
+        }
     }
 }
 

@@ -1,5 +1,3 @@
-use gettextrs::gettext;
-
 use crate::{
     host_services::{
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
@@ -7,103 +5,99 @@ use crate::{
         quarantine_vault::quarantine_file_moves::QuarantineMoveFailure,
     },
     shared_widgets::database_migration_failure_text::describe_migration_failure,
+    translated_messages,
 };
 
 pub fn describe_quarantine_failure(move_failure: &QuarantineMoveFailure) -> String {
     match move_failure {
         QuarantineMoveFailure::FileHashMismatch => {
-            gettext("File hash mismatch — file may be corrupted")
+            translated_messages::widgets::file_hash_mismatch_corrupted()
         }
-        QuarantineMoveFailure::RestoreRefusedIntegrityUnknown => gettext(
-            "This quarantine record has no usable hash, so the file cannot be verified and is not \
-             restored. You can still delete it.",
-        ),
-        QuarantineMoveFailure::UploadRefusedIntegrityUnknown => gettext(
-            "This quarantine record has no usable hash, so Lazaret can't prove the file is the \
-             one it quarantined and doesn't send it anywhere.",
-        ),
+        QuarantineMoveFailure::RestoreRefusedIntegrityUnknown => {
+            translated_messages::widgets::quarantine_record_verified()
+        }
+        QuarantineMoveFailure::UploadRefusedIntegrityUnknown => {
+            translated_messages::widgets::quarantine_record_lazaret()
+        }
         QuarantineMoveFailure::PayloadTooLargeToSend { maximum_size } => {
-            gettext("The file is larger than {size}, the most Lazaret sends.")
-                .replace("{size}", &byte_size_text(*maximum_size))
+            translated_messages::widgets::file_larger_size_quarantine(byte_size_text(*maximum_size))
         }
-        QuarantineMoveFailure::BlockedFileOnOtherFilesystem => gettext(
-            "On-access scanning blocks this file and it is on another filesystem, so it cannot be \
-             moved to quarantine. You can delete it instead.",
-        ),
+        QuarantineMoveFailure::BlockedFileOnOtherFilesystem => {
+            translated_messages::widgets::access_scanning_blocks_file()
+        }
         QuarantineMoveFailure::EntryNotFound { entry_id } => {
-            gettext("Quarantine entry not found: {id}").replace("{id}", &entry_id.to_string())
+            translated_messages::widgets::quarantine_entry_not_found(entry_id)
         }
-        QuarantineMoveFailure::RecordingFailedFileRestored { .. } => gettext(
-            "Failed to record quarantine entry in database. File has been restored to original \
-             location.",
-        ),
+        QuarantineMoveFailure::RecordingFailedFileRestored { .. } => {
+            translated_messages::widgets::failed_record_restored()
+        }
         QuarantineMoveFailure::RecordingFailedRollbackFailed {
             rollback_failure,
             payload_path,
             ..
-        } => gettext(
-            "Failed to record quarantine entry in database. Rollback also failed: {error}. File \
-             may be orphaned at: {path}",
-        )
-        .replace("{error}", &rollback_failure.to_string())
-        .replace(
-            "{path}",
-            &sanitize_scanner_line(&payload_path.to_string_lossy()),
+        } => translated_messages::widgets::failed_record_rollback(
+            rollback_failure,
+            sanitize_scanner_line(&payload_path.to_string_lossy()),
         ),
-        QuarantineMoveFailure::EntryRecordNotRemoved => gettext(
-            "The file was moved, but its quarantine record could not be removed. It may still \
-             appear in the list.",
-        ),
+        QuarantineMoveFailure::EntryRecordNotRemoved => {
+            translated_messages::widgets::file_moved_quarantine_record()
+        }
         QuarantineMoveFailure::SystemCallFailed(system_call_failure) => {
-            gettext("A system call failed: {error}")
-                .replace("{error}", &system_call_failure.to_string())
+            translated_messages::widgets::system_call_failed_error(system_call_failure)
         }
         QuarantineMoveFailure::FileOperationFailed(file_failure) => {
-            gettext("A file operation failed: {error}")
-                .replace("{error}", &file_failure.to_string())
+            translated_messages::widgets::file_operation_failed_error(file_failure)
         }
         QuarantineMoveFailure::DatabaseOperationFailed(database_failure) => {
-            gettext("The quarantine database operation failed: {error}")
-                .replace("{error}", &database_failure.to_string())
+            translated_messages::widgets::quarantine_database_operation_failed(database_failure)
         }
         QuarantineMoveFailure::BlockingStepInterrupted(interrupted_step) => {
-            gettext("A background quarantine step stopped unexpectedly: {error}")
-                .replace("{error}", &interrupted_step.to_string())
+            translated_messages::widgets::background_quarantine_step_stopped(interrupted_step)
         }
-        QuarantineMoveFailure::PathContainsNul => gettext("The path contains a NUL byte"),
-        QuarantineMoveFailure::PathHasNoParent => gettext("The path has no parent folder"),
-        QuarantineMoveFailure::PathHasNoFileName => gettext("The path has no file name"),
+        QuarantineMoveFailure::PathContainsNul => {
+            translated_messages::widgets::path_contains_nul_byte()
+        }
+        QuarantineMoveFailure::PathHasNoParent => {
+            translated_messages::widgets::path_no_parent_folder()
+        }
+        QuarantineMoveFailure::PathHasNoFileName => {
+            translated_messages::widgets::path_no_file_name()
+        }
         QuarantineMoveFailure::DatabasePathNotUtf8 => {
-            gettext("The quarantine database path is not valid UTF-8")
+            translated_messages::widgets::quarantine_database_not_valid()
         }
         QuarantineMoveFailure::DatabaseNotRegularFile => {
-            gettext("The quarantine database is not a regular file")
+            translated_messages::widgets::quarantine_database_not_regular()
         }
         QuarantineMoveFailure::SourceBlockedByOnAccess => {
-            gettext("On-access scanning blocks reading the file")
+            translated_messages::widgets::access_scanning_blocks_reading()
         }
         QuarantineMoveFailure::MovedPayloadStillBlocked => {
-            gettext("The blocked file is still unreadable after moving it to quarantine")
+            translated_messages::widgets::blocked_file_still_unreadable()
         }
-        QuarantineMoveFailure::SourceNotRegularFile => gettext("The file is not a regular file"),
+        QuarantineMoveFailure::SourceNotRegularFile => {
+            translated_messages::widgets::file_not_regular()
+        }
         QuarantineMoveFailure::PayloadNotRegularFile => {
-            gettext("The quarantined file is not a regular file")
+            translated_messages::widgets::quarantined_file_not_regular()
         }
         QuarantineMoveFailure::NotEnoughFreeSpace => {
-            gettext("There is not enough free space to quarantine the file")
+            translated_messages::widgets::not_enough_free_space()
         }
         QuarantineMoveFailure::FileReplacedDuringOperation => {
-            gettext("The file was replaced while it was being moved, so it was not removed")
+            translated_messages::widgets::file_replaced_not_removed()
         }
         QuarantineMoveFailure::PathOutsideQuarantine => {
-            gettext("The path is not inside the quarantine folder")
+            translated_messages::widgets::path_not_inside_quarantine()
         }
-        QuarantineMoveFailure::InvalidRestorePath => gettext("The restore path is not valid"),
+        QuarantineMoveFailure::InvalidRestorePath => {
+            translated_messages::widgets::restore_path_not_valid()
+        }
         QuarantineMoveFailure::ProtectedRestoreDestination => {
-            gettext("Restoring into a protected system folder is not allowed")
+            translated_messages::widgets::restoring_protected_system_folder()
         }
         QuarantineMoveFailure::StoredPathUnreadable { .. } => {
-            gettext("A path stored in the quarantine database could not be read")
+            translated_messages::widgets::path_stored_quarantine_database()
         }
         QuarantineMoveFailure::VaultSchemaUnusable(migration_failure) => {
             describe_migration_failure(migration_failure)

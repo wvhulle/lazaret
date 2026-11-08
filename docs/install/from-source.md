@@ -4,13 +4,13 @@
 
 - Rust 1.99 (the version in `rust-toolchain.toml`), for example through rustup
 - GTK 4.16 and libadwaita 1.6 or newer, GLib and libsystemd, with their development headers
-- `pkg-config`, `make`, `gettext` and `glib-compile-schemas`
+- `pkg-config`, `make` and `glib-compile-schemas`
 - ClamAV: `clamdscan` or `clamscan` on `PATH`, and `freshclam`
 
 On Debian and Ubuntu the build dependencies are:
 
 ```sh
-sudo apt install rustup build-essential pkg-config gettext libgtk-4-dev libadwaita-1-dev libsystemd-dev libglib2.0-dev libglib2.0-bin
+sudo apt install rustup build-essential pkg-config libgtk-4-dev libadwaita-1-dev libsystemd-dev libglib2.0-dev libglib2.0-bin
 ```
 
 ## Install Lazaret

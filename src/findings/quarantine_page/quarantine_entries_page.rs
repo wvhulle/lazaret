@@ -1,5 +1,4 @@
 use futures::{StreamExt, stream};
-use gettextrs::{gettext, ngettext};
 use jiff::{SignedDuration, Timestamp};
 use relm4::{
     Component, ComponentParts, ComponentSender, abstractions::Toaster, adw, adw::prelude::*, gtk,
@@ -60,6 +59,7 @@ use crate::{
         submission_outcome_text::history_failure_text,
         trust_confirmation_dialog::present_trust_confirmation,
     },
+    translated_messages,
 };
 
 const OLD_ENTRY_AGE: SignedDuration = SignedDuration::from_hours(30 * 24);
@@ -126,11 +126,14 @@ impl AlertChoice for DeletionDialogChoice {
 }
 
 fn add_deletion_choices(confirmation_dialog: &adw::AlertDialog) {
-    add_dismissing_choice::<DeletionDialogChoice>(confirmation_dialog, &gettext("Cancel"));
+    add_dismissing_choice::<DeletionDialogChoice>(
+        confirmation_dialog,
+        &translated_messages::findings::cancel_quarantine(),
+    );
     add_alert_choice(
         confirmation_dialog,
         DeletionDialogChoice::DeletionConfirmed,
-        &gettext("Delete"),
+        &translated_messages::findings::delete_entries(),
     );
     confirmation_dialog.set_response_appearance(
         DeletionDialogChoice::DeletionConfirmed.response_id(),
@@ -219,31 +222,22 @@ async fn verdict_for_entry(quarantine_vault: &QuarantineVault, entry_id: i64) ->
 fn verdict_failure_text(verdict_failure: &VerdictFailure) -> String {
     match verdict_failure {
         VerdictFailure::ScannerProgramRefused(ProgramRefusal::ProgramMissing) => {
-            gettext("the scanner program is not installed")
+            translated_messages::findings::scanner_program_not_installed()
         }
         VerdictFailure::ScannerProgramRefused(ProgramRefusal::ProgramReplaceable {
             candidate_path,
             replaceable_path,
-        }) => gettext(
-            "the scanner program at {program} can be replaced by your account through {path}",
-        )
-        .replace(
-            "{program}",
-            &sanitize_scanner_line(&candidate_path.to_string_lossy()),
-        )
-        .replace(
-            "{path}",
-            &sanitize_scanner_line(&replaceable_path.to_string_lossy()),
+        }) => translated_messages::findings::scanner_program_replaced_account(
+            sanitize_scanner_line(&candidate_path.to_string_lossy()),
+            sanitize_scanner_line(&replaceable_path.to_string_lossy()),
         ),
         VerdictFailure::ContentPipeFailed(pipe_failure) => {
-            gettext("the file could not be passed to the scanner: {error}")
-                .replace("{error}", &pipe_failure.to_string())
+            translated_messages::findings::file_not_passed_scanner(pipe_failure)
         }
         VerdictFailure::ScannerSpawnFailed(spawn_failure) => {
-            gettext("the scanner could not be started: {error}")
-                .replace("{error}", &spawn_failure.to_string())
+            translated_messages::findings::scanner_not_started_error(spawn_failure)
         }
-        VerdictFailure::VerdictTimedOut => gettext("the scan took too long"),
+        VerdictFailure::VerdictTimedOut => translated_messages::findings::scan_took_too_long(),
         VerdictFailure::ScannerReported { scanner_message } => {
             sanitize_scanner_line(scanner_message)
         }
@@ -251,16 +245,13 @@ fn verdict_failure_text(verdict_failure: &VerdictFailure) -> String {
             abnormal_scanner_exit_text(abnormal_exit)
         }
         VerdictFailure::DetectionSettingsUnreadable(settings_failure) => {
-            gettext("the clamd detection settings could not be read: {error}")
-                .replace("{error}", &settings_failure.to_string())
+            translated_messages::findings::clamd_detection_not_read(settings_failure)
         }
         VerdictFailure::ProgramLookupFailed(lookup_failure) => {
-            gettext("the scanner programs could not be looked up: {error}")
-                .replace("{error}", &lookup_failure.to_string())
+            translated_messages::findings::scanner_programs_not_looked(lookup_failure)
         }
         VerdictFailure::PayloadUnreadable(read_failure) => {
-            gettext("the quarantined copy could not be read: {error}")
-                .replace("{error}", &read_failure.to_string())
+            translated_messages::findings::quarantined_copy_not_read(read_failure)
         }
     }
 }
@@ -275,29 +266,25 @@ struct RestoreConfirmationText {
 fn restore_confirmation_text(content_verdict: &ContentVerdict) -> RestoreConfirmationText {
     match content_verdict {
         ContentVerdict::NoLongerDetected => RestoreConfirmationText {
-            heading: gettext("Restore This File?"),
-            verdict_text: gettext("ClamAV no longer detects this file with today's signatures."),
-            confirm_label: gettext("Restore"),
+            heading: translated_messages::findings::restore_file_heading(),
+            verdict_text: translated_messages::findings::clamav_no_longer_verdict(),
+            confirm_label: translated_messages::findings::restore_button(),
             restores_detected_file: false,
         },
         ContentVerdict::StillDetected { detection_name } => RestoreConfirmationText {
-            heading: gettext("Restore a File ClamAV Still Detects?"),
-            verdict_text: gettext(
-                "ClamAV still detects this file as {detection} with today's signatures. Only \
-                 restore it if you are sure it is a false positive, and consider trusting it \
-                 first.",
-            )
-            .replace("{detection}", detection_name),
-            confirm_label: gettext("Restore Anyway"),
+            heading: translated_messages::findings::restore_file_clamav_heading(),
+            verdict_text: translated_messages::findings::clamav_still_detects_verdict(
+                detection_name,
+            ),
+            confirm_label: translated_messages::findings::restore_anyway_button(),
             restores_detected_file: true,
         },
         ContentVerdict::VerdictUnavailable(verdict_failure) => RestoreConfirmationText {
-            heading: gettext("Restore an Unchecked File?"),
-            verdict_text: gettext(
-                "The file could not be checked again before restoring it: {error}",
-            )
-            .replace("{error}", &verdict_failure_text(verdict_failure)),
-            confirm_label: gettext("Restore Anyway"),
+            heading: translated_messages::findings::restore_unchecked_file_heading(),
+            verdict_text: translated_messages::findings::file_not_checked_verdict(
+                verdict_failure_text(verdict_failure),
+            ),
+            confirm_label: translated_messages::findings::restore_anyway_button(),
             restores_detected_file: true,
         },
     }
@@ -307,7 +294,7 @@ fn restore_destination_note(entry_record: &QuarantineEntryRecord) -> Option<Stri
     (!entry_record
         .original_path
         .starts_with(gtk::glib::home_dir()))
-    .then(|| gettext("This location is outside your home folder."))
+    .then(translated_messages::findings::location_outside_home_folder)
 }
 
 fn plain_text_toast(toast_text: &str) -> adw::Toast {
@@ -398,7 +385,13 @@ impl QuarantineEntriesPage {
         } = restore_confirmation_text(content_verdict);
         let restore_dialog = adw::AlertDialog::new(
             Some(&heading),
-            Some(&[verdict_text, gettext("The file goes back to:")].join("\n\n")),
+            Some(
+                &[
+                    verdict_text,
+                    translated_messages::findings::file_goes_back(),
+                ]
+                .join("\n\n"),
+            ),
         );
         let destination_label = gtk::Label::builder()
             .label(sanitize_scanner_line(
@@ -422,7 +415,10 @@ impl QuarantineEntriesPage {
             );
         }
         restore_dialog.set_extra_child(Some(&destination_box));
-        add_dismissing_choice::<RestoreDialogChoice>(&restore_dialog, &gettext("Cancel"));
+        add_dismissing_choice::<RestoreDialogChoice>(
+            &restore_dialog,
+            &translated_messages::findings::cancel_quarantine(),
+        );
         add_alert_choice(
             &restore_dialog,
             RestoreDialogChoice::RestoreChosen,
@@ -505,12 +501,7 @@ impl QuarantineEntriesPage {
 
     fn entry_count_text(&self) -> String {
         let listed_count = self.page_state.listed_entries().len();
-        ngettext(
-            "{count} item",
-            "{count} items",
-            u32::try_from(listed_count).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &listed_count.to_string())
+        translated_messages::findings::count_item(listed_count)
     }
 
     fn show_matching_entries(&mut self) {
@@ -531,15 +522,8 @@ impl QuarantineEntriesPage {
     ) {
         let old_entry_count = self.old_entries().len();
         let confirmation_dialog = adw::AlertDialog::new(
-            Some(&gettext("Clear Old Items?")),
-            Some(
-                &ngettext(
-                    "{count} quarantined file older than 30 days will be permanently deleted.",
-                    "{count} quarantined files older than 30 days will be permanently deleted.",
-                    u32::try_from(old_entry_count).unwrap_or(u32::MAX),
-                )
-                .replace("{count}", &old_entry_count.to_string()),
-            ),
+            Some(&translated_messages::findings::clear_old_items()),
+            Some(&translated_messages::findings::count_quarantined_file_older(old_entry_count)),
         );
         add_deletion_choices(&confirmation_dialog);
         deliver_local_outcome(
@@ -561,8 +545,8 @@ impl QuarantineEntriesPage {
         sender: &ComponentSender<Self>,
     ) {
         let confirmation_dialog = adw::AlertDialog::new(
-            Some(&gettext("Delete Quarantined File?")),
-            Some(&gettext("The file will be permanently deleted.")),
+            Some(&translated_messages::findings::delete_quarantined_file()),
+            Some(&translated_messages::findings::file_permanently_deleted()),
         );
         add_deletion_choices(&confirmation_dialog);
         deliver_local_outcome(
@@ -606,18 +590,18 @@ impl Component for QuarantineEntriesPage {
                 add_top_bar = &adw::HeaderBar {
                     #[wrap(Some)]
                     set_title_widget = &adw::WindowTitle {
-                        set_title: &gettext("Quarantine"),
+                        set_title: &translated_messages::findings::quarantine_title(),
                         #[watch]
                         set_subtitle: &model.entry_count_text(),
                     },
 
                     pack_end = &gtk::MenuButton {
                         set_icon_name: "view-more-symbolic",
-                        set_tooltip_text: Some(&gettext("More")),
+                        set_tooltip_text: Some(&translated_messages::findings::more_tooltip()),
                         #[wrap(Some)]
                         set_popover = &gtk::Popover {
                             gtk::Button {
-                                set_label: &gettext("Clear Old Items…"),
+                                set_label: &translated_messages::findings::clear_old_items_label(),
                                 add_css_class: "flat",
                                 #[watch]
                                 set_sensitive: !model.old_entries().is_empty(),
@@ -635,8 +619,8 @@ impl Component for QuarantineEntriesPage {
                     },
 
                     pack_end = &gtk::Button {
-                        set_label: &gettext("Check Again"),
-                        set_tooltip_text: Some(&gettext("Scan every quarantined file with the current signatures")),
+                        set_label: &translated_messages::findings::check_again_label(),
+                        set_tooltip_text: Some(&translated_messages::findings::scan_every_quarantined_tooltip()),
                         #[watch]
                         set_sensitive: !model.page_state.recheck_running()
                             && !model.page_state.listed_entries().is_empty(),
@@ -645,13 +629,13 @@ impl Component for QuarantineEntriesPage {
 
                     pack_end = &gtk::Button {
                         set_icon_name: "view-refresh-symbolic",
-                        set_tooltip_text: Some(&gettext("Refresh")),
+                        set_tooltip_text: Some(&translated_messages::findings::refresh_tooltip()),
                         connect_clicked => QuarantineEntriesPageInput::ReloadEntriesRequested,
                     },
 
                     pack_end = &gtk::ToggleButton {
                         set_icon_name: "system-search-symbolic",
-                        set_tooltip_text: Some(&gettext("Search")),
+                        set_tooltip_text: Some(&translated_messages::findings::search_tooltip()),
                         #[watch]
                         #[block_signal(search_toggle_handler)]
                         set_active: model.search_mode_enabled,
@@ -672,7 +656,7 @@ impl Component for QuarantineEntriesPage {
 
                     #[wrap(Some)]
                     set_child = &gtk::SearchEntry {
-                        set_placeholder_text: Some(&gettext("Search by threat name or path")),
+                        set_placeholder_text: Some(&translated_messages::findings::search_threat_name_placeholder()),
                         connect_search_changed[sender] => move |search_entry| {
                             sender.input(QuarantineEntriesPageInput::SearchTextChanged(
                                 search_entry.text().to_string(),
@@ -687,11 +671,11 @@ impl Component for QuarantineEntriesPage {
                     #[template_child]
                     page_content {
                         adw::PreferencesGroup {
-                            set_title: &gettext("Quarantine Storage"),
-                            set_description: Some(&gettext("Detected threats isolated from your system. Expand an entry to check its reputation.")),
+                            set_title: &translated_messages::findings::quarantine_storage_title(),
+                            set_description: Some(&translated_messages::findings::detected_threats_isolated_description()),
 
                             adw::ActionRow {
-                                set_title: &gettext("Total Size"),
+                                set_title: &translated_messages::findings::total_size_title(),
                                 #[watch]
                                 set_subtitle: &model.total_stored_size(),
                                 add_prefix = &gtk::Image { set_icon_name: Some("drive-harddisk-symbolic") },
@@ -714,7 +698,7 @@ impl Component for QuarantineEntriesPage {
                             },
 
                             gtk::Button {
-                                set_label: &gettext("Dismiss"),
+                                set_label: &translated_messages::findings::dismiss_label(),
                                 set_valign: gtk::Align::Center,
                                 add_css_class: "flat",
                                 connect_clicked => QuarantineEntriesPageInput::OperationFailuresDismissed,
@@ -729,7 +713,7 @@ impl Component for QuarantineEntriesPage {
                             #[local_ref]
                             set_placeholder = placeholder_stack -> gtk::Stack {
                                 add_named[Some(LOAD_FAILED_PAGE_NAME)] = &adw::ActionRow {
-                                    set_title: &gettext("Quarantine can't be read"),
+                                    set_title: &translated_messages::findings::quarantine_cannot_read_title(),
                                     set_use_markup: false,
                                     set_subtitle_lines: 0,
                                     add_css_class: "dim-label",
@@ -798,8 +782,8 @@ impl Component for QuarantineEntriesPage {
         model.reload_entries(&sender);
         let entry_list = model.entry_rows.widget();
         let placeholder_stack = &loading_placeholder_stack(
-            &gettext("Loading quarantine…"),
-            &empty_placeholder_row(&gettext("Quarantine is empty")),
+            &translated_messages::findings::loading_quarantine(),
+            &empty_placeholder_row(&translated_messages::findings::quarantine_empty()),
         );
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -815,8 +799,9 @@ impl Component for QuarantineEntriesPage {
         match page_input {
             QuarantineEntriesPageInput::HashCopyRequested(file_hash) => {
                 root.clipboard().set_text(&file_hash);
-                self.toaster
-                    .add_toast(plain_text_toast(&gettext("Hash copied to clipboard")));
+                self.toaster.add_toast(plain_text_toast(
+                    &translated_messages::findings::hash_copied_clipboard(),
+                ));
             }
             QuarantineEntriesPageInput::ReportLinkRequested(report_url) => {
                 gtk::UriLauncher::new(&report_url).launch(
@@ -1020,27 +1005,15 @@ impl Component for QuarantineEntriesPage {
                 let cleared_count = self.page_state.finish_recheck_run();
                 self.toaster
                     .add_toast(plain_text_toast(&if cleared_count == 0 {
-                        gettext("Every quarantined file is still detected or couldn't be checked")
+                        translated_messages::findings::every_quarantined_file_still()
                     } else {
-                        ngettext(
-                            "{count} quarantined file is no longer detected. Check it before \
-                             restoring it.",
-                            "{count} quarantined files are no longer detected. Check them before \
-                             restoring them.",
-                            u32::try_from(cleared_count).unwrap_or(u32::MAX),
-                        )
-                        .replace("{count}", &cleared_count.to_string())
+                        translated_messages::findings::count_quarantined_file_no(cleared_count)
                     }));
             }
             QuarantineEntriesPageCommand::ClamavReviewsSettled(Ok(0)) => {}
             QuarantineEntriesPageCommand::ClamavReviewsSettled(Ok(settled_count)) => {
                 self.toaster.add_toast(plain_text_toast(
-                    &ngettext(
-                        "{count} report to ClamAV is settled by the new signatures",
-                        "{count} reports to ClamAV are settled by the new signatures",
-                        u32::try_from(settled_count).unwrap_or(u32::MAX),
-                    )
-                    .replace("{count}", &settled_count.to_string()),
+                    &translated_messages::findings::count_report_clamav_settled(settled_count),
                 ));
                 let _shell_closed = sender.output(QuarantineEntriesPageOutput::SubmissionsChanged);
             }

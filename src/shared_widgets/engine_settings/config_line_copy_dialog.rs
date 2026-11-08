@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{ComponentParts, ComponentSender, SimpleComponent, adw, adw::prelude::*, gtk};
 
 use crate::{
@@ -9,6 +8,7 @@ use crate::{
         },
     },
     shared_widgets::engine_settings::config_setting_row::size_unit_labels,
+    translated_messages,
 };
 
 const SIZE_COUNT_CEILING: f64 = i32::MAX as f64;
@@ -148,7 +148,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
 
     view! {
         adw::Dialog {
-            set_title: &gettext("Copy Configuration Line"),
+            set_title: &translated_messages::widgets::copy_configuration_line_title(),
             set_content_width: 460,
             connect_closed => ConfigLineCopyDialogInput::DialogClosed,
 
@@ -159,10 +159,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
                 #[wrap(Some)]
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
-                        set_description: Some(&gettext(
-                            "Nothing is applied. Choose a value and copy the line, then add it \
-                             to your configuration yourself.",
-                        )),
+                        set_description: Some(&translated_messages::widgets::nothing_applied_choose_description()),
 
                         #[name = "switch_editor"]
                         adw::SwitchRow {
@@ -207,7 +204,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
                         },
 
                         adw::ComboRow {
-                            set_title: &gettext("Unit"),
+                            set_title: &translated_messages::widgets::unit_title(),
                             set_visible: model.shows_size(),
                             set_model: Some(&size_unit_labels()),
                             #[watch]
@@ -241,7 +238,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
                     add = &adw::PreferencesGroup {
                         adw::ActionRow {
                             set_use_markup: false,
-                            set_title: &gettext("Line to copy"),
+                            set_title: &translated_messages::widgets::line_copy_title(),
                             set_subtitle_selectable: true,
                             set_subtitle_lines: 0,
                             add_css_class: "property",
@@ -252,7 +249,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
 
                     add = &adw::PreferencesGroup {
                         gtk::Button {
-                            set_label: &gettext("Copy Line"),
+                            set_label: &translated_messages::widgets::copy_line_label(),
                             set_halign: gtk::Align::Center,
                             add_css_class: "pill",
                             add_css_class: "suggested-action",

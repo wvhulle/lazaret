@@ -1,5 +1,3 @@
-use gettextrs::gettext;
-
 use crate::{
     host_services::{
         clamav_programs::distribution_install_guides::DistributionFamily,
@@ -21,6 +19,7 @@ use crate::{
             },
         },
     },
+    translated_messages,
 };
 
 const NIXOS_PTRACE_SNIPPET: &str = "boot.kernel.sysctl.\"kernel.yama.ptrace_scope\" = 1;";
@@ -35,7 +34,7 @@ pub enum AlertStepAction {
 impl StepActionButton for AlertStepAction {
     fn button_label(&self) -> String {
         match self {
-            Self::OpenPreferences => gettext("Open Preferences"),
+            Self::OpenPreferences => translated_messages::findings::open_preferences(),
         }
     }
 
@@ -85,22 +84,19 @@ fn alerts_status_text(
 ) -> String {
     match &alert_readiness.journal_access {
         JournalAccess::JournalUnreadable => {
-            gettext("The system journal can't be read. Add your user to the systemd-journal group.")
+            translated_messages::findings::system_journal_cannot_read()
         }
         JournalAccess::FollowingFailed(follow_failure) => {
             journal_follow_failure_text(follow_failure)
         }
         JournalAccess::FollowingJournal if !alert_readiness.notifications_enabled => {
-            gettext("Notifications are turned off in the preferences")
+            translated_messages::findings::notifications_turned_off_preferences()
         }
         JournalAccess::FollowingJournal if !background_service_runs(background_service_state) => {
-            gettext(
-                "Alerts stop when you quit Lazaret, because it isn't set up to run in the \
-                 background",
-            )
+            translated_messages::findings::alerts_stop_quit_lazaret()
         }
         JournalAccess::FollowingJournal => {
-            gettext("Running in the background and following the journal")
+            translated_messages::findings::running_background_following_journal()
         }
     }
 }
@@ -112,11 +108,8 @@ fn alerts_timeline_step<StepAction: StepActionButton>(
     evidence_rows: Vec<ActionableEvidenceRow<StepAction>>,
 ) -> TimelineStep<StepAction> {
     TimelineStep::settled(
-        gettext("Alerts"),
-        gettext(
-            "Lazaret follows the system journal and notifies you when something is detected. It \
-             can only do that while it is running, so it should run in the background.",
-        ),
+        translated_messages::findings::alerts_label(),
+        translated_messages::findings::lazaret_follows_system_journal(),
         alerts_status_text(alert_readiness, background_service_state),
         SettledStep {
             header_action,
@@ -130,26 +123,32 @@ fn alerts_timeline_step<StepAction: StepActionButton>(
 
 fn notifications_text(notifications_enabled: bool) -> String {
     if notifications_enabled {
-        gettext("On")
+        translated_messages::findings::on_label()
     } else {
-        gettext("Off")
+        translated_messages::findings::off_label()
     }
 }
 
 fn background_service_text(background_service_state: UnitState) -> String {
     match background_service_state {
-        UnitState::UnitLoaded(UnitActivity::UnitActive) => gettext("Running"),
-        UnitState::UnitLoaded(UnitActivity::UnitInactive) => gettext("Not running"),
-        UnitState::UnitNotFound => gettext("Not set up"),
-        UnitState::SystemdUnavailable => gettext("Unknown, systemd can't be reached"),
+        UnitState::UnitLoaded(UnitActivity::UnitActive) => {
+            translated_messages::findings::running_label()
+        }
+        UnitState::UnitLoaded(UnitActivity::UnitInactive) => {
+            translated_messages::findings::not_running()
+        }
+        UnitState::UnitNotFound => translated_messages::findings::not_set_up(),
+        UnitState::SystemdUnavailable => {
+            translated_messages::findings::unknown_systemd_cannot_reached()
+        }
     }
 }
 
 fn journal_access_text(journal_access: &JournalAccess) -> String {
     match journal_access {
-        JournalAccess::FollowingJournal => gettext("Followed"),
-        JournalAccess::JournalUnreadable => gettext("Can't be read"),
-        JournalAccess::FollowingFailed(_) => gettext("Following stopped"),
+        JournalAccess::FollowingJournal => translated_messages::findings::followed_label(),
+        JournalAccess::JournalUnreadable => translated_messages::findings::cannot_read(),
+        JournalAccess::FollowingFailed(_) => translated_messages::findings::following_stopped(),
     }
 }
 
@@ -177,15 +176,15 @@ pub fn alert_delivery_step(
         preferences_offer,
         plain_rows([
             evidence_row(
-                gettext("Notifications"),
+                translated_messages::findings::notifications_label(),
                 notifications_text(alert_readiness.notifications_enabled),
             ),
             evidence_row(
-                gettext("Background service"),
+                translated_messages::findings::background_service(),
                 background_service_text(background_service_state),
             ),
             evidence_row(
-                gettext("System journal"),
+                translated_messages::findings::system_journal(),
                 journal_access_text(&alert_readiness.journal_access),
             ),
         ]),
@@ -207,35 +206,29 @@ pub const fn process_attach_condition(
 
 fn process_attach_failure_text(read_failure: ProcessAttachReadFailure) -> String {
     match read_failure {
-        ProcessAttachReadFailure::ScopeFileUnreadable { failure_kind } => gettext(
-            "Whether other programs can attach is unknown, because the kernel setting can't be \
-             read: {reason}",
-        )
-        .replace("{reason}", &failure_kind.to_string()),
-        ProcessAttachReadFailure::ScopeValueUnrecognized => gettext(
-            "Whether other programs can attach is unknown, because the kernel reports a value \
-             Lazaret doesn't recognize",
-        ),
-        ProcessAttachReadFailure::ReadingTaskInterrupted => gettext(
-            "Whether other programs can attach is unknown, because the check stopped before it \
-             finished",
-        ),
+        ProcessAttachReadFailure::ScopeFileUnreadable { failure_kind } => {
+            translated_messages::findings::attach_unknown_setting(failure_kind)
+        }
+        ProcessAttachReadFailure::ScopeValueUnrecognized => {
+            translated_messages::findings::attach_unknown_reports()
+        }
+        ProcessAttachReadFailure::ReadingTaskInterrupted => {
+            translated_messages::findings::attach_unknown_check()
+        }
     }
 }
 
 fn process_attach_status_text(process_attach_scope: ProcessAttachScope) -> String {
     match process_attach_scope {
         ProcessAttachScope::AttachRestricted => {
-            gettext("Programs can't attach to other programs you run, such as Lazaret")
+            translated_messages::findings::programs_cannot_attach_other()
         }
-        ProcessAttachScope::AnyProgramMayAttach => gettext(
-            "Any program you run can attach to Lazaret and change what it shows, including \
-             detections and the decisions you make here",
-        ),
-        ProcessAttachScope::YamaNotLoaded => gettext(
-            "This kernel doesn't restrict attaching, so any program you run can attach to Lazaret \
-             and change what it shows",
-        ),
+        ProcessAttachScope::AnyProgramMayAttach => {
+            translated_messages::findings::program_run_attach_lazaret()
+        }
+        ProcessAttachScope::YamaNotLoaded => {
+            translated_messages::findings::kernel_not_restrict_attaching()
+        }
         ProcessAttachScope::ScopeUnreadable(read_failure) => {
             process_attach_failure_text(read_failure)
         }
@@ -266,11 +259,8 @@ pub fn process_attach_step(
         | ProcessAttachScope::ScopeUnreadable(_) => Vec::new(),
     };
     TimelineStep::settled(
-        gettext("Other programs can't attach to Lazaret"),
-        gettext(
-            "A program that attaches to Lazaret can hide alerts or change your decisions. Setting \
-             kernel.yama.ptrace_scope to 1 lets only a program's parent attach to it.",
-        ),
+        translated_messages::findings::other_programs_cannot_attach(),
+        translated_messages::findings::program_attaches_lazaret_hide(),
         process_attach_status_text(process_attach_scope),
         SettledStep::without_offers(process_attach_condition(process_attach_scope).node_state()),
     )

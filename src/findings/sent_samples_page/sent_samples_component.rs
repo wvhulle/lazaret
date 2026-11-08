@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use futures::stream;
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender,
     abstractions::Toaster,
@@ -72,6 +71,7 @@ use crate::{
             bazaar_upload_attempt_text, clamav_report_attempt_text, virustotal_upload_attempt_text,
         },
     },
+    translated_messages,
 };
 
 pub struct SentSamplesPageInit {
@@ -179,14 +179,14 @@ fn filter_choice_section(action_name: &str, choice_labels: Vec<String>) -> gio::
 fn submission_filter_menu() -> gio::Menu {
     let filter_menu = gio::Menu::new();
     filter_menu.append_section(
-        Some(&gettext("Service")),
+        Some(&translated_messages::findings::service_label()),
         &filter_choice_section(
             "submissions.service-filter",
             SERVICE_FILTER_CHOICES.map(service_filter_label).to_vec(),
         ),
     );
     filter_menu.append_section(
-        Some(&gettext("Status")),
+        Some(&translated_messages::findings::status_label()),
         &filter_choice_section(
             "submissions.progress-filter",
             PROGRESS_FILTER_CHOICES.map(progress_filter_label).to_vec(),
@@ -297,9 +297,9 @@ impl SentSamplesPage {
     ) {
         let entry_targets = offered_target_activities(entry_record, &self.uploads_in_flight);
         if entry_targets.is_empty() {
-            self.toaster.add_toast(plain_text_toast(&gettext(
-                "This quarantine record has no usable hash, so Lazaret doesn't send it anywhere",
-            )));
+            self.toaster.add_toast(plain_text_toast(
+                &translated_messages::findings::quarantine_record_no_usable(),
+            ));
             return;
         }
         present_target_choice(
@@ -324,15 +324,15 @@ impl SentSamplesPage {
             .candidate_listing
             .candidate_with_id(chosen_target.entry_id)
         else {
-            self.toaster.add_toast(plain_text_toast(&gettext(
-                "This file is no longer in quarantine",
-            )));
+            self.toaster.add_toast(plain_text_toast(
+                &translated_messages::findings::file_no_longer_quarantine(),
+            ));
             return;
         };
         let unsendable_toast = || {
-            self.toaster.add_toast(plain_text_toast(&gettext(
-                "This service doesn't take this detection",
-            )));
+            self.toaster.add_toast(plain_text_toast(
+                &translated_messages::findings::service_not_take_detection(),
+            ));
         };
         let clamav_report_proposal = |report_kind| ClamavReportProposal {
             report_kind,
@@ -446,7 +446,7 @@ impl SentSamplesPage {
         else {
             Self::report_upload_notice(
                 sender,
-                gettext("This file is no longer in quarantine with a usable hash"),
+                translated_messages::findings::file_no_usable_hash(),
             );
             return;
         };
@@ -530,11 +530,11 @@ impl Component for SentSamplesPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&gettext("Check MalwareBazaar and VirusTotal for news")),
+                            set_tooltip_text: Some(&translated_messages::findings::check_malwarebazaar_virustotal_tooltip()),
                             connect_clicked => SentSamplesPageInput::RemoteRefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                            set_tooltip_text: Some(&gettext("Checking")),
+                            set_tooltip_text: Some(&translated_messages::findings::checking_sent_tooltip()),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.remote_refresh_running()),
@@ -544,16 +544,12 @@ impl Component for SentSamplesPage {
                 #[wrap(Some)]
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
-                        set_title: &gettext("Send a File"),
-                        set_description: Some(&gettext(
-                            "Nothing leaves this computer until you confirm what is sent.",
-                        )),
+                        set_title: &translated_messages::findings::send_file_title(),
+                        set_description: Some(&translated_messages::findings::nothing_leaves_computer_description()),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::Button {
-                            set_label: &gettext("Report Missed Malware…"),
-                            set_tooltip_text: Some(&gettext(
-                                "Send ClamAV a malicious file it doesn't detect",
-                            )),
+                            set_label: &translated_messages::findings::report_missed_malware_label(),
+                            set_tooltip_text: Some(&translated_messages::findings::send_clamav_malicious_tooltip()),
                             set_valign: gtk::Align::Center,
                             add_css_class: "flat",
                             connect_clicked => SentSamplesPageInput::MissedMalwareReportRequested,
@@ -573,14 +569,14 @@ impl Component for SentSamplesPage {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &gettext("Sent"),
-                        set_description: Some(&gettext("What Lazaret sent and what became of it.")),
+                        set_title: &translated_messages::findings::sent_title(),
+                        set_description: Some(&translated_messages::findings::lazaret_sent_became_description()),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::MenuButton {
                             set_menu_model: Some(&submission_filter_menu()),
                             set_always_show_arrow: true,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&gettext("Filter Sent Samples")),
+                            set_tooltip_text: Some(&translated_messages::findings::filter_sent_samples_tooltip()),
                             add_css_class: "flat",
                             #[watch]
                             set_label: &filter_summary_text(&model.submission_filters),
@@ -603,11 +599,8 @@ impl Component for SentSamplesPage {
 
                     add = &adw::PreferencesGroup {
                         adw::ActionRow {
-                            set_title: &gettext("Online Services"),
-                            set_subtitle: &gettext(
-                                "What each service receives, and the MalwareBazaar and VirusTotal \
-                                 keys",
-                            ),
+                            set_title: &translated_messages::findings::online_services_title(),
+                            set_subtitle: &translated_messages::findings::each_service_receives_subtitle(),
                             set_subtitle_lines: 0,
                             set_activatable: true,
                             set_action_name: Some(ONLINE_SERVICES_ACTION),
@@ -707,17 +700,17 @@ impl Component for SentSamplesPage {
             SentSamplesPageInput::EntrySubmissionRequested { entry_id } => {
                 match self.candidate_listing.candidate_with_id(entry_id) {
                     Some(entry_record) => self.offer_targets_for(entry_record, root, &sender),
-                    None => self.toaster.add_toast(plain_text_toast(&gettext(
-                        "This file is no longer in quarantine",
-                    ))),
+                    None => self.toaster.add_toast(plain_text_toast(
+                        &translated_messages::findings::file_no_longer_quarantine(),
+                    )),
                 }
             }
             SentSamplesPageInput::QuarantinedFileSubmissionRequested { original_path } => {
                 match self.candidate_listing.newest_candidate_from(&original_path) {
                     Some(entry_record) => self.offer_targets_for(entry_record, root, &sender),
-                    None => self.toaster.add_toast(plain_text_toast(&gettext(
-                        "This file is no longer in quarantine",
-                    ))),
+                    None => self.toaster.add_toast(plain_text_toast(
+                        &translated_messages::findings::file_no_longer_quarantine(),
+                    )),
                 }
             }
             SentSamplesPageInput::TargetChosen(chosen_target) => {
@@ -740,7 +733,9 @@ impl Component for SentSamplesPage {
             SentSamplesPageInput::MissedMalwareReportRequested => {
                 deliver_local_outcome(
                     sender.input_sender().clone(),
-                    chosen_file_to_submit(gettext("Choose the File ClamAV Misses")),
+                    chosen_file_to_submit(
+                        translated_messages::findings::choose_file_clamav_misses(),
+                    ),
                     |chosen_file| match chosen_file {
                         ChosenSubmissionFile::FileChosen(chosen_path) => {
                             Some(SentSamplesPageInput::MissedMalwareFileChosen(chosen_path))

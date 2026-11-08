@@ -2,7 +2,6 @@ use std::sync::OnceLock;
 
 use bytesize::ByteSize;
 use fixed_decimal::Decimal;
-use gettextrs::ngettext;
 use icu::{
     datetime::{
         DateTimeFormatter,
@@ -16,6 +15,8 @@ use icu_experimental::relativetime::{
 use jiff::{SignedDuration, Timestamp, civil, tz::TimeZone};
 use relm4::gtk::glib;
 use writeable::Writeable;
+
+use crate::translated_messages;
 
 const HOURS_PER_DAY: i64 = 24;
 const LOCALE_INDEPENDENT_NAMES: [&str; 2] = ["C", "POSIX"];
@@ -38,16 +39,30 @@ pub struct MomentFormatters {
     days_formatter: RelativeTimeFormatter,
 }
 
-fn locale_from_glib_name(glib_locale_name: &str) -> Option<Locale> {
+fn glib_language_tag(glib_locale_name: &str) -> Option<String> {
     let language_tag = glib_locale_name
         .split(['.', '@'])
         .next()
         .unwrap_or_default()
         .replace('_', "-");
-    if language_tag.is_empty() || LOCALE_INDEPENDENT_NAMES.contains(&language_tag.as_str()) {
-        return None;
+    (!language_tag.is_empty() && !LOCALE_INDEPENDENT_NAMES.contains(&language_tag.as_str()))
+        .then_some(language_tag)
+}
+
+fn locale_from_glib_name(glib_locale_name: &str) -> Option<Locale> {
+    Locale::try_from_str(&glib_language_tag(glib_locale_name)?).ok()
+}
+
+pub fn host_language_tags(locale_category: &str) -> Vec<String> {
+    let mut language_tags = Vec::new();
+    for glib_locale_name in glib::language_names_with_category(locale_category) {
+        if let Some(language_tag) = glib_language_tag(&glib_locale_name)
+            && !language_tags.contains(&language_tag)
+        {
+            language_tags.push(language_tag);
+        }
     }
-    Locale::try_from_str(&language_tag).ok()
+    language_tags
 }
 
 fn host_locale_for(locale_category: &str) -> Locale {
@@ -176,13 +191,7 @@ pub fn byte_size_text(byte_size: ByteSize) -> String {
 
 pub fn exact_byte_size_text(byte_size: ByteSize) -> String {
     let byte_count = byte_size.as_u64();
-    ngettext(
-        "{size} ({count} byte)",
-        "{size} ({count} bytes)",
-        u32::try_from(byte_count).unwrap_or(u32::MAX),
-    )
-    .replace("{count}", &byte_count.to_string())
-    .replace("{size}", &byte_size_text(byte_size))
+    translated_messages::host::size_count_byte(byte_count, byte_size_text(byte_size))
 }
 
 #[cfg(test)]

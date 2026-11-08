@@ -1,8 +1,9 @@
-use gettextrs::gettext;
-
-use crate::application_window::{
-    application_pages::ApplicationPage,
-    sidebar_area_status::{AreaStatus, AreaSummary, SidebarAreaSummary},
+use crate::{
+    application_window::{
+        application_pages::ApplicationPage,
+        sidebar_area_status::{AreaStatus, AreaSummary, SidebarAreaSummary},
+    },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -15,17 +16,17 @@ pub enum SidebarGroup {
 impl SidebarGroup {
     pub fn group_title(self) -> String {
         match self {
-            Self::SignaturesGroup => gettext("Signatures"),
-            Self::ScansGroup => gettext("Scans"),
-            Self::FindingsGroup => gettext("Findings"),
+            Self::SignaturesGroup => translated_messages::window::signatures_label(),
+            Self::ScansGroup => translated_messages::window::scans_label(),
+            Self::FindingsGroup => translated_messages::window::findings_label(),
         }
     }
 
     pub fn group_description(self) -> String {
         match self {
-            Self::SignaturesGroup => gettext("Where detections come from"),
-            Self::ScansGroup => gettext("How files get checked"),
-            Self::FindingsGroup => gettext("What was found"),
+            Self::SignaturesGroup => translated_messages::window::detections_come(),
+            Self::ScansGroup => translated_messages::window::files_get_checked(),
+            Self::FindingsGroup => translated_messages::window::found_label(),
         }
     }
 
@@ -104,9 +105,9 @@ impl SidebarStatusImage {
     pub fn tooltip_text(self) -> String {
         match self {
             Self::NoStatusImage => String::new(),
-            Self::WarningImage => gettext("Needs review"),
-            Self::ErrorImage => gettext("Not working"),
-            Self::WaitingImage => gettext("Waiting for another part"),
+            Self::WarningImage => translated_messages::window::needs_review(),
+            Self::ErrorImage => translated_messages::window::not_working(),
+            Self::WaitingImage => translated_messages::window::waiting_another_part(),
         }
     }
 }
@@ -146,7 +147,7 @@ pub fn sidebar_row_presentation(
     match entry_summary {
         EntrySummary::SummaryPending => SidebarRowPresentation {
             row_title: application_page.page_title(),
-            row_subtitle: gettext("Checking…"),
+            row_subtitle: translated_messages::window::checking_subtitle(),
             prefix_icon: application_page.page_icon(),
             status_image: SidebarStatusImage::NoStatusImage,
         },

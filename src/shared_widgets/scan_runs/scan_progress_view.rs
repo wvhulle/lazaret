@@ -1,12 +1,14 @@
 use std::time::Duration;
 
-use gettextrs::{gettext, ngettext};
 use relm4::gtk;
 
-use crate::host_services::clamav_scanner::{
-    scan_progress_estimates::{file_progress_text, remaining_time_text},
-    scan_target_enumeration::EnumerationProgress,
-    scanner_output_parser::sanitize_scanner_line,
+use crate::{
+    host_services::clamav_scanner::{
+        scan_progress_estimates::{file_progress_text, remaining_time_text},
+        scan_target_enumeration::EnumerationProgress,
+        scanner_output_parser::sanitize_scanner_line,
+    },
+    translated_messages,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,15 +38,10 @@ impl ScanProgressView {
 
     pub fn progress_text(&self) -> String {
         match self {
-            Self::PreparingScan => gettext("Preparing…"),
+            Self::PreparingScan => translated_messages::widgets::preparing_label(),
             Self::FindingFiles {
                 found_file_count, ..
-            } => ngettext(
-                "Finding files… {count} found",
-                "Finding files… {count} found",
-                u32::try_from(*found_file_count).unwrap_or(u32::MAX),
-            )
-            .replace("{count}", &found_file_count.to_string()),
+            } => translated_messages::widgets::finding_files_count_found(*found_file_count),
             Self::ScanningFiles {
                 inspected_file_count,
                 planned_file_count,

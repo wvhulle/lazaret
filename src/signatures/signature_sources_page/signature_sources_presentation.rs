@@ -1,10 +1,9 @@
-use gettextrs::gettext;
-
 use crate::{
     application_window::protection_evidence_refresh::GatheredEvidence,
     signatures::signature_sources_page::source_check_results::{
         AuditCheck, AuditStatus, overall_check_status,
     },
+    translated_messages,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,15 +29,12 @@ impl SourceChecks {
 }
 
 fn abuse_ch_key_purpose_text() -> String {
-    gettext(
-        "URLhaus signatures through fangfrisch, MalwareBazaar lookups and MalwareBazaar uploads \
-         all use this key. It is kept and edited in Preferences, under Online Services.",
-    )
+    translated_messages::signatures::urlhaus_signatures_through_fangfrisch()
 }
 
 pub fn abuse_ch_key_subtitle(gathered_evidence: &GatheredEvidence) -> String {
     let key_status_text = match gathered_evidence {
-        GatheredEvidence::NotGatheredYet => gettext("Checking the API key…"),
+        GatheredEvidence::NotGatheredYet => translated_messages::signatures::checking_api_key(),
         GatheredEvidence::Gathered {
             protection_evidence,
             ..

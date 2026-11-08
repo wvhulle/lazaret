@@ -1,4 +1,3 @@
-use gettextrs::{gettext, ngettext};
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -11,6 +10,7 @@ use crate::{
     shared_widgets::scan_runs::scan_results_section::scan_results_state::{
         ProblemPathGroup, ScanResultsView,
     },
+    translated_messages,
 };
 
 const PROBLEM_PATH_ROW_LIMIT: usize = 200;
@@ -75,14 +75,9 @@ fn problem_path_expander(path_group: &ProblemPathGroup) -> adw::ExpanderRow {
         path_expander.add_row(
             &adw::ActionRow::builder()
                 .use_markup(false)
-                .title(
-                    ngettext(
-                        "{count} more file, listed in the exported report",
-                        "{count} more files, listed in the exported report",
-                        u32::try_from(hidden_path_count).unwrap_or(u32::MAX),
-                    )
-                    .replace("{count}", &hidden_path_count.to_string()),
-                )
+                .title(translated_messages::widgets::count_more_file_title(
+                    hidden_path_count,
+                ))
                 .css_classes(["dim-label"])
                 .build(),
         );
@@ -92,7 +87,7 @@ fn problem_path_expander(path_group: &ProblemPathGroup) -> adw::ExpanderRow {
 
 fn scan_details_expander(noteworthy_output: &str) -> adw::ExpanderRow {
     let details_expander = adw::ExpanderRow::builder()
-        .title(gettext("Scan details"))
+        .title(translated_messages::widgets::scan_details_title())
         .build();
     details_expander.add_row(
         &gtk::Label::builder()

@@ -1,5 +1,5 @@
 [workspace]
-members = ["clamd_configuration", "gtk_scene_capture", "clamav_admin_service", "xtask"]
+members = ["clamd_configuration", "gtk_scene_capture", "clamav_admin_service", "translation_codegen", "xtask"]
 
 [package]
 name = "lazaret"
@@ -17,7 +17,6 @@ enum_variant_names = "allow"
 
 [dependencies]
 futures = "0.3.34"
-gettext-rs = { version = "0.8", features = ["gettext-system"] }
 hex = "0.4"
 lazaret-clamd-configuration = { version = "0.1.0", path = "clamd_configuration" }
 humantime = "2.4"
@@ -48,8 +47,14 @@ icu_datetime = { version = "2.4.0", features = ["unstable_jiff_0_2"] }
 bytesize = "2.7.0"
 flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
 xdg = "3.0.0"
+fluent-bundle = "0.16"
+fluent-langneg = "0.13"
+unic-langid = "0.9"
 
 [dev-dependencies]
 libc = "0.2"
 rusqlite = { version = "0.41", features = ["bundled"] }
 tokio = { version = "1.54", features = ["macros", "rt-multi-thread"] }
+
+[build-dependencies]
+lazaret-translation-codegen = { version = "0.1.0", path = "translation_codegen" }

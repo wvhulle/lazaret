@@ -1,28 +1,23 @@
-use gettextrs::gettext;
-
-use crate::scans::manual_scan_page::scan_profiles_dialog::scan_profile_store::{
-    BuiltinProfile, ProfileOrigin, ProfileStoreFailure, ScanProfile,
+use crate::{
+    scans::manual_scan_page::scan_profiles_dialog::scan_profile_store::{
+        BuiltinProfile, ProfileOrigin, ProfileStoreFailure, ScanProfile,
+    },
+    translated_messages,
 };
 
 pub fn builtin_profile_name(builtin_profile: BuiltinProfile) -> String {
     match builtin_profile {
-        BuiltinProfile::QuickScan => gettext("Quick Scan"),
-        BuiltinProfile::FullScan => gettext("Full Scan"),
-        BuiltinProfile::HomeFolder => gettext("Home Folder"),
+        BuiltinProfile::QuickScan => translated_messages::scans::quick_scan(),
+        BuiltinProfile::FullScan => translated_messages::scans::full_scan(),
+        BuiltinProfile::HomeFolder => translated_messages::scans::home_folder(),
     }
 }
 
 pub fn builtin_profile_description(builtin_profile: BuiltinProfile) -> String {
     match builtin_profile {
-        BuiltinProfile::QuickScan => {
-            gettext("Fast scan of the Downloads folder for quick threat detection")
-        }
-        BuiltinProfile::FullScan => {
-            gettext("Comprehensive system-wide scan of all accessible directories")
-        }
-        BuiltinProfile::HomeFolder => {
-            gettext("Scan of the user's home directory and personal files")
-        }
+        BuiltinProfile::QuickScan => translated_messages::scans::fast_scan_downloads_folder(),
+        BuiltinProfile::FullScan => translated_messages::scans::comprehensive_system_wide_scan(),
+        BuiltinProfile::HomeFolder => translated_messages::scans::user_home_directory_personal(),
     }
 }
 
@@ -43,24 +38,28 @@ pub fn displayed_profile_description(scan_profile: &ScanProfile) -> String {
 pub fn describe_profile_store_failure(store_failure: &ProfileStoreFailure) -> String {
     match store_failure {
         ProfileStoreFailure::ProfileFileUnavailable(access_failure) => {
-            gettext("The profile file could not be accessed: {error}")
-                .replace("{error}", &access_failure.to_string())
+            translated_messages::scans::profile_file_not_accessed(access_failure)
         }
         ProfileStoreFailure::ProfileDataInvalid(parse_failure) => {
-            gettext("The profile data is not valid: {error}")
-                .replace("{error}", &parse_failure.to_string())
+            translated_messages::scans::profile_data_not_valid(parse_failure)
         }
         ProfileStoreFailure::ProfileFileNotReplaced(persist_failure) => {
-            gettext("The profile file could not be replaced: {error}")
-                .replace("{error}", &persist_failure.to_string())
+            translated_messages::scans::profile_file_not_replaced(persist_failure)
         }
         ProfileStoreFailure::ProfileTaskInterrupted(interrupted_task) => {
-            gettext("The profile task was interrupted: {error}")
-                .replace("{error}", &interrupted_task.to_string())
+            translated_messages::scans::profile_task_interrupted_error(interrupted_task)
         }
-        ProfileStoreFailure::ProfileNameMissing => gettext("Profile name is required"),
-        ProfileStoreFailure::ProfileNameTooLong => gettext("Name must be 50 characters or less"),
-        ProfileStoreFailure::ProfileNameTaken => gettext("Another profile already uses this name"),
-        ProfileStoreFailure::ProfileTargetsMissing => gettext("Add at least one target"),
+        ProfileStoreFailure::ProfileNameMissing => {
+            translated_messages::scans::profile_name_required()
+        }
+        ProfileStoreFailure::ProfileNameTooLong => {
+            translated_messages::scans::name_50_characters_less()
+        }
+        ProfileStoreFailure::ProfileNameTaken => {
+            translated_messages::scans::another_profile_already_uses()
+        }
+        ProfileStoreFailure::ProfileTargetsMissing => {
+            translated_messages::scans::add_least_one_target()
+        }
     }
 }

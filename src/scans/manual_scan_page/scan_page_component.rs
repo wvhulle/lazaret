@@ -1,6 +1,5 @@
 use std::{path::PathBuf, time::Instant};
 
-use gettextrs::{gettext, ngettext};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     abstractions::Toaster,
@@ -79,6 +78,7 @@ use crate::{
             },
         },
     },
+    translated_messages,
 };
 
 enum ProfileManagerView {
@@ -117,8 +117,9 @@ fn describe_page_notice(page_notice: &ScanPageNotice) -> String {
         }
         ScanPageNotice::EicarTestFileUnwritable(eicar_failure) => eicar_failure_text(eicar_failure),
         ScanPageNotice::ScanNotRecorded(recording_failure) => {
-            gettext("The scan could not be added to the history: {error}")
-                .replace("{error}", &describe_history_failure(recording_failure))
+            translated_messages::scans::not_added_history_error(describe_history_failure(
+                recording_failure,
+            ))
         }
     }
 }
@@ -213,7 +214,7 @@ fn close_enclosing_popover(clicked_button: &gtk::Button) {
 
 fn profile_choice_label(choice_row: &ProfileChoiceRow) -> String {
     match choice_row {
-        ProfileChoiceRow::ManualTargetsRow => gettext("No Profile (Manual)"),
+        ProfileChoiceRow::ManualTargetsRow => translated_messages::scans::no_profile_manual(),
         ProfileChoiceRow::StoredProfileRow(stored_profile) => {
             sanitize_scanner_line(&displayed_profile_name(stored_profile))
         }
@@ -240,12 +241,12 @@ enum ManualScanStart {
 
 fn device_scan_running_toast() -> adw::Toast {
     let refusal_toast = adw::Toast::builder()
-        .title(gettext(
-            "A removable drive is being scanned. Start this scan when it has finished.",
-        ))
+        .title(translated_messages::scans::removable_drive_scanned_title())
         .use_markup(false)
         .build();
-    refusal_toast.set_button_label(Some(&gettext("Open Removable Drives")));
+    refusal_toast.set_button_label(Some(
+        &translated_messages::scans::open_removable_drives_button(),
+    ));
     refusal_toast.set_action_name(Some("win.show-page"));
     refusal_toast.set_action_target_value(Some(
         &ApplicationPage::RemovableDrives.page_name().to_variant(),
@@ -306,16 +307,15 @@ impl ScanPage {
 
     fn scanner_backend_text(&self) -> String {
         match &self.scanner_backend_view {
-            ScannerBackendView::DetectingBackend => gettext("Checking…"),
+            ScannerBackendView::DetectingBackend => translated_messages::scans::checking_manual(),
             ScannerBackendView::BackendUndetermined(lookup_failure) => {
-                gettext("Backend: unknown, the scanner programs could not be looked up: {error}")
-                    .replace("{error}", &lookup_failure.to_string())
+                translated_messages::scans::backend_unknown_scanner_programs(lookup_failure)
             }
             ScannerBackendView::BackendDetected(ScannerBackend::ClamdDaemon) => {
-                gettext("Backend: clamd (daemon)")
+                translated_messages::scans::backend_clamd_daemon()
             }
             ScannerBackendView::BackendDetected(ScannerBackend::StandaloneClamscan) => {
-                gettext("Backend: clamscan (standalone)")
+                translated_messages::scans::backend_clamscan_standalone()
             }
         }
     }
@@ -355,42 +355,39 @@ impl ScanPage {
 
     fn scan_status_title(&self) -> String {
         match &self.scan_page_state {
-            ScanPageState::WaitingForTargets => gettext("Scan"),
-            ScanPageState::WritingEicarFile => gettext("Preparing…"),
+            ScanPageState::WaitingForTargets => translated_messages::scans::scan_title(),
+            ScanPageState::WritingEicarFile => translated_messages::scans::preparing_label(),
             ScanPageState::ScanRunning(RunningScan {
                 cancel_request: CancelRequest::CancelRequested,
                 ..
-            }) => gettext("Cancelling…"),
+            }) => translated_messages::scans::cancelling_label(),
             ScanPageState::ScanRunning(RunningScan {
                 scan_run,
                 cancel_request: CancelRequest::CancelNotRequested,
                 ..
             }) => match scan_run.scan_targets.as_slice() {
                 [single_target] => {
-                    gettext("Scanning {name}").replace("{name}", &scan_target_name(single_target))
+                    translated_messages::scans::scanning_name(scan_target_name(single_target))
                 }
-                several_targets => ngettext(
-                    "Scanning {count} location",
-                    "Scanning {count} locations",
-                    u32::try_from(several_targets.len()).unwrap_or(u32::MAX),
-                )
-                .replace("{count}", &several_targets.len().to_string()),
+                several_targets => {
+                    translated_messages::scans::scanning_count_location(several_targets.len())
+                }
             },
             ScanPageState::ScanFinished(FinishedScan {
                 scan_ending: ScanEnding::ScanCancelled,
                 ..
-            }) => gettext("Scan cancelled by user"),
+            }) => translated_messages::scans::cancelled_user(),
             ScanPageState::ScanFinished(FinishedScan { scan_run, .. })
                 if scan_run.scan_outcome.threats_were_found() =>
             {
-                gettext("Threats found")
+                translated_messages::scans::threats_found_scan()
             }
             ScanPageState::ScanFinished(FinishedScan { scan_run, .. })
                 if !scan_run.scan_outcome.scan_problems.is_empty() =>
             {
-                gettext("The scan did not finish cleanly")
+                translated_messages::scans::not_finish_cleanly()
             }
-            ScanPageState::ScanFinished(_) => gettext("No threats found"),
+            ScanPageState::ScanFinished(_) => translated_messages::scans::no_threats_found(),
         }
     }
 
@@ -503,7 +500,7 @@ fn eicar_failure_text(eicar_failure: &EicarTestFileFailure) -> String {
         }
         EicarTestFileFailure::FileUnwritable(write_failure) => write_failure.to_string(),
     };
-    gettext("Could not create the EICAR test file: {error}").replace("{error}", &failure_detail)
+    translated_messages::scans::not_create_eicar_test(&failure_detail)
 }
 
 #[relm4::component(pub)]
@@ -520,14 +517,14 @@ impl Component for ScanPage {
             add_top_bar = &adw::HeaderBar {
                 #[wrap(Some)]
                 set_title_widget = &adw::WindowTitle {
-                    set_title: &gettext("Scan"),
+                    set_title: &translated_messages::scans::scan_title(),
                     #[watch]
                     set_subtitle: &model.header_subtitle(),
                 },
 
                 pack_start = &gtk::Button {
                     set_icon_name: "document-new-symbolic",
-                    set_tooltip_text: Some(&gettext("Add Files")),
+                    set_tooltip_text: Some(&translated_messages::scans::add_files_tooltip()),
                     #[watch]
                     set_visible: model.scan_page_state.shows_scan_settings(),
                     connect_clicked => ScanPageInput::ChooseFilesRequested,
@@ -535,7 +532,7 @@ impl Component for ScanPage {
 
                 pack_start = &gtk::Button {
                     set_icon_name: "folder-new-symbolic",
-                    set_tooltip_text: Some(&gettext("Add Folder")),
+                    set_tooltip_text: Some(&translated_messages::scans::add_folder_manual_tooltip()),
                     #[watch]
                     set_visible: model.scan_page_state.shows_scan_settings(),
                     connect_clicked => ScanPageInput::ChooseFolderRequested,
@@ -543,7 +540,7 @@ impl Component for ScanPage {
 
                 pack_end = &gtk::MenuButton {
                     set_icon_name: "view-more-symbolic",
-                    set_tooltip_text: Some(&gettext("More")),
+                    set_tooltip_text: Some(&translated_messages::scans::more_tooltip()),
                     #[watch]
                     set_visible: !model.scan_page_state.scan_is_active(),
                     #[wrap(Some)]
@@ -552,7 +549,7 @@ impl Component for ScanPage {
                             set_orientation: gtk::Orientation::Vertical,
 
                             gtk::Button {
-                                set_label: &gettext("Run EICAR Test"),
+                                set_label: &translated_messages::scans::run_eicar_test_label(),
                                 add_css_class: "flat",
                                 #[watch]
                                 set_visible: model.scan_page_state.shows_scan_settings(),
@@ -563,7 +560,7 @@ impl Component for ScanPage {
                             },
 
                             gtk::Button {
-                                set_label: &gettext("Copy Results"),
+                                set_label: &translated_messages::scans::copy_results_label(),
                                 add_css_class: "flat",
                                 #[watch]
                                 set_visible: model.scan_page_state.shows_results(),
@@ -574,7 +571,7 @@ impl Component for ScanPage {
                             },
 
                             gtk::Button {
-                                set_label: &gettext("Export Results…"),
+                                set_label: &translated_messages::scans::export_results_label(),
                                 add_css_class: "flat",
                                 #[watch]
                                 set_visible: model.scan_page_state.shows_results(),
@@ -588,7 +585,7 @@ impl Component for ScanPage {
                 },
 
                 pack_end = &gtk::Button {
-                    set_label: &gettext("Start Scan"),
+                    set_label: &translated_messages::scans::start_scan_label(),
                     add_css_class: "suggested-action",
                     #[watch]
                     set_visible: model.scan_page_state.shows_scan_settings(),
@@ -598,7 +595,7 @@ impl Component for ScanPage {
                 },
 
                 pack_end = &gtk::Button {
-                    set_label: &gettext("Cancel"),
+                    set_label: &translated_messages::scans::cancel_manual_label(),
                     add_css_class: "destructive-action",
                     #[watch]
                     set_visible: model.scan_page_state.scan_is_active(),
@@ -609,8 +606,8 @@ impl Component for ScanPage {
             },
 
             add_top_bar = &adw::Banner {
-                set_title: &gettext("Lazaret refuses a ClamAV program that your account could replace"),
-                set_button_label: Some(&gettext("Details")),
+                set_title: &translated_messages::scans::lazaret_refuses_clamav_title(),
+                set_button_label: Some(&translated_messages::scans::details_button()),
                 set_action_name: Some("win.show-page"),
                 set_action_target_value: Some(&ApplicationPage::ScanEngine.page_name().to_variant()),
                 #[watch]
@@ -654,12 +651,12 @@ impl Component for ScanPage {
                         },
 
                         adw::PreferencesGroup {
-                            set_title: &gettext("Scan Profile"),
+                            set_title: &translated_messages::scans::profile_title(),
                             #[watch]
                             set_visible: model.scan_page_state.shows_scan_settings(),
 
                             adw::ComboRow {
-                                set_title: &gettext("Profile"),
+                                set_title: &translated_messages::scans::profile_short_title(),
                                 #[track(model.profile_list_reloaded)]
                                 #[block_signal(profile_selection_handler)]
                                 set_model: Some(&model.profile_choice_labels()),
@@ -674,7 +671,7 @@ impl Component for ScanPage {
 
                                 add_suffix = &gtk::Button {
                                     set_icon_name: "emblem-system-symbolic",
-                                    set_tooltip_text: Some(&gettext("Manage Profiles")),
+                                    set_tooltip_text: Some(&translated_messages::scans::manage_profiles_tooltip()),
                                     set_valign: gtk::Align::Center,
                                     add_css_class: "flat",
                                     connect_clicked => ScanPageInput::ManageProfilesRequested,
@@ -683,7 +680,7 @@ impl Component for ScanPage {
                         },
 
                         adw::PreferencesGroup {
-                            set_title: &gettext("Scan Targets"),
+                            set_title: &translated_messages::scans::targets_manual_title(),
                             #[watch]
                             set_visible: model.scan_page_state.shows_scan_settings(),
 
@@ -706,7 +703,7 @@ impl Component for ScanPage {
                                     },
 
                                     gtk::Label {
-                                        set_label: &gettext("Drop files or folders to scan"),
+                                        set_label: &translated_messages::scans::drop_files_folders_label(),
                                         add_css_class: "title-4",
                                     },
 
@@ -715,13 +712,13 @@ impl Component for ScanPage {
                                         set_halign: gtk::Align::Center,
 
                                         gtk::Button {
-                                            set_label: &gettext("Add Files…"),
+                                            set_label: &translated_messages::scans::add_files_label(),
                                             add_css_class: "pill",
                                             connect_clicked => ScanPageInput::ChooseFilesRequested,
                                         },
 
                                         gtk::Button {
-                                            set_label: &gettext("Add Folder…"),
+                                            set_label: &translated_messages::scans::add_folder_label(),
                                             add_css_class: "pill",
                                             connect_clicked => ScanPageInput::ChooseFolderRequested,
                                         },
@@ -731,7 +728,7 @@ impl Component for ScanPage {
                         },
 
                         adw::PreferencesGroup {
-                            set_title: &gettext("Found so far"),
+                            set_title: &translated_messages::scans::found_far_scan_title(),
                             set_margin_top: 12,
                             #[watch]
                             set_visible: model.scan_page_state.scan_is_active() && !model.found_threat_rows.is_empty(),
@@ -833,7 +830,7 @@ impl Component for ScanPage {
             scan_results_section: ScanResultsSection::builder()
                 .launch(ScanResultsSectionInit {
                     quarantine_vault: page_init.quarantine_vault,
-                    dismiss_label: gettext("New Scan"),
+                    dismiss_label: translated_messages::scans::new_scan_button(),
                 })
                 .forward(
                     sender.input_sender(),
@@ -862,11 +859,9 @@ impl Component for ScanPage {
                 .launch(ActivityHistoryGroupInit {
                     activity_history: page_init.activity_history,
                     history_filter: ActivityHistoryFilter::ManualScans,
-                    group_title: gettext("Recent scans"),
-                    group_description: gettext(
-                        "Scans started from Lazaret, newest first. Select one to read its \
-                         transcript.",
-                    ),
+                    group_title: translated_messages::scans::recent_scans_title(),
+                    group_description:
+                        translated_messages::scans::started_lazaret_newest_description(),
                 })
                 .detach(),
             exclusions_section: ScanExclusionsSection::builder().launch(()).detach(),
@@ -894,7 +889,7 @@ impl Component for ScanPage {
         match page_input {
             ScanPageInput::ChooseFilesRequested => deliver_local_outcome(
                 sender.input_sender().clone(),
-                chosen_files_to_open(gettext("Choose Files to Scan")),
+                chosen_files_to_open(translated_messages::scans::choose_files_scan()),
                 |chosen_paths| {
                     (!chosen_paths.is_empty())
                         .then_some(ScanPageInput::ScanTargetsAdded(chosen_paths))
@@ -902,7 +897,7 @@ impl Component for ScanPage {
             ),
             ScanPageInput::ChooseFolderRequested => deliver_local_outcome(
                 sender.input_sender().clone(),
-                chosen_folders_to_open(gettext("Choose a Folder to Scan")),
+                chosen_folders_to_open(translated_messages::scans::choose_folder_scan()),
                 |chosen_paths| {
                     (!chosen_paths.is_empty())
                         .then_some(ScanPageInput::ScanTargetsAdded(chosen_paths))

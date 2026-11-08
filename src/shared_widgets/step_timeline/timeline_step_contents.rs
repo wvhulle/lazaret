@@ -1,9 +1,8 @@
 use std::fmt::Debug;
 
-use gettextrs::gettext;
 use jiff::Timestamp;
 
-use crate::host_services::desktop::locale_formatting::MomentFormatters;
+use crate::{host_services::desktop::locale_formatting::MomentFormatters, translated_messages};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StepNodeState {
@@ -224,9 +223,7 @@ pub fn moment_value_text(
     if moment_details.is_empty() {
         relative_text
     } else {
-        gettext("{moment} · {details}")
-            .replace("{moment}", &relative_text)
-            .replace("{details}", &moment_details)
+        translated_messages::widgets::moment_details(&relative_text, &moment_details)
     }
 }
 

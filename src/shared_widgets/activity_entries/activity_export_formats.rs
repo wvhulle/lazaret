@@ -1,8 +1,9 @@
-use gettextrs::gettext;
-
-use crate::host_services::activity_history::activity_history_database::{
-    ActivityEntryRecord, ActivityRecord, ExportedActivityColumns, FoundThreatCount,
-    ScanActivityStatus, ScanOrigin, UpdateActivityStatus,
+use crate::{
+    host_services::activity_history::activity_history_database::{
+        ActivityEntryRecord, ActivityRecord, ExportedActivityColumns, FoundThreatCount,
+        ScanActivityStatus, ScanOrigin, UpdateActivityStatus,
+    },
+    translated_messages,
 };
 
 const CSV_HEADER: &str =
@@ -19,33 +20,36 @@ fn exported_origin_text(activity_record: &ActivityRecord) -> &'static str {
 pub fn activity_status_text(activity_record: &ActivityRecord) -> String {
     match activity_record {
         ActivityRecord::ScanActivity { scan_status, .. } => match scan_status {
-            ScanActivityStatus::ScanClean => gettext("Clean"),
-            ScanActivityStatus::ScanInfected { .. } => gettext("Infected"),
-            ScanActivityStatus::ScanFailed => gettext("Error"),
-            ScanActivityStatus::ScanCancelled => gettext("Cancelled"),
+            ScanActivityStatus::ScanClean => translated_messages::widgets::clean_label(),
+            ScanActivityStatus::ScanInfected { .. } => {
+                translated_messages::widgets::infected_label()
+            }
+            ScanActivityStatus::ScanFailed => translated_messages::widgets::error_status(),
+            ScanActivityStatus::ScanCancelled => translated_messages::widgets::cancelled_label(),
         },
-        ActivityRecord::SkippedScan { .. } => gettext("Skipped"),
+        ActivityRecord::SkippedScan { .. } => translated_messages::widgets::skipped_label(),
         ActivityRecord::UpdateActivity { update_status } => match update_status {
-            UpdateActivityStatus::UpdateFailed => gettext("Error"),
-            UpdateActivityStatus::UpdateCancelled => gettext("Cancelled"),
-            UpdateActivityStatus::UpdateApplied => gettext("Success"),
-            UpdateActivityStatus::UpdateAlreadyCurrent => gettext("Up to date"),
-            UpdateActivityStatus::UpdateRequested => gettext("Requested"),
-            UpdateActivityStatus::UpdateResultUnknown => gettext("Ran"),
+            UpdateActivityStatus::UpdateFailed => translated_messages::widgets::error_status(),
+            UpdateActivityStatus::UpdateCancelled => {
+                translated_messages::widgets::cancelled_label()
+            }
+            UpdateActivityStatus::UpdateApplied => translated_messages::widgets::success_label(),
+            UpdateActivityStatus::UpdateAlreadyCurrent => translated_messages::widgets::up_date(),
+            UpdateActivityStatus::UpdateRequested => {
+                translated_messages::widgets::requested_label()
+            }
+            UpdateActivityStatus::UpdateResultUnknown => translated_messages::widgets::ran_label(),
         },
     }
 }
 
 fn found_threats_text(found_threats: FoundThreatCount) -> String {
     match found_threats {
-        FoundThreatCount::CountedThreats { threat_count } => gettextrs::ngettext(
-            "Found {count} threat",
-            "Found {count} threats",
-            u32::try_from(threat_count.get()).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &threat_count.to_string()),
+        FoundThreatCount::CountedThreats { threat_count } => {
+            translated_messages::widgets::found_count_threat(threat_count.get())
+        }
         FoundThreatCount::UncountedThreats => {
-            gettext("The scanner reported a threat without naming the file.")
+            translated_messages::widgets::scanner_reported_threat_activity()
         }
     }
 }
@@ -56,22 +60,38 @@ pub fn activity_summary_text(activity_entry: &ActivityEntryRecord) -> String {
             ScanActivityStatus::ScanInfected { found_threats } => {
                 found_threats_text(*found_threats)
             }
-            ScanActivityStatus::ScanClean => gettext("No threats found"),
-            ScanActivityStatus::ScanFailed => gettext("The scan did not finish cleanly"),
-            ScanActivityStatus::ScanCancelled => gettext("Scan cancelled by user"),
+            ScanActivityStatus::ScanClean => {
+                translated_messages::widgets::no_threats_found_activity()
+            }
+            ScanActivityStatus::ScanFailed => {
+                translated_messages::widgets::scan_not_finish_activity()
+            }
+            ScanActivityStatus::ScanCancelled => {
+                translated_messages::widgets::scan_cancelled_user_activity()
+            }
         },
-        ActivityRecord::SkippedScan { .. } => gettext("Scheduled scan skipped (on battery power)"),
+        ActivityRecord::SkippedScan { .. } => {
+            translated_messages::widgets::scheduled_scan_skipped_battery()
+        }
         ActivityRecord::UpdateActivity { update_status } => match update_status {
-            UpdateActivityStatus::UpdateApplied => gettext("Virus definitions updated"),
+            UpdateActivityStatus::UpdateApplied => {
+                translated_messages::widgets::virus_definitions_updated()
+            }
             UpdateActivityStatus::UpdateAlreadyCurrent => {
-                gettext("Virus definitions are up to date")
+                translated_messages::widgets::virus_definitions_up_date()
             }
-            UpdateActivityStatus::UpdateRequested => gettext("Update requested from the service"),
+            UpdateActivityStatus::UpdateRequested => {
+                translated_messages::widgets::update_requested_service()
+            }
             UpdateActivityStatus::UpdateResultUnknown => {
-                gettext("The update service ran without reporting a result")
+                translated_messages::widgets::update_service_no_result()
             }
-            UpdateActivityStatus::UpdateFailed => gettext("Database update failed"),
-            UpdateActivityStatus::UpdateCancelled => gettext("Database update cancelled"),
+            UpdateActivityStatus::UpdateFailed => {
+                translated_messages::widgets::database_update_failed()
+            }
+            UpdateActivityStatus::UpdateCancelled => {
+                translated_messages::widgets::database_update_cancelled()
+            }
         },
     }
 }
@@ -168,25 +188,28 @@ pub fn activity_detail_text(
 ) -> String {
     let heading = match activity_entry.activity_record {
         ActivityRecord::ScanActivity { .. } | ActivityRecord::SkippedScan { .. } => {
-            gettext("SCAN LOG")
+            translated_messages::widgets::scan_log()
         }
-        ActivityRecord::UpdateActivity { .. } => gettext("UPDATE LOG"),
+        ActivityRecord::UpdateActivity { .. } => translated_messages::widgets::update_log(),
     };
     let metadata_lines = [
-        format!("{}: {formatted_start_time}", gettext("Timestamp")),
+        format!(
+            "{}: {formatted_start_time}",
+            translated_messages::widgets::timestamp_label()
+        ),
         format!(
             "{}: {}",
-            gettext("Status"),
+            translated_messages::widgets::status_label(),
             activity_status_text(&activity_entry.activity_record)
         ),
         format!(
             "{}: {}",
-            gettext("Duration"),
+            translated_messages::widgets::duration_label(),
             formatted_duration_text(activity_entry.duration_millis)
         ),
         format!(
             "{}: {}",
-            gettext("Summary"),
+            translated_messages::widgets::summary_label(),
             activity_summary_text(activity_entry)
         ),
     ]
@@ -197,7 +220,7 @@ pub fn activity_detail_text(
     } else {
         format!(
             "\n\n{}:\n{}",
-            gettext("Path"),
+            translated_messages::widgets::path_label(),
             scan_targets
                 .iter()
                 .map(|scan_target| scan_target.display().to_string())
@@ -210,7 +233,7 @@ pub fn activity_detail_text(
     } else {
         format!(
             "\n\n{}:\n{}",
-            gettext("Full Output"),
+            translated_messages::widgets::full_output(),
             activity_entry.activity_output
         )
     };

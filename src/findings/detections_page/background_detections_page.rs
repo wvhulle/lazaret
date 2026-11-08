@@ -1,7 +1,6 @@
 use std::{collections::HashMap, fs, path::PathBuf};
 
 use futures::{Stream, StreamExt, stream};
-use gettextrs::gettext;
 use jiff::Timestamp;
 use relm4::{
     Component, ComponentParts, ComponentSender, abstractions::Toaster, actions::ActionName, adw,
@@ -64,6 +63,7 @@ use crate::{
             timeline_step_row::{TimelineStepRow, TimelineStepRowInput, show_timeline_steps},
         },
     },
+    translated_messages,
 };
 
 const JOURNAL_BATCH_SIZE: usize = 256;
@@ -187,24 +187,24 @@ impl ResolvingIncidentAction {
 fn describe_incident_action_failure(action_failure: &IncidentActionFailure) -> String {
     match action_failure {
         IncidentActionFailure::FileOwnedByOtherUser => {
-            gettext("This file belongs to another user, so it can't be moved or deleted from here")
+            translated_messages::findings::file_other_owner()
         }
         IncidentActionFailure::FileNotCheckable => {
-            gettext("This file couldn't be checked, so it can't be moved or deleted from here")
+            translated_messages::findings::file_not_checked_cannot()
         }
         IncidentActionFailure::RemovalFailed(removal_failure) => {
-            gettext("The file could not be deleted: {error}")
-                .replace("{error}", &removal_failure.to_string())
+            translated_messages::findings::file_not_deleted_error(removal_failure)
         }
         IncidentActionFailure::FileCheckInterrupted(_) => {
-            gettext("Checking the file stopped unexpectedly")
+            translated_messages::findings::checking_file_stopped_unexpectedly()
         }
         IncidentActionFailure::QuarantineFailed(move_failure) => {
             describe_quarantine_failure(move_failure)
         }
         IncidentActionFailure::HistoryNotUpdated(history_failure) => {
-            gettext("Your decision could not be saved: {error}")
-                .replace("{error}", &describe_history_failure(history_failure))
+            translated_messages::findings::decision_not_saved_error(describe_history_failure(
+                history_failure,
+            ))
         }
     }
 }
@@ -406,22 +406,20 @@ impl BackgroundDetectionsPage {
 
     fn list_description(&self) -> String {
         match &self.journal_access {
-            JournalAccess::JournalUnreadable => gettext(
-                "Lazaret can't read the system journal, so new background detections won't appear \
-                 here. This does not mean nothing was found. Add your user to the systemd-journal \
-                 group.",
-            ),
+            JournalAccess::JournalUnreadable => {
+                translated_messages::findings::lazaret_cannot_read_system()
+            }
             JournalAccess::FollowingFailed(follow_failure) => {
                 journal_follow_failure_text(follow_failure)
             }
             JournalAccess::FollowingJournal if self.first_load == FirstLoad::StillLoading => {
-                gettext("Loading detections…")
+                translated_messages::findings::loading_detections()
             }
             JournalAccess::FollowingJournal if self.displayed_detections.is_empty() => {
-                gettext("Nothing has been detected in the background.")
+                translated_messages::findings::nothing_detected_background()
             }
             JournalAccess::FollowingJournal => {
-                gettext("What on-access scanning and scheduled scans have found.")
+                translated_messages::findings::access_scanning_scheduled_scans()
             }
         }
     }
@@ -653,14 +651,14 @@ impl Component for BackgroundDetectionsPage {
                 add_top_bar = &adw::HeaderBar {
                     #[wrap(Some)]
                     set_title_widget = &adw::WindowTitle {
-                        set_title: &gettext("Detections"),
+                        set_title: &translated_messages::findings::detections_title(),
                         #[watch]
                         set_subtitle: &model.opened_file_name(),
                     },
 
                     pack_start = &gtk::Button {
                         set_icon_name: "go-previous-symbolic",
-                        set_tooltip_text: Some(&gettext("Back to detections")),
+                        set_tooltip_text: Some(&translated_messages::findings::back_detections_tooltip()),
                         #[watch]
                         set_visible: model.opened_detection().is_some(),
                         connect_clicked => BackgroundDetectionsPageInput::BackToListRequested,
@@ -672,11 +670,11 @@ impl Component for BackgroundDetectionsPage {
                     set_transition_type: gtk::StackTransitionType::Crossfade,
 
                     add_named[Some(LIST_VIEW_NAME)] = &adw::PreferencesPage {
-                        set_title: &gettext("Detections"),
+                        set_title: &translated_messages::findings::detections_title(),
 
                         #[local_ref]
                         add = detection_list_group -> adw::PreferencesGroup {
-                            set_title: &gettext("Detections"),
+                            set_title: &translated_messages::findings::detections_title(),
                             #[watch]
                             set_description: Some(&gtk::glib::markup_escape_text(&model.list_description())),
                             #[wrap(Some)]
@@ -688,22 +686,19 @@ impl Component for BackgroundDetectionsPage {
 
                         #[local_ref]
                         add = alert_group -> adw::PreferencesGroup {
-                            set_title: &gettext("Alerts"),
-                            set_description: Some(&gettext(
-                                "How detections reach you, and what keeps other programs from \
-                                 hiding them.",
-                            )),
+                            set_title: &translated_messages::findings::alerts_title(),
+                            set_description: Some(&translated_messages::findings::detections_reach_keeps_description()),
                             #[wrap(Some)]
                             set_header_suffix = &gtk::Stack {
                                 add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                                     set_icon_name: "view-refresh-symbolic",
-                                    set_tooltip_text: Some(&gettext("Check again")),
+                                    set_tooltip_text: Some(&translated_messages::findings::check_again_background_tooltip()),
                                     set_valign: gtk::Align::Center,
                                     add_css_class: "flat",
                                     connect_clicked => BackgroundDetectionsPageInput::AlertsRefreshRequested,
                                 },
                                 add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                                    set_tooltip_text: Some(&gettext("Checking")),
+                                    set_tooltip_text: Some(&translated_messages::findings::checking_background_tooltip()),
                                 },
                                 #[watch]
                                 set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -712,7 +707,7 @@ impl Component for BackgroundDetectionsPage {
                     },
 
                     add_named[Some(INCIDENT_VIEW_NAME)] = &adw::PreferencesPage {
-                        set_title: &gettext("Detection"),
+                        set_title: &translated_messages::findings::detection_title(),
 
                         #[local_ref]
                         add = incident_group -> adw::PreferencesGroup {},
@@ -797,7 +792,8 @@ impl Component for BackgroundDetectionsPage {
                 copied_text,
             )) => {
                 root.clipboard().set_text(&copied_text);
-                self.toaster.toast(&gettext("Copied to clipboard"));
+                self.toaster
+                    .toast(&translated_messages::findings::copied_clipboard_toast());
             }
             BackgroundDetectionsPageInput::StepRequested(TimelineStepRowOutput::ActionChosen(
                 chosen_action,
@@ -820,7 +816,8 @@ impl Component for BackgroundDetectionsPage {
                 TimelineStepRowOutput::CopyRequested(copied_command),
             ) => {
                 root.clipboard().set_text(&copied_command);
-                self.toaster.toast(&gettext("Command copied to clipboard"));
+                self.toaster
+                    .toast(&translated_messages::findings::command_copied_clipboard_toast());
             }
         }
     }
@@ -853,11 +850,9 @@ impl Component for BackgroundDetectionsPage {
             BackgroundDetectionsPageCommand::JournalCursorUnreadable(cursor_failure) => {
                 send_detection_alerts(&[DetectionAlert::MissedDetectionsUncountable]);
                 self.toaster.add_toast(plain_text_toast(
-                    &gettext(
-                        "Detections while Lazaret wasn't running can't be counted, because where \
-                         it stopped reading the system journal could not be read: {error}",
-                    )
-                    .replace("{error}", &describe_history_failure(&cursor_failure)),
+                    &translated_messages::findings::detections_lazaret_stopped(
+                        describe_history_failure(&cursor_failure),
+                    ),
                 ));
             }
             BackgroundDetectionsPageCommand::DetectionsLoaded {
@@ -878,8 +873,9 @@ impl Component for BackgroundDetectionsPage {
             }
             BackgroundDetectionsPageCommand::LoadingFailed(history_failure) => {
                 self.toaster.add_toast(plain_text_toast(
-                    &gettext("Detections could not be read: {error}")
-                        .replace("{error}", &describe_history_failure(&history_failure)),
+                    &translated_messages::findings::detections_not_read_error(
+                        describe_history_failure(&history_failure),
+                    ),
                 ));
             }
             BackgroundDetectionsPageCommand::SignatureLookupFinished {

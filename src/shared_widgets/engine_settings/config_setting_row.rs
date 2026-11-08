@@ -1,5 +1,4 @@
 use clamd_configuration::setting_kinds::whole_number_in_text;
-use gettextrs::gettext;
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -8,15 +7,18 @@ use relm4::{
     prelude::{DynamicIndex, FactoryComponent},
 };
 
-use crate::host_services::{
-    clamav_config::{
-        setting_provenance::SettingLock,
-        typed_setting_values::{
-            DraftApplyTiming, DraftEdit, SIZE_UNITS, SettingParseFailure, SizeUnit, SwitchPosition,
-            TypedSettingValue, parse_setting_value,
+use crate::{
+    host_services::{
+        clamav_config::{
+            setting_provenance::SettingLock,
+            typed_setting_values::{
+                DraftApplyTiming, DraftEdit, SIZE_UNITS, SettingParseFailure, SizeUnit,
+                SwitchPosition, TypedSettingValue, parse_setting_value,
+            },
         },
+        desktop::locale_formatting::byte_size_text,
     },
-    desktop::locale_formatting::byte_size_text,
+    translated_messages,
 };
 
 const SIZE_COUNT_CEILING: f64 = i32::MAX as f64;
@@ -53,14 +55,12 @@ pub enum SettingLockReason {
 
 pub fn setting_lock_tooltip(lock_reason: SettingLockReason) -> String {
     match lock_reason {
-        SettingLockReason::UnlockRequired => gettext(
-            "Unlock to change this setting. While locked, you can copy its line for your \
-             configuration.",
-        ),
-        SettingLockReason::NotAllowedAtRuntime => gettext(
-            "Your administrator doesn't allow changing this setting from Lazaret. You can copy \
-             its line for your configuration.",
-        ),
+        SettingLockReason::UnlockRequired => {
+            translated_messages::widgets::unlock_change_setting_locked()
+        }
+        SettingLockReason::NotAllowedAtRuntime => {
+            translated_messages::widgets::administrator_not_copy()
+        }
     }
 }
 
@@ -72,9 +72,9 @@ enum DraftComparison {
 
 pub fn size_unit_label(size_unit: SizeUnit) -> String {
     match size_unit {
-        SizeUnit::PlainBytes => gettext("bytes"),
-        SizeUnit::Kibibytes => gettext("KiB"),
-        SizeUnit::Mebibytes => gettext("MiB"),
+        SizeUnit::PlainBytes => translated_messages::widgets::bytes_label(),
+        SizeUnit::Kibibytes => translated_messages::widgets::kib_label(),
+        SizeUnit::Mebibytes => translated_messages::widgets::mib_label(),
     }
 }
 
@@ -86,24 +86,20 @@ pub fn size_unit_labels() -> gtk::StringList {
 pub fn describe_parse_failure(parse_failure: SettingParseFailure) -> String {
     match parse_failure {
         SettingParseFailure::UnknownOption => {
-            gettext("Lazaret doesn't know this option, so it only shows it.")
+            translated_messages::widgets::lazaret_not_know_option()
         }
-        SettingParseFailure::NotYesOrNo => gettext("Needs review: this value should be yes or no."),
+        SettingParseFailure::NotYesOrNo => translated_messages::widgets::needs_review_value_yes(),
         SettingParseFailure::NotAWholeNumber => {
-            gettext("Needs review: this value should be a whole number.")
+            translated_messages::widgets::needs_review_value_whole()
         }
         SettingParseFailure::CountOutOfRange { minimum, maximum } => {
-            gettext("Needs review: this value should be between {minimum} and {maximum}.")
-                .replace("{minimum}", &minimum.to_string())
-                .replace("{maximum}", &maximum.to_string())
+            translated_messages::widgets::needs_review_value_between(minimum, maximum)
         }
-        SettingParseFailure::NotASize => gettext(
-            "Needs review: this value should be a size in bytes, or a number followed by K or M.",
-        ),
+        SettingParseFailure::NotASize => translated_messages::widgets::needs_review_value_size(),
         SettingParseFailure::PathNotAbsolute => {
-            gettext("Needs review: this value should be a full path that starts with /.")
+            translated_messages::widgets::needs_review_value_full()
         }
-        SettingParseFailure::EmptyText => gettext("Needs review: this value is empty."),
+        SettingParseFailure::EmptyText => translated_messages::widgets::needs_review_value_empty(),
     }
 }
 
@@ -269,7 +265,7 @@ fn read_only_row(setting_key: &str, row_subtitle: &str) -> adw::PreferencesRow {
 fn apply_button() -> gtk::Button {
     gtk::Button::builder()
         .icon_name("object-select-symbolic")
-        .tooltip_text(gettext("Apply"))
+        .tooltip_text(translated_messages::widgets::apply_tooltip())
         .valign(gtk::Align::Center)
         .css_classes(["suggested-action", "circular"])
         .build()
@@ -488,7 +484,7 @@ impl ConfigSettingRow {
                         .model(&size_unit_labels())
                         .selected(size_amount.size_unit.unit_position())
                         .valign(gtk::Align::Center)
-                        .tooltip_text(gettext("Unit"))
+                        .tooltip_text(translated_messages::widgets::unit_tooltip())
                         .build();
                     let unit_sender = sender.clone();
                     let unit_handler = unit_dropdown.connect_selected_notify(move |chosen_unit| {
@@ -542,10 +538,7 @@ impl ConfigSettingRow {
             ConfigRowPresentation::ProtectedSettingRow(_) => {
                 action_row.add_suffix(&suffix_icon(
                     "changes-prevent-symbolic",
-                    &gettext(
-                        "This setting runs commands or changes who ClamAV runs as, so Lazaret \
-                         never offers to change it",
-                    ),
+                    &translated_messages::widgets::setting_runs_commands_changes(),
                     "dim-label",
                 ));
             }
@@ -559,7 +552,7 @@ impl ConfigSettingRow {
             ConfigRowPresentation::NeedsReviewRow(_) => {
                 action_row.add_suffix(&suffix_icon(
                     "dialog-warning-symbolic",
-                    &gettext("Check this value in the configuration file."),
+                    &translated_messages::widgets::check_value_configuration_file(),
                     "warning",
                 ));
             }
@@ -571,7 +564,7 @@ impl ConfigSettingRow {
                 ));
                 let copy_button = gtk::Button::builder()
                     .icon_name("edit-copy-symbolic")
-                    .tooltip_text(gettext("Copy configuration line…"))
+                    .tooltip_text(translated_messages::widgets::copy_configuration_line_tooltip())
                     .valign(gtk::Align::Center)
                     .css_classes(["flat"])
                     .build();
@@ -673,7 +666,7 @@ impl FactoryComponent for ConfigSettingRow {
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let applying_spinner = adw::Spinner::builder()
-            .tooltip_text(gettext("Applying, and restarting ClamAV"))
+            .tooltip_text(translated_messages::widgets::applying_restarting_clamav_tooltip())
             .visible(false)
             .build();
         self.add_read_only_suffixes(&root, &sender);

@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, adw,
     adw::prelude::*, gtk, prelude::FactoryVecDeque,
@@ -19,6 +18,7 @@ use crate::{
         },
         database_migration_failure_text::describe_history_failure,
     },
+    translated_messages,
 };
 
 pub struct ActivityHistoryGroupInit {
@@ -110,7 +110,7 @@ impl Component for ActivityHistoryGroup {
                 adw::ActionRow {
                     set_use_markup: false,
                     set_activatable: false,
-                    set_title: &gettext("Scan history can't be read"),
+                    set_title: &translated_messages::widgets::scan_history_cannot_title(),
                     set_subtitle_lines: 0,
                     #[watch]
                     set_subtitle: &history_failure_text(&model.history_view),
@@ -119,7 +119,7 @@ impl Component for ActivityHistoryGroup {
                         add_css_class: "error",
                     },
                     add_suffix = &gtk::Button {
-                        set_label: &gettext("Retry"),
+                        set_label: &translated_messages::widgets::retry_label(),
                         set_valign: gtk::Align::Center,
                         connect_clicked => ActivityHistoryGroupInput::ReloadRequested,
                     },

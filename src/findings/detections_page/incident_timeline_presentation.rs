@@ -1,7 +1,5 @@
 use std::collections::BTreeSet;
 
-use gettextrs::gettext;
-
 use crate::{
     findings::detections_page::detected_file_state::{DetectedFileState, FileAccess, FileOwner},
     host_services::{
@@ -24,6 +22,7 @@ use crate::{
         ActionConsequence, ActionableEvidenceRow, SettledNodeState, SettledStep, StepActionButton,
         StepChoiceRow, StepEvidenceRow, TimelineStep,
     },
+    translated_messages,
 };
 
 const TEST_SIGNATURE_MARKER: &str = "Eicar-Test-Signature";
@@ -43,14 +42,14 @@ pub enum IncidentStepAction {
 impl StepActionButton for IncidentStepAction {
     fn button_label(&self) -> String {
         match self {
-            Self::QuarantineIncident => gettext("Quarantine"),
-            Self::AskIncidentDeletion => gettext("Delete…"),
-            Self::DeleteIncidentFile => gettext("Delete Permanently"),
-            Self::CancelIncidentDeletion => gettext("Cancel"),
-            Self::DismissIncident => gettext("Keep"),
-            Self::LookUpIncidentSignature => gettext("Look Up"),
-            Self::OpenOnlineServices => gettext("Add Key…"),
-            Self::SubmitIncidentSample => gettext("Submit…"),
+            Self::QuarantineIncident => translated_messages::findings::quarantine_label(),
+            Self::AskIncidentDeletion => translated_messages::findings::delete_incident(),
+            Self::DeleteIncidentFile => translated_messages::findings::delete_permanently(),
+            Self::CancelIncidentDeletion => translated_messages::findings::cancel_incident(),
+            Self::DismissIncident => translated_messages::findings::keep_label(),
+            Self::LookUpIncidentSignature => translated_messages::findings::look_up(),
+            Self::OpenOnlineServices => translated_messages::findings::add_key(),
+            Self::SubmitIncidentSample => translated_messages::findings::submit_incident(),
         }
     }
 
@@ -122,39 +121,39 @@ pub fn detection_state_text(displayed_detection: &DisplayedDetection) -> String 
             resolution_kind: ResolutionKind::MovedToQuarantine,
             ..
         } if displayed_detection.file_state.file_is_present() => {
-            gettext("Restored from quarantine")
+            translated_messages::findings::restored_quarantine()
         }
         DetectionState::Resolved {
             resolution_kind: ResolutionKind::MovedToQuarantine,
             ..
-        } => gettext("Moved to quarantine"),
+        } => translated_messages::findings::moved_quarantine(),
         DetectionState::Resolved {
             resolution_kind: ResolutionKind::DeletedByUser,
             ..
-        } => gettext("Deleted"),
+        } => translated_messages::findings::deleted_label(),
         DetectionState::Resolved {
             resolution_kind: ResolutionKind::DismissedByUser,
             ..
-        } => gettext("Kept by you"),
+        } => translated_messages::findings::kept_label(),
         DetectionState::Open => match displayed_detection.file_state {
             DetectedFileState::Present {
                 owner: FileOwner::OtherUser,
                 ..
-            } => gettext("Belongs to another user"),
+            } => translated_messages::findings::belongs_another_user(),
             DetectedFileState::Present {
                 access: FileAccess::BlockedOnAccess,
                 owner: FileOwner::CurrentUser,
-            } => gettext("Blocked, needs a decision"),
+            } => translated_messages::findings::blocked_needs_decision(),
             DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
-            } => gettext("Not blocked, needs a decision"),
+            } => translated_messages::findings::not_blocked_needs_decision(),
             DetectedFileState::Present {
                 access: FileAccess::NotOpened,
                 owner: FileOwner::CurrentUser,
-            } => gettext("Needs a decision"),
-            DetectedFileState::NoLongerThere => gettext("No longer there"),
-            DetectedFileState::StateUnknown => gettext("File could not be checked"),
+            } => translated_messages::findings::needs_decision(),
+            DetectedFileState::NoLongerThere => translated_messages::findings::file_gone_label(),
+            DetectedFileState::StateUnknown => translated_messages::findings::file_not_checked(),
         },
     }
 }
@@ -164,13 +163,9 @@ pub fn detection_summary_text(displayed_detection: &DisplayedDetection) -> Strin
     let signature_text = sanitize_scanner_line(&stored_detection.signature_name);
     let state_text = detection_state_text(displayed_detection);
     if signature_is_test_pattern(&stored_detection.signature_name) {
-        gettext("{signature} (test file) · {state}")
-            .replace("{signature}", &signature_text)
-            .replace("{state}", &state_text)
+        translated_messages::findings::signature_test_file_state(&signature_text, &state_text)
     } else {
-        gettext("{signature} · {state}")
-            .replace("{signature}", &signature_text)
-            .replace("{state}", &state_text)
+        translated_messages::findings::signature_state(&signature_text, &state_text)
     }
 }
 
@@ -198,50 +193,48 @@ fn plain_step(
 fn source_text(stored_detection: &StoredDetection) -> String {
     match stored_detection.detection_sources {
         DetectionSources::OnAccessAndSchedule => {
-            gettext("On-access scanning and the scheduled scan")
+            translated_messages::findings::access_scanning_scheduled_scan()
         }
-        DetectionSources::OnAccessOnly => gettext("On-access scanning"),
-        DetectionSources::ScheduleOnly => gettext("The scheduled scan"),
+        DetectionSources::OnAccessOnly => translated_messages::findings::access_scanning(),
+        DetectionSources::ScheduleOnly => translated_messages::findings::scheduled_scan(),
     }
 }
 
 fn detected_step(stored_detection: &StoredDetection) -> IncidentStep {
     let signature_text = sanitize_scanner_line(&stored_detection.signature_name);
     let evidence_rows = vec![
-        evidence_row(gettext("File"), displayed_file_path(stored_detection)),
         evidence_row(
-            gettext("Signature source"),
+            translated_messages::findings::file_label(),
+            displayed_file_path(stored_detection),
+        ),
+        evidence_row(
+            translated_messages::findings::signature_source(),
             signature_source_name(provider_of_signature(&stored_detection.signature_name)),
         ),
-        evidence_row(gettext("Found by"), source_text(stored_detection)),
         evidence_row(
-            gettext("Last seen"),
+            translated_messages::findings::found_label(),
+            source_text(stored_detection),
+        ),
+        evidence_row(
+            translated_messages::findings::last_seen(),
             exact_local_time_text(stored_detection.last_seen),
         ),
         evidence_row(
-            gettext("Times seen"),
+            translated_messages::findings::times_seen(),
             stored_detection.sighting_count.to_string(),
         ),
     ];
     TimelineStep::settled(
-        gettext("Detected"),
+        translated_messages::findings::detected_label(),
         if signature_is_test_pattern(&stored_detection.signature_name) {
-            gettext(
-                "This signature matches the harmless EICAR test pattern, which exists to check \
-                 that detection works.",
-            )
+            translated_messages::findings::signature_matches_harmless_eicar()
         } else {
-            gettext(
-                "ClamAV matched this file against a signature. A match is strong evidence, but \
-                 false positives happen, especially with packed or administrative tools.",
-            )
+            translated_messages::findings::clamav_matched_file_against()
         },
-        gettext("{signature}, first seen {time}")
-            .replace("{signature}", &signature_text)
-            .replace(
-                "{time}",
-                &exact_local_time_text(stored_detection.first_seen),
-            ),
+        translated_messages::findings::signature_first_seen_time(
+            &signature_text,
+            exact_local_time_text(stored_detection.first_seen),
+        ),
         SettledStep {
             evidence_rows,
             ..SettledStep::without_offers(SettledNodeState::Completed)
@@ -257,44 +250,41 @@ fn blocked_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
             ..
         } => (
             SettledNodeState::Completed,
-            gettext("Opening this file is refused, which is why it won't open"),
+            translated_messages::findings::opening_file_refused_why(),
         ),
         DetectedFileState::Present {
             access: FileAccess::NotOpened,
             ..
         } => (
             SettledNodeState::Completed,
-            gettext("Not opened again after your decision"),
+            translated_messages::findings::not_opened_again_after(),
         ),
         DetectedFileState::NoLongerThere => (
             SettledNodeState::Completed,
-            gettext("The file is no longer there"),
+            translated_messages::findings::file_no_longer(),
         ),
         DetectedFileState::Present {
             access: FileAccess::Readable,
             ..
         } if stored_detection.detection_sources == DetectionSources::ScheduleOnly => (
             SettledNodeState::NeedsReview,
-            gettext("Not blocked: the scheduled scan found it, and it can still be opened"),
+            translated_messages::findings::not_blocked_scheduled_scan(),
         ),
         DetectedFileState::Present {
             access: FileAccess::Readable,
             ..
         } => (
             SettledNodeState::NeedsReview,
-            gettext("Not blocked right now: it can still be opened"),
+            translated_messages::findings::not_blocked_right_now(),
         ),
         DetectedFileState::StateUnknown => (
             SettledNodeState::NeedsReview,
-            gettext("Could not check whether the file is blocked"),
+            translated_messages::findings::not_check_whether_file(),
         ),
     };
     plain_step(
-        gettext("Blocked"),
-        gettext(
-            "With on-access prevention, the kernel refuses to open a detected file in a watched \
-             folder. The file stays where it is until you decide what to do with it.",
-        ),
+        translated_messages::findings::blocked_label(),
+        translated_messages::findings::access_prevention_kernel_refuses(),
         node_state,
         status_text,
     )
@@ -318,15 +308,16 @@ fn false_positive_snippet(
 fn describe_bazaar_lookup_failure(bazaar_failure: &MalwareBazaarFailure) -> String {
     match bazaar_failure {
         MalwareBazaarFailure::RequestFailed(request_failure) => {
-            gettext("MalwareBazaar could not be reached: {error}")
-                .replace("{error}", &request_failure.to_string())
+            translated_messages::findings::malwarebazaar_not_reached_error(request_failure)
         }
         MalwareBazaarFailure::AnswerUnreadable => {
-            gettext("MalwareBazaar sent an answer that could not be read")
+            translated_messages::findings::malwarebazaar_sent_not_read()
         }
-        MalwareBazaarFailure::KeyRefused => gettext("MalwareBazaar refused the API key"),
+        MalwareBazaarFailure::KeyRefused => {
+            translated_messages::findings::malwarebazaar_refused_api_key()
+        }
         MalwareBazaarFailure::QueryRefused { query_status } => {
-            gettext("MalwareBazaar answered: {status}").replace("{status}", query_status)
+            translated_messages::findings::malwarebazaar_answered_status(query_status)
         }
     }
 }
@@ -334,10 +325,8 @@ fn describe_bazaar_lookup_failure(bazaar_failure: &MalwareBazaarFailure) -> Stri
 fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
     match lookup_state {
         SignatureLookupState::NotLookedUp => None,
-        SignatureLookupState::LookingUp => Some(gettext("Looking up…")),
-        SignatureLookupState::KeyMissing => Some(gettext(
-            "Add your abuse.ch key in Preferences to look up detections.",
-        )),
+        SignatureLookupState::LookingUp => Some(translated_messages::findings::looking_up()),
+        SignatureLookupState::KeyMissing => Some(translated_messages::findings::add_abuse_ch_key()),
         SignatureLookupState::KeyUnreadable(key_failure) => {
             Some(sanitize_scanner_line(&describe_key_failure(key_failure)))
         }
@@ -345,7 +334,7 @@ fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
             &describe_bazaar_lookup_failure(bazaar_failure),
         )),
         SignatureLookupState::LookupFinished(KnownSampleLookup::NoKnownSamples) => {
-            Some(gettext("No known samples match this signature."))
+            Some(translated_messages::findings::no_known_samples_match())
         }
         SignatureLookupState::LookupFinished(KnownSampleLookup::SamplesFound { known_samples }) => {
             let families = known_samples
@@ -363,21 +352,22 @@ fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
                     SampleFirstSeen::FirstSeenUnknown => None,
                 })
                 .min()
-                .map_or_else(|| gettext("unknown"), sanitize_scanner_line);
-            Some(
-                gettext("{count} known samples. Families: {families}. Earliest seen: {date}.")
-                    .replace("{count}", &known_samples.len().to_string())
-                    .replace("{families}", &families)
-                    .replace("{date}", &earliest_seen),
-            )
+                .map_or_else(
+                    translated_messages::findings::unknown_label,
+                    sanitize_scanner_line,
+                );
+            Some(translated_messages::findings::count_known_samples_families(
+                known_samples.len(),
+                &families,
+                &earliest_seen,
+            ))
         }
     }
 }
 
 fn lookup_choices(lookup_state: &SignatureLookupState) -> Vec<StepChoiceRow<IncidentStepAction>> {
     let signature_lookup = StepChoiceRow {
-        choice_description: gettext(
-            "Ask MalwareBazaar about this signature. Only its name is sent.",
+        choice_description: translated_messages::findings::ask_malwarebazaar_signature_description(
         ),
         chosen_action: IncidentStepAction::LookUpIncidentSignature,
     };
@@ -385,7 +375,8 @@ fn lookup_choices(lookup_state: &SignatureLookupState) -> Vec<StepChoiceRow<Inci
         SignatureLookupState::KeyMissing => vec![
             signature_lookup,
             StepChoiceRow {
-                choice_description: gettext("MalwareBazaar needs a free abuse.ch key"),
+                choice_description:
+                    translated_messages::findings::malwarebazaar_needs_free_description(),
                 chosen_action: IncidentStepAction::OpenOnlineServices,
             },
         ],
@@ -403,35 +394,34 @@ fn decision_choices(
 ) -> Vec<StepChoiceRow<IncidentStepAction>> {
     if !file_state.user_can_move_or_delete() {
         return vec![StepChoiceRow {
-            choice_description: gettext("Stop asking about this file"),
+            choice_description: translated_messages::findings::stop_asking_file_description(),
             chosen_action: IncidentStepAction::DismissIncident,
         }];
     }
     match deletion_prompt {
         DeletionPrompt::AwaitingAnswer => vec![
             StepChoiceRow {
-                choice_description: gettext("Delete this file permanently? This can't be undone."),
+                choice_description:
+                    translated_messages::findings::delete_file_permanently_description(),
                 chosen_action: IncidentStepAction::DeleteIncidentFile,
             },
             StepChoiceRow {
-                choice_description: gettext("Go back without deleting"),
+                choice_description: translated_messages::findings::go_back_without_description(),
                 chosen_action: IncidentStepAction::CancelIncidentDeletion,
             },
         ],
         DeletionPrompt::NotAsked => vec![
             StepChoiceRow {
-                choice_description: gettext("Move it somewhere safe. You can restore it later."),
+                choice_description: translated_messages::findings::move_somewhere_safe_description(
+                ),
                 chosen_action: IncidentStepAction::QuarantineIncident,
             },
             StepChoiceRow {
-                choice_description: gettext("Remove it for good"),
+                choice_description: translated_messages::findings::remove_good_description(),
                 chosen_action: IncidentStepAction::AskIncidentDeletion,
             },
             StepChoiceRow {
-                choice_description: gettext(
-                    "You know this file is fine. ClamAV still reports it at the next scan; trust \
-                     it from Quarantine or a scan result to stop that.",
-                ),
+                choice_description: translated_messages::findings::know_file_fine_description(),
                 chosen_action: IncidentStepAction::DismissIncident,
             },
         ],
@@ -445,20 +435,12 @@ fn review_step(
     distribution_family: DistributionFamily,
 ) -> IncidentStep {
     let stored_detection = &displayed_detection.stored_detection;
-    let step_title = gettext("Your decision");
-    let mechanism_details = gettext(
-        "If it's unfamiliar, quarantine it. Keeping a file only stops Lazaret asking: on-access \
-         scanning keeps blocking it until the path is excluded in the ClamAV configuration, as \
-         shown here.",
-    );
+    let step_title = translated_messages::findings::decision_title();
+    let mechanism_details = translated_messages::findings::unfamiliar_quarantine_keeping_file();
     if !detection_needs_attention(displayed_detection) {
         return plain_step(
             step_title,
-            gettext(
-                "Quarantined files can be restored from the Quarantine page. A file you kept is \
-                 still blocked by on-access scanning until its path is excluded in the ClamAV \
-                 configuration.",
-            ),
+            translated_messages::findings::quarantined_files_restored_quarantine(),
             SettledNodeState::Completed,
             detection_state_text(displayed_detection),
         );
@@ -467,15 +449,13 @@ fn review_step(
         DetectedFileState::Present {
             owner: FileOwner::OtherUser,
             ..
-        } => gettext("This file belongs to another user, so Lazaret can't move or delete it"),
-        DetectedFileState::StateUnknown => {
-            gettext("Lazaret couldn't check this file, so it can't move or delete it")
-        }
+        } => translated_messages::findings::file_other_owner_decision(),
+        DetectedFileState::StateUnknown => translated_messages::findings::lazaret_not_check_file(),
         DetectedFileState::Present {
             owner: FileOwner::CurrentUser,
             ..
         }
-        | DetectedFileState::NoLongerThere => gettext("Choose what happens to this file"),
+        | DetectedFileState::NoLongerThere => translated_messages::findings::choose_happens_file(),
     };
     TimelineStep::settled(
         step_title,
@@ -487,7 +467,12 @@ fn review_step(
                 .chain(lookup_choices(lookup_state))
                 .collect(),
             evidence_rows: lookup_summary_text(lookup_state)
-                .map(|lookup_summary| evidence_row(gettext("MalwareBazaar"), lookup_summary))
+                .map(|lookup_summary| {
+                    evidence_row(
+                        translated_messages::findings::malwarebazaar_label(),
+                        lookup_summary,
+                    )
+                })
                 .into_iter()
                 .collect(),
             ..SettledStep::without_offers(SettledNodeState::ActNext)
@@ -501,23 +486,21 @@ fn review_step(
 
 fn resolved_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
     let stored_detection = &displayed_detection.stored_detection;
-    let step_title = gettext("Resolved");
-    let mechanism_details = gettext(
-        "A resolved detection opens again if ClamAV finds the same file again later, for example \
-         after you download it a second time.",
-    );
+    let step_title = translated_messages::findings::resolved_title();
+    let mechanism_details = translated_messages::findings::resolved_detection_opens_again();
     if detection_needs_attention(displayed_detection) {
         return plain_step(
             step_title,
             mechanism_details,
             SettledNodeState::AwaitingPrerequisite,
-            gettext("Waiting for your decision"),
+            translated_messages::findings::waiting_decision(),
         );
     }
     let status_text = match &stored_detection.detection_state {
-        DetectionState::Resolved { resolved_at, .. } => gettext("{state}, {time}")
-            .replace("{state}", &detection_state_text(displayed_detection))
-            .replace("{time}", &exact_local_time_text(*resolved_at)),
+        DetectionState::Resolved { resolved_at, .. } => translated_messages::findings::state_time(
+            detection_state_text(displayed_detection),
+            exact_local_time_text(*resolved_at),
+        ),
         DetectionState::Open => detection_state_text(displayed_detection),
     };
     let quarantined_copy_kept = matches!(
@@ -541,11 +524,8 @@ fn resolved_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
         status_text,
         SettledStep {
             choice_rows: vec![StepChoiceRow {
-                choice_description: gettext(
-                    "Send the quarantined copy to ClamAV, MalwareBazaar or VirusTotal. A false \
-                     positive reported to ClamAV is fixed for everyone by a later signature \
-                     update.",
-                ),
+                choice_description:
+                    translated_messages::findings::send_quarantined_copy_description(),
                 chosen_action: IncidentStepAction::SubmitIncidentSample,
             }],
             ..SettledStep::without_offers(SettledNodeState::Completed)

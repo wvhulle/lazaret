@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use bytesize::ByteSize;
-use gettextrs::gettext;
 use relm4::gtk::glib;
 
 use crate::{
@@ -13,6 +12,7 @@ use crate::{
         removable_drives_state::DeviceScanStatus,
     },
     shared_widgets::scan_runs::scan_results_section::scan_results_state::ScanResultsStatus,
+    translated_messages,
 };
 
 pub fn drive_size_text(drive_size: ByteSize) -> String {
@@ -36,10 +36,10 @@ pub fn auto_scan_state_text(auto_scan_settings: DeviceAutoScanSettings) -> Strin
         auto_scan_settings.auto_scan_enabled,
         auto_scan_settings.drive_size_limit(),
     ) {
-        (false, _) => gettext("Off"),
-        (true, DriveSizeLimit::NoSizeLimit) => gettext("Scans every drive"),
+        (false, _) => translated_messages::scans::off_label(),
+        (true, DriveSizeLimit::NoSizeLimit) => translated_messages::scans::every_drive(),
         (true, DriveSizeLimit::LimitedTo(size_limit)) => {
-            gettext("Scans drives up to {size}").replace("{size}", &drive_size_text(size_limit))
+            translated_messages::scans::drives_up_size(drive_size_text(size_limit))
         }
     }
 }
@@ -49,31 +49,38 @@ fn skip_reason_text(skip_reason: DriveSkipReason) -> String {
         DriveSkipReason::SkippedLargerThanLimit {
             drive_size,
             size_limit,
-        } => gettext("Not scanned: {size} is larger than the {limit} limit")
-            .replace("{size}", &drive_size_text(drive_size))
-            .replace("{limit}", &drive_size_text(size_limit)),
+        } => translated_messages::scans::not_scanned_size_larger(
+            drive_size_text(drive_size),
+            drive_size_text(size_limit),
+        ),
         DriveSkipReason::SkippedOnBattery => {
-            gettext("Not scanned: the computer was running on battery")
+            translated_messages::scans::not_scanned_computer_running()
         }
-        DriveSkipReason::SkippedAutoScanOff => gettext("Not scanned: device auto-scan is off"),
-        DriveSkipReason::SkippedWhileScanning => gettext("Not scanned: another scan was running"),
-        DriveSkipReason::SizeUnreadable => {
-            gettext("Not scanned: the size of the drive could not be read")
+        DriveSkipReason::SkippedAutoScanOff => {
+            translated_messages::scans::not_scanned_device_auto()
         }
+        DriveSkipReason::SkippedWhileScanning => {
+            translated_messages::scans::not_scanned_another_scan()
+        }
+        DriveSkipReason::SizeUnreadable => translated_messages::scans::not_scanned_size_drive(),
     }
 }
 
 pub fn drive_decision_text(drive_decision: DriveScanDecision) -> String {
     match drive_decision {
-        DriveScanDecision::DriveSettling => gettext("Checking the drive…"),
-        DriveScanDecision::DriveScanning => gettext("Scanning…"),
+        DriveScanDecision::DriveSettling => translated_messages::scans::checking_drive(),
+        DriveScanDecision::DriveScanning => translated_messages::scans::scanning_label(),
         DriveScanDecision::ScannedDrive { scan_result } => match scan_result {
-            ScanResultsStatus::ThreatsDetected => gettext("Scanned, threats found"),
-            ScanResultsStatus::NoThreatsDetected => gettext("Scanned, no threats found"),
-            ScanResultsStatus::FinishedWithProblems => {
-                gettext("Scanned, but the scan did not finish cleanly")
+            ScanResultsStatus::ThreatsDetected => {
+                translated_messages::scans::scanned_threats_found()
             }
-            ScanResultsStatus::ScanCancelled => gettext("Scan cancelled"),
+            ScanResultsStatus::NoThreatsDetected => {
+                translated_messages::scans::scanned_no_threats_found()
+            }
+            ScanResultsStatus::FinishedWithProblems => {
+                translated_messages::scans::scanned_scan_not_finish()
+            }
+            ScanResultsStatus::ScanCancelled => translated_messages::scans::cancelled_label(),
         },
         DriveScanDecision::DriveSkipped(skip_reason) => skip_reason_text(skip_reason),
     }
@@ -101,10 +108,10 @@ pub const fn drive_decision_icon(drive_decision: DriveScanDecision) -> &'static 
 pub fn device_scan_title(device_scan_status: &DeviceScanStatus) -> String {
     match device_scan_status {
         DeviceScanStatus::DeviceScanRunning { drive_name } => {
-            gettext("Scanning {drive}").replace("{drive}", drive_name)
+            translated_messages::scans::scanning_drive(drive_name)
         }
         DeviceScanStatus::NoDeviceScanYet | DeviceScanStatus::DeviceScanEnded { .. } => {
-            gettext("Drive scan")
+            translated_messages::scans::drive_scan()
         }
     }
 }

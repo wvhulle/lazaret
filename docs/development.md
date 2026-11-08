@@ -54,13 +54,31 @@ The schema of `lazaret.db` lives in the numbered files in `migrations/`:
 
 ## Translations
 
-User-facing strings go through `gettext` with literal strings, and untrusted values are substituted last. After changing strings, update the template:
+User-facing text lives in [Fluent](https://projectfluent.org) catalogs, one per language: `locales/<language>/lazaret.ftl`, with English in `locales/en/lazaret.ftl` as the source. `build.rs` turns every English message into a Rust function. The part of the id before the first dash names the module, so:
 
-```sh
-make update-translation-template
+```ftl
+scans-scanning-name = Scanning { $name }
+scans-count-target =
+    { $count ->
+        [one] { $count } target
+       *[other] { $count } targets
+    }
 ```
 
-To add a language, add its code to `po/LINGUAS` and create `po/<code>.po` from `po/lazaret.pot`.
+becomes `translated_messages::scans::scanning_name(target_name)` and `translated_messages::scans::count_target(target_count)`. A variable used as a selector takes a number; any other variable takes anything that implements `Display`.
+
+Name a message after where it appears, not after its English text, so rewording keeps the id: a module prefix (`startup`, `window`, `scans`, `findings`, `signatures`, `preferences`, `widgets`, `host`, `headless`), two to four words, and the widget role when there is one (`-title`, `-tooltip`, `-button`, `-heading`, `-body`). Give each place its own message even when the English is the same, because other languages may need different words. Write the application name as `{ -brand-name }`; every catalog defines that term.
+
+To add or change text, edit the English catalog and call the function. The build fails when:
+
+- a catalog has a syntax error;
+- a message id has no module prefix, or doesn't convert to a Rust name;
+- a translation uses a variable the English message doesn't pass, or selects on one that English passes as text;
+- a translation keeps a message that English no longer has, or uses a term its catalog doesn't define.
+
+An English message that no code calls shows up as a dead-code warning. Untranslated messages fall back to English, and the build prints how many each language is missing.
+
+To add a language, create `locales/<tag>/lazaret.ftl` with a BCP 47 tag such as `pt-BR`, starting with `-brand-name = Lazaret`. The language is chosen from `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` and `LANG`, so `LANGUAGE=de cargo run` shows the German text.
 
 ## Screenshots and recordings
 

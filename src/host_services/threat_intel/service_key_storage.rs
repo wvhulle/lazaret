@@ -4,10 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use gettextrs::gettext;
 use relm4::gtk::gio::prelude::SettingsExt;
 
-use crate::host_services::desktop::stored_settings::application_settings;
+use crate::{host_services::desktop::stored_settings::application_settings, translated_messages};
 
 const VIRUSTOTAL_KEY_LENGTH: usize = 64;
 const ABUSE_CH_MINIMUM_KEY_LENGTH: usize = 16;
@@ -224,21 +223,21 @@ pub async fn delete_stored_api_key(
 
 pub fn describe_key_failure(key_failure: &KeyStorageFailure) -> String {
     match key_failure {
-        KeyStorageFailure::KeyFormatInvalid => gettext("This doesn't look like a valid API key"),
-        KeyStorageFailure::StoredKeyUnreadable => gettext("Unable to read the stored API key"),
-        KeyStorageFailure::KeyringUnavailable(_keyring_failure) => gettext("Keyring unavailable"),
-        KeyStorageFailure::KeyFileUnreadable { read_failure, .. } => gettext(
-            "Lazaret can't read this file: {error}. If it is an agenix or sops-nix secret, set \
-             its owner to your user.",
-        )
-        .replace("{error}", &read_failure.to_string()),
-        KeyStorageFailure::KeyFilePermissionDenied { .. } => gettext(
-            "Lazaret can't read this file, so lookups with this service are off. Give your user \
-             read access, for example with the owner or group setting of the agenix or sops-nix \
-             secret.",
-        ),
+        KeyStorageFailure::KeyFormatInvalid => translated_messages::host::api_key_invalid(),
+        KeyStorageFailure::StoredKeyUnreadable => {
+            translated_messages::host::unable_read_stored_api()
+        }
+        KeyStorageFailure::KeyringUnavailable(_keyring_failure) => {
+            translated_messages::host::keyring_unavailable()
+        }
+        KeyStorageFailure::KeyFileUnreadable { read_failure, .. } => {
+            translated_messages::host::key_file_unreadable_error(read_failure)
+        }
+        KeyStorageFailure::KeyFilePermissionDenied { .. } => {
+            translated_messages::host::key_file_unreadable_lookups()
+        }
         KeyStorageFailure::KeyFileContentInvalid { .. } => {
-            gettext("The file doesn't hold a valid key for this service")
+            translated_messages::host::file_not_hold_valid()
         }
     }
 }

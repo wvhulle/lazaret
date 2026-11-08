@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     abstractions::Toaster,
@@ -25,6 +24,7 @@ use crate::{
         add_dismissing_choice, alert_choice, deliver_local_outcome, describe_export_failure,
         exported_text, imported_file,
     },
+    translated_messages,
 };
 
 enum OpenProfileEditor {
@@ -112,7 +112,10 @@ fn present_change_confirmation(
 ) {
     let confirmation_dialog =
         adw::AlertDialog::new(Some(&confirmation_title), Some(&confirmation_body));
-    add_dismissing_choice::<ProfileChangeChoice>(&confirmation_dialog, &gettext("Cancel"));
+    add_dismissing_choice::<ProfileChangeChoice>(
+        &confirmation_dialog,
+        &translated_messages::scans::cancel_profile(),
+    );
     add_alert_choice(
         &confirmation_dialog,
         ProfileChangeChoice::ChangeConfirmed,
@@ -136,9 +139,11 @@ fn present_change_confirmation(
 
 fn completed_change_text(completed_change: CompletedProfileChange) -> String {
     match completed_change {
-        CompletedProfileChange::DefaultsRestored => gettext("Default profiles restored"),
-        CompletedProfileChange::ProfileDeleted => gettext("Profile deleted"),
-        CompletedProfileChange::ProfileImported => gettext("Profile imported"),
+        CompletedProfileChange::DefaultsRestored => {
+            translated_messages::scans::default_profiles_restored()
+        }
+        CompletedProfileChange::ProfileDeleted => translated_messages::scans::profile_deleted(),
+        CompletedProfileChange::ProfileImported => translated_messages::scans::profile_imported(),
     }
 }
 
@@ -215,7 +220,7 @@ impl Component for ProfileManagerDialog {
 
     view! {
         adw::Dialog {
-            set_title: &gettext("Manage Profiles"),
+            set_title: &translated_messages::scans::manage_profiles_title(),
             set_content_width: 560,
             set_content_height: 520,
 
@@ -227,20 +232,20 @@ impl Component for ProfileManagerDialog {
                     add_top_bar = &adw::HeaderBar {
                         pack_start = &gtk::Button {
                             set_icon_name: "edit-undo-symbolic",
-                            set_tooltip_text: Some(&gettext("Restore Defaults")),
+                            set_tooltip_text: Some(&translated_messages::scans::restore_defaults_tooltip()),
                             connect_clicked => ProfileManagerDialogInput::RestoreDefaultsRequested,
                         },
 
                         pack_end = &gtk::Button {
                             set_icon_name: "list-add-symbolic",
-                            set_tooltip_text: Some(&gettext("New Profile")),
+                            set_tooltip_text: Some(&translated_messages::scans::new_profile_tooltip()),
                             add_css_class: "suggested-action",
                             connect_clicked => ProfileManagerDialogInput::NewProfileRequested,
                         },
 
                         pack_end = &gtk::Button {
                             set_icon_name: "document-open-symbolic",
-                            set_tooltip_text: Some(&gettext("Import")),
+                            set_tooltip_text: Some(&translated_messages::scans::import_tooltip()),
                             connect_clicked => ProfileManagerDialogInput::ImportRequested,
                         },
                     },
@@ -248,8 +253,8 @@ impl Component for ProfileManagerDialog {
                     #[wrap(Some)]
                     set_content = &adw::PreferencesPage {
                         add = &adw::PreferencesGroup {
-                            set_title: &gettext("Scan Profiles"),
-                            set_description: Some(&gettext("Select a profile to edit or use for scanning")),
+                            set_title: &translated_messages::scans::profiles_title(),
+                            set_description: Some(&translated_messages::scans::select_profile_edit_description()),
 
                             #[local_ref]
                             profile_list -> gtk::ListBox {
@@ -318,7 +323,7 @@ impl Component for ProfileManagerDialog {
             }
             ProfileManagerDialogInput::ImportRequested => deliver_local_outcome(
                 sender.command_sender().clone(),
-                imported_file(gettext("Import")),
+                imported_file(translated_messages::scans::import_tooltip()),
                 |import_outcome| {
                     Some(ProfileManagerDialogCommand::ImportedFileRead(
                         import_outcome,
@@ -326,12 +331,9 @@ impl Component for ProfileManagerDialog {
                 },
             ),
             ProfileManagerDialogInput::RestoreDefaultsRequested => present_change_confirmation(
-                gettext("Restore Default Profiles"),
-                gettext(
-                    "Restore the built-in default profiles? Any customizations to default \
-                     profiles will be reset; custom profiles are preserved.",
-                ),
-                gettext("Restore Defaults"),
+                translated_messages::scans::restore_default_profiles(),
+                translated_messages::scans::restore_built_default_profiles(),
+                translated_messages::scans::restore_defaults_tooltip(),
                 ConfirmedProfileChange::DefaultsRestored,
                 root,
                 &sender,
@@ -358,10 +360,9 @@ impl Component for ProfileManagerDialog {
                     let deleted_name = displayed_profile_name(&deleted_profile);
                     match deleted_profile.profile_origin {
                         ProfileOrigin::Custom { profile_id } => present_change_confirmation(
-                            gettext("Delete Profile"),
-                            gettext("Delete the profile '{name}'?")
-                                .replace("{name}", &deleted_name),
-                            gettext("Delete"),
+                            translated_messages::scans::delete_profile(),
+                            translated_messages::scans::delete_profile_name(&deleted_name),
+                            translated_messages::scans::delete_label(),
                             ConfirmedProfileChange::ProfileDeleted { profile_id },
                             root,
                             &sender,
@@ -470,8 +471,9 @@ impl Component for ProfileManagerDialog {
                     &change_failure,
                 ))),
             ProfileManagerDialogCommand::ExportFinished(TextExportOutcome::TextSaved) => {
-                self.toaster
-                    .add_toast(plain_text_toast(&gettext("Profile exported")));
+                self.toaster.add_toast(plain_text_toast(
+                    &translated_messages::scans::profile_exported(),
+                ));
             }
             ProfileManagerDialogCommand::ExportFinished(TextExportOutcome::ExportFailed(
                 export_failure,

@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use gettextrs::gettext;
 use relm4::{FactorySender, adw, adw::prelude::*, prelude::FactoryComponent};
 
 use crate::{
@@ -15,6 +14,7 @@ use crate::{
         flatpak_sandbox::host_user_data_directory,
     },
     scans::scheduled_scans_page::scan_schedule_units::current_launcher_words,
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -135,16 +135,13 @@ fn describe_integration_failure(integration_state: &IntegrationState) -> String 
         | IntegrationState::ChangingIntegration { .. } => String::new(),
         IntegrationState::ChangeFailed { change_failure, .. } => match change_failure {
             IntegrationChangeFailure::LauncherNotFound(launcher_failure) => {
-                gettext("Lazaret could not find its own launcher: {error}")
-                    .replace("{error}", &launcher_failure.to_string())
+                translated_messages::preferences::lazaret_not_find_own(launcher_failure)
             }
             IntegrationChangeFailure::ActionUnwritable(write_failure) => {
-                gettext("The file manager action could not be added: {error}")
-                    .replace("{error}", &write_failure.to_string())
+                translated_messages::preferences::file_manager_not_added(write_failure)
             }
             IntegrationChangeFailure::ActionUnremovable(remove_failure) => {
-                gettext("The file manager action could not be removed: {error}")
-                    .replace("{error}", &remove_failure.to_string())
+                translated_messages::preferences::file_manager_not_removed(remove_failure)
             }
         },
     }

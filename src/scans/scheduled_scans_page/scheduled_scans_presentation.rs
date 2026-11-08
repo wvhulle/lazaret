@@ -1,5 +1,3 @@
-use gettextrs::gettext;
-
 use crate::{
     host_services::{
         clamav_programs::distribution_install_guides::DistributionFamily,
@@ -24,6 +22,7 @@ use crate::{
             StepEvidenceRow, TimelineStep,
         },
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -67,17 +66,17 @@ impl From<UnitTimestamp> for EvidenceMoment {
 fn next_run_text(next_run: UnitTimestamp) -> String {
     match next_run {
         UnitTimestamp::RecordedAt { recorded_at } => exact_local_time_text(recorded_at),
-        UnitTimestamp::NeverRecorded => gettext("Not scheduled"),
+        UnitTimestamp::NeverRecorded => translated_messages::scans::not_scheduled(),
     }
 }
 
 fn next_run_row(next_run: UnitTimestamp, moment_context: MomentContext) -> StepEvidenceRow {
     let evidence_value = match next_run {
         UnitTimestamp::RecordedAt { .. } => String::new(),
-        UnitTimestamp::NeverRecorded => gettext("Not scheduled"),
+        UnitTimestamp::NeverRecorded => translated_messages::scans::not_scheduled(),
     };
     timed_evidence_row(
-        gettext("Next scan"),
+        translated_messages::scans::next_scan(),
         EvidenceMoment::from(next_run),
         evidence_value,
         moment_context,
@@ -92,16 +91,16 @@ fn last_run_row(
         ScanRunHistory::CompletedScan {
             scan_findings: ScanRunFindings::ThreatsFound,
             ..
-        } => gettext("threats found"),
+        } => translated_messages::scans::threats_found_scheduled(),
         ScanRunHistory::CompletedScan {
             scan_findings: ScanRunFindings::NothingFound,
             ..
-        } => gettext("nothing found"),
-        ScanRunHistory::NoCompletedScan => gettext("Not run yet"),
+        } => translated_messages::scans::nothing_found(),
+        ScanRunHistory::NoCompletedScan => translated_messages::scans::not_run_yet(),
         ScanRunHistory::JournalUnreadable(read_failure) => unknown_run_text(read_failure),
     };
     timed_evidence_row(
-        gettext("Last scan"),
+        translated_messages::scans::last_scan(),
         EvidenceMoment::from(last_completed_run),
         evidence_value,
         moment_context,
@@ -119,7 +118,7 @@ pub fn scanned_folders_text(scan_service: &ScanServiceEvidence) -> String {
     match scan_service {
         ScanServiceEvidence::ServiceConfigured { scan_targets, .. } => scan_targets.join("\n"),
         ScanServiceEvidence::ServiceMissing | ScanServiceEvidence::ServiceUnreadable => {
-            gettext("Unknown")
+            translated_messages::scans::unknown_label()
         }
     }
 }
@@ -165,7 +164,7 @@ fn scheduled_status_text(
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerInactive,
             ..
-        } => gettext("The system timer is not active"),
+        } => translated_messages::scans::system_timer_not_active(),
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerActive { next_run },
             scan_service,
@@ -174,20 +173,20 @@ fn scheduled_status_text(
             ScanServiceEvidence::ServiceConfigured { last_result, .. }
                 if scan_result_failed(last_result) =>
             {
-                gettext("The last scan ended with an error")
+                translated_messages::scans::last_scan_ended_error()
             }
             ScanServiceEvidence::ServiceConfigured { .. } => {
-                gettext("Next scan: {time}").replace("{time}", &next_run_text(*next_run))
+                translated_messages::scans::next_scan_time(next_run_text(*next_run))
             }
             ScanServiceEvidence::ServiceMissing => {
-                gettext("The timer starts a scan service that is not installed")
+                translated_messages::scans::timer_starts_scan_service()
             }
             ScanServiceEvidence::ServiceUnreadable => {
-                gettext("The scan service could not be read from systemd")
+                translated_messages::scans::service_not_read_systemd()
             }
         },
-        ScheduledScanEvidence::LazaretSchedule => gettext("Scheduled by Lazaret"),
-        ScheduledScanEvidence::NoSchedule => gettext("No scan is scheduled"),
+        ScheduledScanEvidence::LazaretSchedule => translated_messages::scans::scheduled_lazaret(),
+        ScheduledScanEvidence::NoSchedule => translated_messages::scans::no_scan_scheduled(),
     }
 }
 
@@ -200,8 +199,8 @@ fn system_timer_rows(
     let next_scan_row = match timer_state {
         TimerState::TimerActive { next_run } => next_run_row(*next_run, moment_context),
         TimerState::TimerInactive => evidence_row(
-            gettext("Next scan"),
-            gettext("Not scheduled, because the timer is not active"),
+            translated_messages::scans::next_scan(),
+            translated_messages::scans::not_scheduled_timer_active(),
         ),
     };
     vec![
@@ -210,7 +209,7 @@ fn system_timer_rows(
         StepEvidenceRow {
             evidence_moment: EvidenceMoment::SettingValue,
             ..evidence_row(
-                gettext("Folders scanned"),
+                translated_messages::scans::folders_scanned(),
                 scanned_folders_text(scan_service),
             )
         },
@@ -247,11 +246,8 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
         }
     };
     TimelineStep::settled(
-        gettext("Scheduled scan"),
-        gettext(
-            "A scheduled scan catches files that were not opened, or that only became detectable \
-             after a signature update.",
-        ),
+        translated_messages::scans::scheduled_scan(),
+        translated_messages::scans::scheduled_scan_catches_files(),
         scheduled_status_text(scheduled_scan_evidence, daemon_answering),
         SettledStep {
             evidence_rows: plain_rows(evidence_rows),

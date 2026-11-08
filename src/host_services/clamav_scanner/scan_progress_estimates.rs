@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use gettextrs::{gettext, ngettext};
+use crate::translated_messages;
 
 const ESTIMATE_MINIMUM_FILES: u64 = 50;
 const ESTIMATE_MINIMUM_ELAPSED: Duration = Duration::from_secs(3);
@@ -31,13 +31,7 @@ impl RefreshThrottle {
 }
 
 pub fn file_progress_text(inspected_file_count: u64, planned_file_count: u64) -> String {
-    ngettext(
-        "{done} of {total} file",
-        "{done} of {total} files",
-        u32::try_from(planned_file_count).unwrap_or(u32::MAX),
-    )
-    .replace("{done}", &inspected_file_count.to_string())
-    .replace("{total}", &planned_file_count.to_string())
+    translated_messages::host::done_total_file(planned_file_count, inspected_file_count)
 }
 
 pub fn remaining_time_text(
@@ -62,30 +56,15 @@ fn describe_remaining_seconds(remaining_seconds: u64) -> String {
     match remaining_seconds {
         0..60 => {
             let remaining_amount = remaining_seconds.max(1);
-            ngettext(
-                "About {count} second left",
-                "About {count} seconds left",
-                plural_selector(remaining_amount),
-            )
-            .replace("{count}", &remaining_amount.to_string())
+            translated_messages::host::count_second_left(remaining_amount)
         }
         60..3600 => {
             let remaining_amount = remaining_seconds.div_ceil(60);
-            ngettext(
-                "About {count} minute left",
-                "About {count} minutes left",
-                plural_selector(remaining_amount),
-            )
-            .replace("{count}", &remaining_amount.to_string())
+            translated_messages::host::count_minute_left(remaining_amount)
         }
         _long_scan => {
             let remaining_amount = remaining_seconds.div_ceil(3600);
-            ngettext(
-                "About {count} hour left",
-                "About {count} hours left",
-                plural_selector(remaining_amount),
-            )
-            .replace("{count}", &remaining_amount.to_string())
+            translated_messages::host::count_hour_left(remaining_amount)
         }
     }
 }
@@ -98,18 +77,10 @@ pub fn elapsed_duration_text(elapsed_time: Duration) -> String {
         elapsed_seconds % 60,
     );
     match (hours, minutes) {
-        (0, 0) => gettext("{seconds} s").replace("{seconds}", &seconds.to_string()),
-        (0, _) => gettext("{minutes} min {seconds} s")
-            .replace("{minutes}", &minutes.to_string())
-            .replace("{seconds}", &seconds.to_string()),
-        _long_scan => gettext("{hours} h {minutes} min")
-            .replace("{hours}", &hours.to_string())
-            .replace("{minutes}", &minutes.to_string()),
+        (0, 0) => translated_messages::host::seconds_s(seconds),
+        (0, _) => translated_messages::host::minutes_min_seconds_s(minutes, seconds),
+        _long_scan => translated_messages::host::hours_h_minutes_min(hours, minutes),
     }
-}
-
-fn plural_selector(counted_amount: u64) -> u32 {
-    u32::try_from(counted_amount).unwrap_or(u32::MAX)
 }
 
 #[cfg(test)]

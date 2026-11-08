@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{Sender, adw, adw::prelude::*, gtk};
 
 use crate::{
@@ -9,6 +8,7 @@ use crate::{
     shared_widgets::awaited_dialogs::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,41 +43,34 @@ fn confirmation_text(trust_choice: &TrustChoice) -> ConfirmationText {
             file_fingerprint,
             shown_path,
         } => ConfirmationText {
-            heading: gettext("Trust This File?"),
-            body: gettext(
-                "ClamAV will never report a file with exactly this content again, wherever it is \
-                 on this computer and whichever scan finds it. Your administrator password is \
-                 needed, and the password prompt shows the same SHA-256 hash as below.\n\n{path}",
-            )
-            .replace("{path}", shown_path),
-            shown_value: gettext("SHA-256 {hash}\n{size}")
-                .replace("{hash}", &file_fingerprint.sha256_hex)
-                .replace("{size}", &exact_byte_size_text(file_fingerprint.file_size)),
-            confirm_label: gettext("Trust"),
+            heading: translated_messages::widgets::trust_file_heading(),
+            body: translated_messages::widgets::clamav_never_report_body(shown_path),
+            shown_value: translated_messages::widgets::sha_256_hash_size(
+                &file_fingerprint.sha256_hex,
+                exact_byte_size_text(file_fingerprint.file_size),
+            ),
+            confirm_label: translated_messages::widgets::trust_button(),
             lowers_protection: true,
         },
         TrustChoice::IgnoreSignature { signature_name } => ConfirmationText {
-            heading: gettext("Ignore This Detection?"),
-            body: gettext(
-                "ClamAV will stop reporting every file with this detection, not just this one. \
-                 Trusting the file by its hash is safer when only one file is a false positive.",
-            ),
+            heading: translated_messages::widgets::ignore_detection_heading(),
+            body: translated_messages::widgets::clamav_stop_reporting_body(),
             shown_value: signature_name.clone(),
-            confirm_label: gettext("Ignore"),
+            confirm_label: translated_messages::widgets::ignore_button(),
             lowers_protection: true,
         },
         TrustChoice::ForgetTrustedFile { sha256_hex } => ConfirmationText {
-            heading: gettext("Stop Trusting This File?"),
-            body: gettext("ClamAV will report this file again when it matches a signature."),
+            heading: translated_messages::widgets::stop_trusting_file_heading(),
+            body: translated_messages::widgets::clamav_report_file_body(),
             shown_value: format!("SHA-256 {sha256_hex}"),
-            confirm_label: gettext("Stop Trusting"),
+            confirm_label: translated_messages::widgets::stop_trusting_button(),
             lowers_protection: false,
         },
         TrustChoice::StopIgnoringSignature { signature_name } => ConfirmationText {
-            heading: gettext("Report This Detection Again?"),
-            body: gettext("ClamAV will report files with this detection again."),
+            heading: translated_messages::widgets::report_detection_again_heading(),
+            body: translated_messages::widgets::clamav_report_files_body(),
             shown_value: signature_name.clone(),
-            confirm_label: gettext("Report Again"),
+            confirm_label: translated_messages::widgets::report_again_button(),
             lowers_protection: false,
         },
     }
@@ -110,7 +103,10 @@ pub fn present_trust_confirmation<Message: 'static>(
     } = confirmation_text(&trust_choice);
     let confirmation_dialog = adw::AlertDialog::new(Some(&heading), Some(&body));
     confirmation_dialog.set_extra_child(Some(&shown_value_label(&shown_value)));
-    add_dismissing_choice::<TrustDialogChoice>(&confirmation_dialog, &gettext("Cancel"));
+    add_dismissing_choice::<TrustDialogChoice>(
+        &confirmation_dialog,
+        &translated_messages::widgets::cancel_trust(),
+    );
     add_alert_choice(
         &confirmation_dialog,
         TrustDialogChoice::TrustConfirmed,

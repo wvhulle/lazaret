@@ -1,5 +1,6 @@
-use gettextrs::gettext;
 use regex::Regex;
+
+use crate::translated_messages;
 
 const HIDDEN_ADDRESS_TEXT: &str = "[address hidden]";
 pub const NIXOS_URLHAUS_SNIPPET: &str =
@@ -34,8 +35,8 @@ pub enum CredentialLabel {
 impl CredentialLabel {
     pub fn described(self) -> String {
         match self {
-            Self::PurchaseReceipt => gettext("purchase receipt number"),
-            Self::CustomerIdentifier => gettext("customer ID"),
+            Self::PurchaseReceipt => translated_messages::host::purchase_receipt_number(),
+            Self::CustomerIdentifier => translated_messages::host::customer_id(),
         }
     }
 }
@@ -190,7 +191,7 @@ pub fn signature_file_source_name(file_source: SignatureFileSource) -> String {
         SignatureFileSource::ThirdPartyFile(third_party_provider) => {
             third_party_provider.provider_name().to_owned()
         }
-        SignatureFileSource::UnrecognizedSource => gettext("Other source"),
+        SignatureFileSource::UnrecognizedSource => translated_messages::host::other_source(),
     }
 }
 

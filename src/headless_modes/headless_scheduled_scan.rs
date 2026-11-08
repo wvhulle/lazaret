@@ -6,33 +6,35 @@ use std::{
 };
 
 use futures::{StreamExt, future::ready, stream};
-use gettextrs::{gettext, ngettext};
 use jiff::Timestamp;
 use relm4::gtk::glib;
 
-use crate::host_services::{
-    activity_history::activity_history_database::{
-        ActivityHistory, ActivityRecord, FoundThreatCount, NewActivityEntry, ScanActivityStatus,
-        ScanOrigin,
-    },
-    clamav_config::detection_options::host_clamscan_detection_arguments,
-    clamav_scanner::{
-        scan_exclusion_rules::ScanExclusions,
-        scan_progress_events::{CompletedScanOutcome, ScanRequest, scan_progress_events},
-        scanner_command_builder::{ScannerProgramPaths, choose_scanner_backend},
-    },
-    desktop::{
-        application_directories::application_data_directory,
-        desktop_notifications::send_session_notification,
-        file_process_lock::{FileLockAttempt, try_file_lock},
-        stored_settings::{
-            application_settings, read_exclusion_entries, scanner_backend_preference,
+use crate::{
+    host_services::{
+        activity_history::activity_history_database::{
+            ActivityHistory, ActivityRecord, FoundThreatCount, NewActivityEntry,
+            ScanActivityStatus, ScanOrigin,
         },
+        clamav_config::detection_options::host_clamscan_detection_arguments,
+        clamav_scanner::{
+            scan_exclusion_rules::ScanExclusions,
+            scan_progress_events::{CompletedScanOutcome, ScanRequest, scan_progress_events},
+            scanner_command_builder::{ScannerProgramPaths, choose_scanner_backend},
+        },
+        desktop::{
+            application_directories::application_data_directory,
+            desktop_notifications::send_session_notification,
+            file_process_lock::{FileLockAttempt, try_file_lock},
+            stored_settings::{
+                application_settings, read_exclusion_entries, scanner_backend_preference,
+            },
+        },
+        lazaret_database::locked_database_connection::{
+            lazaret_database_path, quarantine_owner_lock_path,
+        },
+        quarantine_vault::quarantine_entry_database::QuarantineVault,
     },
-    lazaret_database::locked_database_connection::{
-        lazaret_database_path, quarantine_owner_lock_path,
-    },
-    quarantine_vault::quarantine_entry_database::QuarantineVault,
+    translated_messages,
 };
 
 const THREATS_FOUND_EXIT_CODE: u8 = 1;
@@ -146,23 +148,16 @@ fn finished_scan_notification_body(
     quarantined_count: usize,
 ) -> String {
     let threat_count = scan_outcome.threat_findings.attributed_threats().len();
-    let found_text = ngettext(
-        "{count} threat found",
-        "{count} threats found",
-        u32::try_from(threat_count).unwrap_or(u32::MAX),
-    )
-    .replace("{count}", &threat_count.to_string());
+    let found_text = translated_messages::headless::count_threat_found(threat_count);
     if quarantined_count == 0 {
-        format!("{found_text}. {}", gettext("Open Lazaret to review them."))
+        format!(
+            "{found_text}. {}",
+            translated_messages::headless::open_lazaret_review()
+        )
     } else {
         format!(
             "{found_text}. {}",
-            ngettext(
-                "{count} moved to quarantine.",
-                "{count} moved to quarantine.",
-                u32::try_from(quarantined_count).unwrap_or(u32::MAX),
-            )
-            .replace("{count}", &quarantined_count.to_string())
+            translated_messages::headless::count_moved_quarantine(quarantined_count)
         )
     }
 }
@@ -229,15 +224,15 @@ async fn run_scheduled_scan_async(scan_options: ScheduledScanOptions) -> ExitCod
     match scan_status {
         ScanActivityStatus::ScanInfected { .. } => {
             send_session_notification(
-                &gettext("Threats Detected"),
+                &translated_messages::headless::threats_detected(),
                 &finished_scan_notification_body(&scan_outcome, quarantined_count),
             );
             ExitCode::from(THREATS_FOUND_EXIT_CODE)
         }
         ScanActivityStatus::ScanFailed => {
             send_session_notification(
-                &gettext("Scheduled scan failed"),
-                &gettext("Open Lazaret to read the log."),
+                &translated_messages::headless::scheduled_scan_failed(),
+                &translated_messages::headless::open_lazaret_read_log(),
             );
             ExitCode::from(SCAN_FAILED_EXIT_CODE)
         }

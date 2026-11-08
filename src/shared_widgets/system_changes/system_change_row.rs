@@ -1,9 +1,11 @@
-use gettextrs::gettext;
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
-use crate::host_services::{
-    clamav_admin_service::admin_audit_records::{AdminAuditEntry, Requester},
-    desktop::locale_formatting::exact_local_time_text,
+use crate::{
+    host_services::{
+        clamav_admin_service::admin_audit_records::{AdminAuditEntry, Requester},
+        desktop::locale_formatting::exact_local_time_text,
+    },
+    translated_messages,
 };
 
 pub struct SystemChangeRow {
@@ -12,18 +14,21 @@ pub struct SystemChangeRow {
 
 impl SystemChangeRow {
     fn row_subtitle(&self) -> String {
+        let recorded_time_text = exact_local_time_text(self.audit_entry.recorded_at);
+        let outcome_text = self.audit_entry.audited_outcome.described();
         match self.audit_entry.requester {
             Requester::KnownUser { user_id } => {
-                gettext("{time} · {outcome} · requested by user {uid}")
-                    .replace("{uid}", &user_id.to_string())
+                translated_messages::widgets::time_outcome_requested_user(
+                    &recorded_time_text,
+                    &outcome_text,
+                    user_id,
+                )
             }
-            Requester::UnknownUser => gettext("{time} · {outcome} · requested by an unknown user"),
+            Requester::UnknownUser => translated_messages::widgets::time_outcome_requested_unknown(
+                &recorded_time_text,
+                &outcome_text,
+            ),
         }
-        .replace(
-            "{time}",
-            &exact_local_time_text(self.audit_entry.recorded_at),
-        )
-        .replace("{outcome}", &self.audit_entry.audited_outcome.described())
     }
 }
 
@@ -44,7 +49,7 @@ impl FactoryComponent for SystemChangeRow {
 
             add_prefix = &gtk::Image {
                 set_icon_name: Some("dialog-warning-symbolic"),
-                set_tooltip_text: Some(&gettext("This change lowered protection")),
+                set_tooltip_text: Some(&translated_messages::widgets::change_lowered_protection_tooltip()),
                 add_css_class: "warning",
                 set_visible: self.audit_entry.lowered_protection(),
             },

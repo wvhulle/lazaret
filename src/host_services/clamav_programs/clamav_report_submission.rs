@@ -7,15 +7,19 @@ use std::{
     time::Duration,
 };
 
-use gettextrs::gettext;
 use tokio::time::timeout;
 
-use crate::host_services::{
-    clamav_programs::trusted_program_lookup::{
-        ClamavProgram, ProgramRefusal, locate_trusted_program,
+use crate::{
+    host_services::{
+        clamav_programs::trusted_program_lookup::{
+            ClamavProgram, ProgramRefusal, locate_trusted_program,
+        },
+        clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+        desktop::{
+            content_pipe::pipe_content_for_child, flatpak_sandbox::host_program_async_command,
+        },
     },
-    clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-    desktop::{content_pipe::pipe_content_for_child, flatpak_sandbox::host_program_async_command},
+    translated_messages,
 };
 
 const SUBMISSION_TIMEOUT: Duration = Duration::from_secs(300);
@@ -180,28 +184,26 @@ async fn run_submitter(
 
 pub fn clamsubmit_failure_text(clamsubmit_failure: &ClamsubmitFailure) -> String {
     match clamsubmit_failure {
-        ClamsubmitFailure::ContactIncomplete => {
-            gettext("Enter your name and a valid email address to send a report")
-        }
+        ClamsubmitFailure::ContactIncomplete => translated_messages::host::enter_name_valid_email(),
         ClamsubmitFailure::SubmitterMissing => {
-            gettext("Reporting needs clamsubmit, which comes with ClamAV but isn't installed here")
+            translated_messages::host::reporting_needs_clamsubmit_comes()
         }
         ClamsubmitFailure::SubmitterReplaceable => {
-            gettext("Lazaret refused to run clamsubmit, because your account can replace it")
+            translated_messages::host::lazaret_refused_run_clamsubmit()
         }
         ClamsubmitFailure::ContentPipeFailed(pipe_failure) => {
-            gettext("The report was not sent: {error}")
-                .replace("{error}", &pipe_failure.to_string())
+            translated_messages::host::report_not_sent_error(pipe_failure)
         }
         ClamsubmitFailure::SubmitterRunFailed(run_failure) => {
-            gettext("The report was not sent: {error}").replace("{error}", &run_failure.to_string())
+            translated_messages::host::report_not_sent_error(run_failure)
         }
         ClamsubmitFailure::UploadTimedOut(_elapsed) => {
-            gettext("The report was not sent: the upload took too long")
+            translated_messages::host::report_not_sent_upload()
         }
         ClamsubmitFailure::ReportedBySubmitter { submitter_output } => {
-            gettext("The report was not sent: {error}")
-                .replace("{error}", &sanitize_scanner_line(submitter_output))
+            translated_messages::host::report_not_sent_error(sanitize_scanner_line(
+                submitter_output,
+            ))
         }
     }
 }

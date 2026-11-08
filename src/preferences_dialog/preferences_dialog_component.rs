@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, adw,
     adw::prelude::*,
@@ -22,6 +21,7 @@ use crate::{
         file_manager_row::FileManagerRow,
         service_key_section::{ServiceKeySection, ServiceKeySectionOutput},
     },
+    translated_messages,
 };
 
 pub const ONLINE_SERVICES_PAGE_NAME: &str = "online-services";
@@ -97,21 +97,19 @@ impl Component for PreferencesDialog {
 
     view! {
         adw::PreferencesDialog {
-            set_title: &gettext("Preferences"),
+            set_title: &translated_messages::preferences::dialog_title(),
             set_search_enabled: true,
 
             add = &adw::PreferencesPage {
-                set_title: &gettext("General"),
+                set_title: &translated_messages::preferences::general_title(),
                 set_icon_name: Some("preferences-system-symbolic"),
 
                 adw::PreferencesGroup {
-                    set_title: &gettext("Window Behavior"),
-                    set_description: Some(&gettext(
-                        "Detection alerts only work while Lazaret is running.",
-                    )),
+                    set_title: &translated_messages::preferences::window_behavior_title(),
+                    set_description: Some(&translated_messages::preferences::detection_alerts_work_description()),
 
                     adw::ComboRow {
-                        set_title: &gettext("When closing window"),
+                        set_title: &translated_messages::preferences::closing_window_title(),
                         set_model: Some(&close_action_labels()),
                         #[watch]
                         #[block_signal(close_action_handler)]
@@ -122,8 +120,8 @@ impl Component for PreferencesDialog {
                     },
 
                     adw::SwitchRow {
-                        set_title: &gettext("Start in the Background"),
-                        set_subtitle: &gettext("Launch in the background without opening a window."),
+                        set_title: &translated_messages::preferences::start_background_title(),
+                        set_subtitle: &translated_messages::preferences::launch_background_without_subtitle(),
                         #[watch]
                         #[block_signal(start_in_background_handler)]
                         set_active: model.window_behavior.start_in_background,
@@ -133,11 +131,8 @@ impl Component for PreferencesDialog {
                     },
 
                     adw::SwitchRow {
-                        set_title: &gettext("Desktop Notifications"),
-                        set_subtitle: &gettext(
-                            "Notify about detections, and about finished scans and updates while \
-                             the window is not in focus.",
-                        ),
+                        set_title: &translated_messages::preferences::desktop_notifications_title(),
+                        set_subtitle: &translated_messages::preferences::notify_detections_finished_subtitle(),
                         #[watch]
                         #[block_signal(notifications_handler)]
                         set_active: model.window_behavior.notifications_enabled,
@@ -149,31 +144,21 @@ impl Component for PreferencesDialog {
 
                 #[local_ref]
                 file_manager_group -> adw::PreferencesGroup {
-                    set_title: &gettext("File Manager Integration"),
-                    set_description: Some(&gettext(
-                        "Add context menu actions for supported file managers.",
-                    )),
+                    set_title: &translated_messages::preferences::file_manager_integration_title(),
+                    set_description: Some(&translated_messages::preferences::add_context_menu_description()),
                     set_visible: !running_in_flatpak(),
                 },
             },
 
             add = &adw::PreferencesPage {
                 set_name: Some(ONLINE_SERVICES_PAGE_NAME),
-                set_title: &gettext("Online Services"),
+                set_title: &translated_messages::preferences::online_services_title(),
                 set_icon_name: Some("network-server-symbolic"),
-                set_description: &gettext(
-                    "Services that tell you more about a detected or quarantined file. Lookups \
-                     run only when you press Look Up on a detection or Check in a quarantine \
-                     entry, and send only a hash or a signature name. A file leaves this \
-                     computer only when you submit it and confirm what is sent.",
-                ),
+                set_description: &translated_messages::preferences::services_tell_more_description(),
 
                 adw::PreferencesGroup {
                     set_title: "CIRCL hashlookup",
-                    set_description: Some(&gettext(
-                        "Lookups send only a file's SHA-256 hash and tell whether it belongs to a \
-                         known, harmless file. No key needed.",
-                    )),
+                    set_description: Some(&translated_messages::preferences::lookups_send_file_description()),
                 },
 
                 #[local_ref]
@@ -184,12 +169,7 @@ impl Component for PreferencesDialog {
 
                 adw::PreferencesGroup {
                     set_title: "ClamAV (Cisco Talos)",
-                    set_description: Some(&gettext(
-                        "No lookups. A report you confirm sends the file, the detection name for \
-                         a false positive, and your name and email address. Talos processes \
-                         samples by automation, never makes them public and doesn't share them \
-                         with other companies. A review takes at least 48 hours. No key needed.",
-                    )),
+                    set_description: Some(&translated_messages::preferences::no_lookups_report_description()),
                 },
             },
 

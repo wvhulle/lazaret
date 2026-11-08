@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     FactorySender, RelmWidgetExt, adw,
     adw::prelude::*,
@@ -7,11 +6,14 @@ use relm4::{
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
 
-use crate::shared_widgets::step_timeline::{
-    timeline_detail_row::{TimelineDetailRow, detail_rows_of},
-    timeline_step_contents::{
-        ButtonStyle, StepActionButton, StepNodeState, TimelineStep, TimelineStepRowOutput,
+use crate::{
+    shared_widgets::step_timeline::{
+        timeline_detail_row::{TimelineDetailRow, detail_rows_of},
+        timeline_step_contents::{
+            ButtonStyle, StepActionButton, StepNodeState, TimelineStep, TimelineStepRowOutput,
+        },
     },
+    translated_messages,
 };
 
 pub struct TimelineStepRow<StepAction> {
@@ -120,7 +122,7 @@ impl<StepAction: StepActionButton> FactoryComponent for TimelineStepRow<StepActi
             .build();
         let explanation_button = gtk::MenuButton::builder()
             .icon_name("help-about-symbolic")
-            .tooltip_text(gettext("Why this matters"))
+            .tooltip_text(translated_messages::widgets::why_matters_tooltip())
             .valign(gtk::Align::Center)
             .css_classes(["flat"])
             .popover(&gtk::Popover::builder().child(&explanation_label).build())

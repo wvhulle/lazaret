@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, gtk::gio};
 
 use crate::{
@@ -21,6 +20,7 @@ use crate::{
             read_schedule_timer_state, systemd_user_unit_directory,
         },
     },
+    translated_messages,
 };
 
 const SYSTEM_SCAN_TIMER: &str = "clamdscan.timer";
@@ -71,36 +71,33 @@ pub enum ScanScheduleSectionCommand {
 
 fn describe_timer_state(timer_state: &ScheduleTimerState) -> String {
     match timer_state {
-        ScheduleTimerState::TimerInactive => gettext("Not scheduled"),
+        ScheduleTimerState::TimerInactive => translated_messages::scans::not_scheduled_scan(),
         ScheduleTimerState::TimerActive {
             next_run: UnitTimestamp::RecordedAt { recorded_at },
-        } => gettext("Next run: {time}").replace("{time}", &exact_local_time_text(*recorded_at)),
+        } => translated_messages::scans::next_run_time(exact_local_time_text(*recorded_at)),
         ScheduleTimerState::TimerActive {
             next_run: UnitTimestamp::NeverRecorded,
-        } => gettext("Scheduled. The time of the next run is not known yet."),
+        } => translated_messages::scans::scheduled_time_next_run(),
         ScheduleTimerState::SystemdUnavailable => {
-            gettext("Scheduled scans need a systemd user session, which is not available.")
+            translated_messages::scans::scheduled_scans_need_systemd()
         }
     }
 }
 
 fn describe_system_schedule(next_run: UnitTimestamp) -> String {
     match next_run {
-        UnitTimestamp::RecordedAt { recorded_at } => gettext(
-            "Your system already runs scheduled scans, so these settings are locked to avoid a \
-             second schedule. Next scan: {time}. Change it in your system configuration.",
-        )
-        .replace("{time}", &exact_local_time_text(recorded_at)),
-        UnitTimestamp::NeverRecorded => gettext(
-            "Your system has a scan timer, so these settings are locked to avoid a second \
-             schedule. Change it in your system configuration.",
-        ),
+        UnitTimestamp::RecordedAt { recorded_at } => {
+            translated_messages::scans::system_already_runs_scheduled(exact_local_time_text(
+                recorded_at,
+            ))
+        }
+        UnitTimestamp::NeverRecorded => translated_messages::scans::system_scan_timer_settings(),
     }
 }
 
 fn describe_user_timer(user_timer_view: &UserTimerView) -> String {
     match user_timer_view {
-        UserTimerView::ReadingUserTimer => gettext("Checking…"),
+        UserTimerView::ReadingUserTimer => translated_messages::scans::checking_label(),
         UserTimerView::UserTimerRead(timer_state) => describe_timer_state(timer_state),
     }
 }
@@ -110,17 +107,14 @@ fn describe_schedule_group(
     user_timer_view: &UserTimerView,
 ) -> String {
     match system_schedule_owner {
-        SystemScheduleOwner::InspectingSystemTimer => gettext(
-            "Checking whether your system already runs scheduled scans. These settings stay \
-             locked until then.",
-        ),
+        SystemScheduleOwner::InspectingSystemTimer => {
+            translated_messages::scans::checking_whether_system_already()
+        }
         SystemScheduleOwner::NoSystemTimer => describe_user_timer(user_timer_view),
         SystemScheduleOwner::SystemTimerExists { next_run } => describe_system_schedule(*next_run),
-        SystemScheduleOwner::SystemTimerUnknown(inspection_failure) => gettext(
-            "Lazaret could not check whether your system already runs scheduled scans, so these \
-             settings are locked to avoid a second schedule: {error}",
-        )
-        .replace("{error}", &inspection_failure.to_string()),
+        SystemScheduleOwner::SystemTimerUnknown(inspection_failure) => {
+            translated_messages::scans::lazaret_not_check_whether(inspection_failure)
+        }
     }
 }
 
@@ -128,7 +122,7 @@ fn describe_page_notice(page_notice: &ScheduleSectionNotice) -> String {
     match page_notice {
         ScheduleSectionNotice::NoNoticeShown => String::new(),
         ScheduleSectionNotice::ScanTimeUnreadable => {
-            gettext("Enter the scan time as HH:MM, for example 02:00.")
+            translated_messages::scans::enter_scan_time_hh()
         }
         ScheduleSectionNotice::ScheduleNotApplied(apply_failure) => {
             describe_apply_failure(apply_failure)
@@ -143,35 +137,33 @@ const fn shows_page_notice(page_notice: &ScheduleSectionNotice) -> bool {
 fn describe_apply_failure(apply_failure: &ScheduleApplyFailure) -> String {
     match apply_failure {
         ScheduleApplyFailure::UnitFilesUnwritable(unit_failure) => {
-            gettext("Error creating systemd files: {error}")
-                .replace("{error}", &unit_failure.to_string())
+            translated_messages::scans::error_creating_systemd_files(unit_failure)
         }
         ScheduleApplyFailure::UserManagerFailed(manager_failure) => {
-            gettext("The timer could not be applied: {error}")
-                .replace("{error}", &manager_failure.to_string())
+            translated_messages::scans::timer_not_applied_error(manager_failure)
         }
     }
 }
 
 fn frequency_labels() -> gtk::StringList {
     let labels = [
-        gettext("Hourly"),
-        gettext("Daily"),
-        gettext("Weekly"),
-        gettext("Monthly"),
+        translated_messages::scans::hourly_label(),
+        translated_messages::scans::daily_label(),
+        translated_messages::scans::weekly_label(),
+        translated_messages::scans::monthly_label(),
     ];
     gtk::StringList::new(&labels.iter().map(String::as_str).collect::<Vec<_>>())
 }
 
 fn weekday_labels() -> gtk::StringList {
     let labels = [
-        gettext("Monday"),
-        gettext("Tuesday"),
-        gettext("Wednesday"),
-        gettext("Thursday"),
-        gettext("Friday"),
-        gettext("Saturday"),
-        gettext("Sunday"),
+        translated_messages::scans::monday_label(),
+        translated_messages::scans::tuesday_label(),
+        translated_messages::scans::wednesday_label(),
+        translated_messages::scans::thursday_label(),
+        translated_messages::scans::friday_label(),
+        translated_messages::scans::saturday_label(),
+        translated_messages::scans::sunday_label(),
     ];
     gtk::StringList::new(&labels.iter().map(String::as_str).collect::<Vec<_>>())
 }
@@ -247,7 +239,7 @@ impl Component for ScanScheduleSection {
                 set_spacing: 12,
 
             adw::PreferencesGroup {
-                set_title: &gettext("Schedule"),
+                set_title: &translated_messages::scans::schedule_title(),
                 #[watch]
                 set_sensitive: allows_applying_schedule(&model.system_schedule_owner),
                 #[watch]
@@ -257,14 +249,14 @@ impl Component for ScanScheduleSection {
                 )),
                 #[wrap(Some)]
                 set_header_suffix = &gtk::Button {
-                    set_label: &gettext("Apply"),
+                    set_label: &translated_messages::scans::apply_label(),
                     set_valign: gtk::Align::Center,
                     add_css_class: "suggested-action",
                     connect_clicked => ScanScheduleSectionInput::ApplyRequested,
                 },
 
                 adw::SwitchRow {
-                    set_title: &gettext("Enable Scheduled Scans"),
+                    set_title: &translated_messages::scans::enable_scheduled_scans_title(),
                     #[watch]
                     #[block_signal(schedule_toggled_handler)]
                     set_active: model.schedule_settings.schedule_enabled,
@@ -274,7 +266,7 @@ impl Component for ScanScheduleSection {
                 },
 
                 adw::ComboRow {
-                    set_title: &gettext("Scan Frequency"),
+                    set_title: &translated_messages::scans::frequency_title(),
                     set_model: Some(&frequency_labels()),
                     #[watch]
                     #[block_signal(frequency_chosen_handler)]
@@ -285,7 +277,7 @@ impl Component for ScanScheduleSection {
                 },
 
                 adw::EntryRow {
-                    set_title: &gettext("Scan Time (24-hour)"),
+                    set_title: &translated_messages::scans::time_24_hour_title(),
                     #[track(model.entry_texts_replaced)]
                     #[block_signal(time_changed_handler)]
                     set_text: &model.schedule_settings.schedule_time_text,
@@ -295,8 +287,8 @@ impl Component for ScanScheduleSection {
                 },
 
                 adw::ComboRow {
-                    set_title: &gettext("Day of Week"),
-                    set_subtitle: &gettext("Used for weekly scans."),
+                    set_title: &translated_messages::scans::day_week_title(),
+                    set_subtitle: &translated_messages::scans::used_weekly_scans_subtitle(),
                     set_model: Some(&weekday_labels()),
                     #[watch]
                     #[block_signal(weekday_chosen_handler)]
@@ -307,8 +299,8 @@ impl Component for ScanScheduleSection {
                 },
 
                 adw::SpinRow {
-                    set_title: &gettext("Day of Month"),
-                    set_subtitle: &gettext("Used for monthly scans."),
+                    set_title: &translated_messages::scans::day_month_title(),
+                    set_subtitle: &translated_messages::scans::used_monthly_scans_subtitle(),
                     set_adjustment: Some(&gtk::Adjustment::new(1.0, 1.0, 28.0, 1.0, 7.0, 0.0)),
                     #[watch]
                     #[block_signal(month_day_handler)]
@@ -319,7 +311,7 @@ impl Component for ScanScheduleSection {
                 },
 
                 adw::EntryRow {
-                    set_title: &gettext("Scan Targets (separated by commas; empty scans your home folder)"),
+                    set_title: &translated_messages::scans::targets_separated_commas_title(),
                     #[track(model.entry_texts_replaced)]
                     #[block_signal(targets_changed_handler)]
                     set_text: &model.scan_targets_text,
@@ -329,8 +321,8 @@ impl Component for ScanScheduleSection {
                 },
 
                 adw::SwitchRow {
-                    set_title: &gettext("Skip on Battery"),
-                    set_subtitle: &gettext("Do not start scheduled scans while on battery power."),
+                    set_title: &translated_messages::scans::skip_battery_schedule_title(),
+                    set_subtitle: &translated_messages::scans::not_start_scheduled_subtitle(),
                     #[watch]
                     #[block_signal(battery_skip_handler)]
                     set_active: model.schedule_settings.skip_on_battery,
@@ -340,8 +332,8 @@ impl Component for ScanScheduleSection {
                 },
 
                 adw::SwitchRow {
-                    set_title: &gettext("Auto-Quarantine"),
-                    set_subtitle: &gettext("Automatically quarantine threats found by scheduled scans. While Lazaret is open, threats are only reported."),
+                    set_title: &translated_messages::scans::auto_quarantine_title(),
+                    set_subtitle: &translated_messages::scans::automatically_quarantine_threats_subtitle(),
                     #[watch]
                     #[block_signal(auto_quarantine_handler)]
                     set_active: model.schedule_settings.auto_quarantine,

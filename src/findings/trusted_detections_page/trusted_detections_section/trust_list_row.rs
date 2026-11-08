@@ -1,7 +1,8 @@
-use gettextrs::gettext;
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
-use crate::host_services::clamav_admin_service::trust_requests::TrustChoice;
+use crate::{
+    host_services::clamav_admin_service::trust_requests::TrustChoice, translated_messages,
+};
 
 #[derive(Clone, Debug)]
 pub enum TrustRemoval {
@@ -75,7 +76,7 @@ impl FactoryComponent for TrustListRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "user-trash-symbolic",
-                set_tooltip_text: Some(&gettext("Remove")),
+                set_tooltip_text: Some(&translated_messages::findings::remove_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_visible: self.is_removable(),

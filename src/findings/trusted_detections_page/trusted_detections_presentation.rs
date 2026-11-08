@@ -1,5 +1,3 @@
-use gettextrs::{gettext, ngettext};
-
 use crate::{
     findings::trusted_detections_page::trusted_detections_section::{
         trust_list_contents::{
@@ -15,6 +13,7 @@ use crate::{
             StepEvidenceRow, TimelineStep,
         },
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,23 +53,27 @@ fn lazaret_list_failure_row<ListEntry>(
 fn foreign_allowlist_evidence_row(foreign_allowlist: &ForeignAllowlistFile) -> StepEvidenceRow {
     match &foreign_allowlist.allowlist_entries {
         AllowlistEntries::EntriesCounted { .. } => evidence_row(
-            gettext("Other allowlist"),
+            translated_messages::findings::other_allowlist(),
             foreign_allowlist.file_name.clone(),
         ),
         AllowlistEntries::FileUnreadable(read_failure) => evidence_row(
-            gettext("Other allowlist"),
-            gettext("{file}: {reason}")
-                .replace("{file}", &foreign_allowlist.file_name)
-                .replace("{reason}", &trust_list_failure_text(read_failure)),
+            translated_messages::findings::other_allowlist(),
+            translated_messages::findings::file_reason(
+                &foreign_allowlist.file_name,
+                trust_list_failure_text(read_failure),
+            ),
         ),
     }
 }
 
 fn trust_list_contents_verdict(trust_list: &TrustListContents) -> Option<TrustListVerdict> {
     let evidence_rows = [
-        lazaret_list_failure_row(gettext("Trusted files"), &trust_list.trusted_files),
         lazaret_list_failure_row(
-            gettext("Ignored detections"),
+            translated_messages::findings::trusted_files(),
+            &trust_list.trusted_files,
+        ),
+        lazaret_list_failure_row(
+            translated_messages::findings::ignored_detections(),
             &trust_list.ignored_signatures,
         ),
     ]
@@ -86,9 +89,7 @@ fn trust_list_contents_verdict(trust_list: &TrustListContents) -> Option<TrustLi
     if !trust_list.foreign_allowlists.is_empty() {
         return Some(TrustListVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: gettext(
-                "An allowlist that Lazaret didn't write tells ClamAV to stay silent",
-            ),
+            status_text: translated_messages::findings::allowlist_not_write_status(),
             evidence_rows,
         });
     }
@@ -100,12 +101,9 @@ fn trust_list_contents_verdict(trust_list: &TrustListContents) -> Option<TrustLi
             let lazaret_entries = trusted_files.len() + ignored_signatures.len();
             (lazaret_entries > 0).then(|| TrustListVerdict {
                 checked_condition: CheckedCondition::ConditionMet,
-                status_text: ngettext(
-                    "{count} file or detection is never reported",
-                    "{count} files or detections are never reported",
-                    u32::try_from(lazaret_entries).unwrap_or(u32::MAX),
-                )
-                .replace("{count}", &lazaret_entries.to_string()),
+                status_text: translated_messages::findings::count_file_detection_status(
+                    lazaret_entries,
+                ),
                 evidence_rows,
             })
         }
@@ -113,10 +111,7 @@ fn trust_list_contents_verdict(trust_list: &TrustListContents) -> Option<TrustLi
         | (LazaretListReading::ListRead(_), LazaretListReading::ListUnreadable(_)) => {
             Some(TrustListVerdict {
                 checked_condition: CheckedCondition::EvidenceUnknown,
-                status_text: gettext(
-                    "Lazaret can't read its own allowlist, so it can't tell what ClamAV stays \
-                     silent about",
-                ),
+                status_text: translated_messages::findings::own_allowlist_unreadable_status(),
                 evidence_rows,
             })
         }
@@ -129,12 +124,9 @@ fn trust_list_verdict(trust_list_reading: &TrustListReading) -> Option<TrustList
         TrustListReading::FolderMissing => None,
         TrustListReading::FolderUnreadable(read_failure) => Some(TrustListVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: gettext(
-                "Lazaret can't read the signature folder, so it can't tell what ClamAV stays \
-                 silent about",
-            ),
+            status_text: translated_messages::findings::signature_folder_unreadable_status(),
             evidence_rows: vec![evidence_row(
-                gettext("Signature folder"),
+                translated_messages::findings::signature_folder(),
                 trust_list_failure_text(read_failure),
             )],
         }),
@@ -158,7 +150,7 @@ pub fn trust_list_step<StepAction: StepActionButton>(
         evidence_rows,
     } = trust_list_verdict(trust_list_reading)?;
     Some(TimelineStep::settled(
-        gettext("Trusted detections"),
+        translated_messages::findings::trusted_detections(),
         trust_list_mechanism_text(),
         status_text,
         SettledStep {
@@ -170,18 +162,14 @@ pub fn trust_list_step<StepAction: StepActionButton>(
 }
 
 fn trust_list_mechanism_text() -> String {
-    gettext(
-        "Files and detection names on ClamAV's allowlists are never reported, by any scan. \
-         Malware that gets administrator rights could hide itself this way, so check that every \
-         entry was added on purpose.",
-    )
+    translated_messages::findings::files_detection_names_clamav()
 }
 
 fn nothing_trusted_step() -> TrustedDetectionsStep {
     TimelineStep::settled(
-        gettext("Trusted detections"),
+        translated_messages::findings::trusted_detections(),
         trust_list_mechanism_text(),
-        gettext("ClamAV reports everything it detects"),
+        translated_messages::findings::clamav_reports_everything_detects(),
         SettledStep::without_offers(SettledNodeState::Completed),
     )
 }

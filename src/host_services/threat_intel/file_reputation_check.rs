@@ -1,23 +1,24 @@
 use std::sync::Arc;
 
-use gettextrs::{gettext, ngettext};
-
-use crate::host_services::{
-    clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-    threat_intel::{
-        circl_hashlookup_client::{
-            CirclLookupFailure, KnownFileLookup, KnownName, ListingSource, look_up_known_file,
+use crate::{
+    host_services::{
+        clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+        threat_intel::{
+            circl_hashlookup_client::{
+                CirclLookupFailure, KnownFileLookup, KnownName, ListingSource, look_up_known_file,
+            },
+            malware_bazaar_client::{
+                KnownSampleLookup, MalwareBazaarFailure, MalwareFamily, SampleFirstSeen,
+                look_up_file_hash,
+            },
+            service_key_storage::{
+                KeyStorageFailure, ResolvedApiKey, ThreatIntelService, describe_key_failure,
+                read_api_key,
+            },
+            virustotal_api_client::{FileReportLookup, VirusTotalClient, VirusTotalFailure},
         },
-        malware_bazaar_client::{
-            KnownSampleLookup, MalwareBazaarFailure, MalwareFamily, SampleFirstSeen,
-            look_up_file_hash,
-        },
-        service_key_storage::{
-            KeyStorageFailure, ResolvedApiKey, ThreatIntelService, describe_key_failure,
-            read_api_key,
-        },
-        virustotal_api_client::{FileReportLookup, VirusTotalClient, VirusTotalFailure},
     },
+    translated_messages,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -54,7 +55,7 @@ impl From<ReputationLookupFailure> for SourceAnswer {
 impl SourceAnswer {
     pub fn displayed_text(&self) -> String {
         match self {
-            Self::NeedsKey => gettext("Needs a key"),
+            Self::NeedsKey => translated_messages::host::needs_key(),
             Self::Answered { verdict_text } | Self::AnsweredWithReport { verdict_text, .. } => {
                 verdict_text.clone()
             }
@@ -77,35 +78,35 @@ pub struct ReputationAnswers {
 fn listing_source_text(listing_source: &ListingSource) -> String {
     match listing_source {
         ListingSource::NamedSource(source_name) => sanitize_scanner_line(source_name),
-        ListingSource::UnnamedSource => gettext("an unnamed source"),
+        ListingSource::UnnamedSource => translated_messages::host::unnamed_source(),
     }
 }
 
 pub fn describe_known_file(known_file_lookup: &KnownFileLookup) -> SourceAnswer {
     let verdict_text = match known_file_lookup {
-        KnownFileLookup::HashUnknown => gettext("Not in the known-files database"),
+        KnownFileLookup::HashUnknown => translated_messages::host::not_known_files_database(),
         KnownFileLookup::KnownMalicious {
             file_name: KnownName::NamedFile(file_name),
             flagged_by,
-        } => gettext("Listed as malicious by {source} (as {name})")
-            .replace("{source}", &listing_source_text(flagged_by))
-            .replace("{name}", &sanitize_scanner_line(file_name)),
+        } => translated_messages::host::listed_malicious_source_name(
+            listing_source_text(flagged_by),
+            sanitize_scanner_line(file_name),
+        ),
         KnownFileLookup::KnownMalicious {
             file_name: KnownName::UnnamedFile,
             flagged_by,
-        } => gettext("Listed as malicious by {source}")
-            .replace("{source}", &listing_source_text(flagged_by)),
+        } => translated_messages::host::listed_malicious_source(listing_source_text(flagged_by)),
         KnownFileLookup::KnownFile {
             file_name: KnownName::UnnamedFile,
             source_name,
-        } => gettext("Listed as a known file by {source}")
-            .replace("{source}", &listing_source_text(source_name)),
+        } => translated_messages::host::listed_known_file_source(listing_source_text(source_name)),
         KnownFileLookup::KnownFile {
             file_name: KnownName::NamedFile(file_name),
             source_name,
-        } => gettext("Known file {name}, listed by {source}")
-            .replace("{source}", &listing_source_text(source_name))
-            .replace("{name}", &sanitize_scanner_line(file_name)),
+        } => translated_messages::host::known_file_name_listed(
+            sanitize_scanner_line(file_name),
+            listing_source_text(source_name),
+        ),
     };
     SourceAnswer::Answered { verdict_text }
 }
@@ -113,29 +114,27 @@ pub fn describe_known_file(known_file_lookup: &KnownFileLookup) -> SourceAnswer 
 pub fn malware_family_text(malware_family: &MalwareFamily) -> String {
     match malware_family {
         MalwareFamily::NamedFamily(family_name) => sanitize_scanner_line(family_name),
-        MalwareFamily::UnnamedFamily => gettext("unnamed family"),
+        MalwareFamily::UnnamedFamily => translated_messages::host::unnamed_family(),
     }
 }
 
 pub fn first_seen_text(first_seen: &SampleFirstSeen) -> String {
     match first_seen {
         SampleFirstSeen::SeenAt(seen_at) => sanitize_scanner_line(seen_at),
-        SampleFirstSeen::FirstSeenUnknown => gettext("an unknown date"),
+        SampleFirstSeen::FirstSeenUnknown => translated_messages::host::unknown_date(),
     }
 }
 
 pub fn describe_known_samples(sample_lookup: &KnownSampleLookup) -> SourceAnswer {
     let verdict_text = match sample_lookup {
-        KnownSampleLookup::NoKnownSamples => gettext("Not a known malware sample"),
+        KnownSampleLookup::NoKnownSamples => translated_messages::host::not_known_malware_sample(),
         KnownSampleLookup::SamplesFound { known_samples } => known_samples.first().map_or_else(
-            || gettext("Known malware sample"),
+            translated_messages::host::known_malware_sample,
             |first_sample| {
-                gettext("Known malware: {family}, first seen {date}")
-                    .replace("{date}", &first_seen_text(&first_sample.first_seen))
-                    .replace(
-                        "{family}",
-                        &malware_family_text(&first_sample.malware_family),
-                    )
+                translated_messages::host::known_malware_family_first(
+                    malware_family_text(&first_sample.malware_family),
+                    first_seen_text(&first_sample.first_seen),
+                )
             },
         ),
     };
@@ -145,16 +144,13 @@ pub fn describe_known_samples(sample_lookup: &KnownSampleLookup) -> SourceAnswer
 pub fn describe_virustotal_report(report_lookup: &FileReportLookup) -> SourceAnswer {
     match report_lookup {
         FileReportLookup::FileUnknownToVirusTotal => SourceAnswer::Answered {
-            verdict_text: gettext("Unknown to VirusTotal"),
+            verdict_text: translated_messages::host::unknown_virustotal_verdict(),
         },
         FileReportLookup::ReportAvailable(file_report) => SourceAnswer::AnsweredWithReport {
-            verdict_text: ngettext(
-                "{count} of {total} engine detects it",
-                "{count} of {total} engines detect it",
-                u32::try_from(file_report.total_engine_count).unwrap_or(u32::MAX),
-            )
-            .replace("{count}", &file_report.detecting_engine_count.to_string())
-            .replace("{total}", &file_report.total_engine_count.to_string()),
+            verdict_text: translated_messages::host::count_total_engine_verdict(
+                file_report.total_engine_count,
+                file_report.detecting_engine_count,
+            ),
             report_url: file_report.report_url.clone(),
         },
     }
@@ -162,20 +158,20 @@ pub fn describe_virustotal_report(report_lookup: &FileReportLookup) -> SourceAns
 
 pub fn describe_virustotal_failure(virustotal_failure: &VirusTotalFailure) -> String {
     match virustotal_failure {
-        VirusTotalFailure::ApiKeyRejected => gettext("VirusTotal rejected the API key."),
+        VirusTotalFailure::ApiKeyRejected => {
+            translated_messages::host::virustotal_rejected_api_key()
+        }
         VirusTotalFailure::RequestLimitReached => {
-            gettext("The VirusTotal request limit was reached. Try again later.")
+            translated_messages::host::virustotal_request_limit_reached()
         }
         VirusTotalFailure::UnexpectedStatus { status_code } => {
-            gettext("VirusTotal answered with status {status}")
-                .replace("{status}", &status_code.to_string())
+            translated_messages::host::virustotal_answered_status(status_code)
         }
         VirusTotalFailure::RequestFailed(request_failure) => {
-            gettext("VirusTotal could not be reached: {error}")
-                .replace("{error}", &request_failure.to_string())
+            translated_messages::host::virustotal_not_reached_error(request_failure)
         }
         VirusTotalFailure::AnswerUnreadable => {
-            gettext("VirusTotal sent an answer Lazaret cannot read")
+            translated_messages::host::virustotal_sent_answer_lazaret()
         }
     }
 }
@@ -183,15 +179,13 @@ pub fn describe_virustotal_failure(virustotal_failure: &VirusTotalFailure) -> St
 fn describe_circl_failure(circl_failure: &CirclLookupFailure) -> String {
     match circl_failure {
         CirclLookupFailure::RequestFailed(request_failure) => {
-            gettext("CIRCL hashlookup could not be reached: {error}")
-                .replace("{error}", &request_failure.to_string())
+            translated_messages::host::circl_hashlookup_not_reached(request_failure)
         }
         CirclLookupFailure::AnswerUnreadable => {
-            gettext("CIRCL hashlookup sent an answer that could not be read")
+            translated_messages::host::circl_hashlookup_sent_answer()
         }
         CirclLookupFailure::UnexpectedStatus { status_code } => {
-            gettext("CIRCL hashlookup answered with status {status}")
-                .replace("{status}", &status_code.to_string())
+            translated_messages::host::circl_hashlookup_answered_status(status_code)
         }
     }
 }
@@ -199,16 +193,18 @@ fn describe_circl_failure(circl_failure: &CirclLookupFailure) -> String {
 pub fn describe_bazaar_failure(bazaar_failure: &MalwareBazaarFailure) -> String {
     match bazaar_failure {
         MalwareBazaarFailure::RequestFailed(request_failure) => {
-            gettext("MalwareBazaar could not be reached: {error}")
-                .replace("{error}", &request_failure.to_string())
+            translated_messages::host::malwarebazaar_not_reached_error(request_failure)
         }
         MalwareBazaarFailure::AnswerUnreadable => {
-            gettext("MalwareBazaar sent an answer that could not be read")
+            translated_messages::host::malwarebazaar_sent_not_read()
         }
-        MalwareBazaarFailure::KeyRefused => gettext("MalwareBazaar refused the API key"),
+        MalwareBazaarFailure::KeyRefused => {
+            translated_messages::host::malwarebazaar_refused_api_key()
+        }
         MalwareBazaarFailure::QueryRefused { query_status } => {
-            gettext("MalwareBazaar answered: {status}")
-                .replace("{status}", &sanitize_scanner_line(query_status))
+            translated_messages::host::malwarebazaar_answered_status(sanitize_scanner_line(
+                query_status,
+            ))
         }
     }
 }

@@ -1,4 +1,4 @@
-use gettextrs::gettext;
+use crate::translated_messages;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApplicationPage {
@@ -54,17 +54,17 @@ impl ApplicationPage {
 
     pub fn page_title(self) -> String {
         match self {
-            Self::SignatureSources => gettext("Signature Sources"),
-            Self::DatabaseUpdates => gettext("Database Updates"),
-            Self::ScanEngine => gettext("Scan Engine"),
-            Self::OnAccessScanning => gettext("On-Access Scanning"),
-            Self::ScheduledScans => gettext("Scheduled Scans"),
-            Self::ManualScan => gettext("Manual Scan"),
-            Self::RemovableDrives => gettext("Removable Drives"),
-            Self::Detections => gettext("Detections"),
-            Self::Quarantine => gettext("Quarantine"),
-            Self::TrustedDetections => gettext("Trusted Detections"),
-            Self::SentSamples => gettext("Sent Samples"),
+            Self::SignatureSources => translated_messages::window::signature_sources(),
+            Self::DatabaseUpdates => translated_messages::window::database_updates(),
+            Self::ScanEngine => translated_messages::window::scan_engine(),
+            Self::OnAccessScanning => translated_messages::window::access_scanning(),
+            Self::ScheduledScans => translated_messages::window::scheduled_scans(),
+            Self::ManualScan => translated_messages::window::manual_scan(),
+            Self::RemovableDrives => translated_messages::window::removable_drives(),
+            Self::Detections => translated_messages::window::detections_label(),
+            Self::Quarantine => translated_messages::window::quarantine_label(),
+            Self::TrustedDetections => translated_messages::window::trusted_detections(),
+            Self::SentSamples => translated_messages::window::sent_samples(),
         }
     }
 

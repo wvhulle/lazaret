@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -6,8 +5,11 @@ use relm4::{
     prelude::{DynamicIndex, FactoryComponent},
 };
 
-use crate::signatures::signature_sources_page::source_check_results::{
-    AuditCheck, AuditStatus, CheckGuidance,
+use crate::{
+    signatures::signature_sources_page::source_check_results::{
+        AuditCheck, AuditStatus, CheckGuidance,
+    },
+    translated_messages,
 };
 
 pub enum AuditCheckRow {
@@ -57,7 +59,7 @@ fn suggested_command_row(
         .build();
     let copy_button = gtk::Button::builder()
         .icon_name("edit-copy-symbolic")
-        .tooltip_text(gettext("Copy"))
+        .tooltip_text(translated_messages::signatures::copy_tooltip())
         .valign(gtk::Align::Center)
         .css_classes(["flat"])
         .build();
@@ -79,8 +81,8 @@ fn documentation_row(
 ) -> adw::ActionRow {
     let documentation_row = adw::ActionRow::builder()
         .use_markup(false)
-        .title(gettext("Learn more"))
-        .tooltip_text(gettext("Open in browser"))
+        .title(translated_messages::signatures::learn_more_title())
+        .tooltip_text(translated_messages::signatures::open_browser_tooltip())
         .activatable(true)
         .build();
     documentation_row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
@@ -113,7 +115,7 @@ fn guidance_row(
 fn checking_placeholder_row() -> adw::PreferencesRow {
     let checking_row = adw::ActionRow::builder()
         .use_markup(false)
-        .title(gettext("Checking…"))
+        .title(translated_messages::signatures::checking_title())
         .css_classes(["dim-label"])
         .build();
     checking_row.add_prefix(&adw::Spinner::new());

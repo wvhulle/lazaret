@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, adw,
     adw::prelude::*,
@@ -6,15 +5,18 @@ use relm4::{
     gtk::{gio, gio::prelude::SettingsExtManual},
 };
 
-use crate::host_services::{
-    clamav_scanner::scanner_command_builder::ScannerBackendPreference,
-    desktop::{
-        stored_settings::{
-            SCAN_BACKEND_CHOICES, SCAN_BACKEND_KEY, SHOW_LIVE_PROGRESS_KEY, application_settings,
-            scanner_backend_preference,
+use crate::{
+    host_services::{
+        clamav_scanner::scanner_command_builder::ScannerBackendPreference,
+        desktop::{
+            stored_settings::{
+                SCAN_BACKEND_CHOICES, SCAN_BACKEND_KEY, SHOW_LIVE_PROGRESS_KEY,
+                application_settings, scanner_backend_preference,
+            },
+            stored_settings_watch::forward_setting_changes,
         },
-        stored_settings_watch::forward_setting_changes,
     },
+    translated_messages,
 };
 
 pub struct ScanOptionsSection {
@@ -32,9 +34,13 @@ pub enum ScanOptionsSectionInput {
 
 fn backend_choice_label(backend_preference: ScannerBackendPreference) -> String {
     match backend_preference {
-        ScannerBackendPreference::PreferClamdWhenAvailable => gettext("Automatic"),
-        ScannerBackendPreference::AlwaysClamd => gettext("clamd (daemon)"),
-        ScannerBackendPreference::AlwaysClamscan => gettext("clamscan (standalone)"),
+        ScannerBackendPreference::PreferClamdWhenAvailable => {
+            translated_messages::scans::automatic_label()
+        }
+        ScannerBackendPreference::AlwaysClamd => translated_messages::scans::clamd_daemon(),
+        ScannerBackendPreference::AlwaysClamscan => {
+            translated_messages::scans::clamscan_standalone()
+        }
     }
 }
 
@@ -69,13 +75,11 @@ impl Component for ScanOptionsSection {
             set_margin_top: 12,
 
             adw::PreferencesGroup {
-                set_title: &gettext("Options"),
+                set_title: &translated_messages::scans::options_title(),
 
                 adw::ComboRow {
-                    set_title: &gettext("Scan Backend"),
-                    set_subtitle: &gettext(
-                        "Automatic uses the daemon when it answers and clamscan otherwise.",
-                    ),
+                    set_title: &translated_messages::scans::backend_title(),
+                    set_subtitle: &translated_messages::scans::automatic_uses_daemon_subtitle(),
                     set_model: Some(&backend_labels()),
                     #[watch]
                     #[block_signal(backend_selected_handler)]
@@ -86,8 +90,8 @@ impl Component for ScanOptionsSection {
                 },
 
                 adw::SwitchRow {
-                    set_title: &gettext("Show Live Scan Progress"),
-                    set_subtitle: &gettext("Display files being scanned in real time."),
+                    set_title: &translated_messages::scans::show_live_scan_title(),
+                    set_subtitle: &translated_messages::scans::display_files_scanned_subtitle(),
                     #[watch]
                     #[block_signal(live_progress_handler)]
                     set_active: model.shows_live_progress,

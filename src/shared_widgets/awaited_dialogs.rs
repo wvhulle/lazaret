@@ -1,12 +1,13 @@
 use std::{future::Future, path::PathBuf};
 
-use gettextrs::gettext;
 use relm4::{
     Sender, adw,
     adw::prelude::*,
     gtk,
     gtk::{gio, glib},
 };
+
+use crate::translated_messages;
 
 #[derive(Debug)]
 pub enum TextExportOutcome {
@@ -23,7 +24,7 @@ pub enum ImportedFileOutcome {
 }
 
 pub fn describe_export_failure(export_failure: &glib::Error) -> String {
-    gettext("Could not save the file: {error}").replace("{error}", &export_failure.to_string())
+    translated_messages::widgets::not_save_file_error(export_failure)
 }
 
 fn active_application_window() -> Option<gtk::Window> {
@@ -150,7 +151,7 @@ pub async fn imported_file(dialog_title: String) -> ImportedFileOutcome {
 
 pub async fn exported_text(suggested_name: String, exported_text: String) -> TextExportOutcome {
     let chosen_file = gtk::FileDialog::builder()
-        .title(gettext("Export"))
+        .title(translated_messages::widgets::export_title())
         .initial_name(suggested_name)
         .build()
         .save_future(active_application_window().as_ref())

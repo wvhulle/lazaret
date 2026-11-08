@@ -1,58 +1,44 @@
-use gettextrs::gettext;
-
-use crate::host_services::clamav_scanner::{
-    scanner_output_parser::sanitize_scanner_line, scanner_process_events::ScanStartFailure,
+use crate::{
+    host_services::clamav_scanner::{
+        scanner_output_parser::sanitize_scanner_line, scanner_process_events::ScanStartFailure,
+    },
+    translated_messages,
 };
 
 pub fn describe_start_failure(start_failure: &ScanStartFailure) -> String {
     match start_failure {
         ScanStartFailure::ScannerProgramMissing => {
-            gettext("The ClamAV scanner is not installed or not on the search path.")
+            translated_messages::widgets::clamav_scanner_not_installed()
         }
         ScanStartFailure::ScannerProgramReplaceable {
             candidate_path,
             replaceable_path,
-        } => gettext(
-            "Lazaret refused to run {program}, because your account can replace {replaceable}. \
-             Install ClamAV system-wide so a program planted by malware can't fake clean results.",
-        )
-        .replace(
-            "{replaceable}",
-            &sanitize_scanner_line(&replaceable_path.to_string_lossy()),
-        )
-        .replace(
-            "{program}",
-            &sanitize_scanner_line(&candidate_path.to_string_lossy()),
+        } => translated_messages::widgets::lazaret_refused_run_program(
+            sanitize_scanner_line(&candidate_path.to_string_lossy()),
+            sanitize_scanner_line(&replaceable_path.to_string_lossy()),
         ),
         ScanStartFailure::ScannerSpawnFailed(spawn_failure) => {
-            gettext("The scanner could not be started: {error}")
-                .replace("{error}", &spawn_failure.to_string())
+            translated_messages::widgets::scanner_not_started_error(spawn_failure)
         }
         ScanStartFailure::ScannerWorkDirectoryUnavailable(work_directory_failure) => {
-            gettext("Unable to create the private scanner work directory: {error}")
-                .replace("{error}", &work_directory_failure.to_string())
+            translated_messages::widgets::unable_create_private_scanner(work_directory_failure)
         }
         ScanStartFailure::ScannerOutputUncaptured => {
-            gettext("The scanner output could not be captured.")
+            translated_messages::widgets::scanner_output_not_captured()
         }
-        ScanStartFailure::DetectionSettingsUnreadable(settings_failure) => gettext(
-            "The scan did not start, because the clamd detection settings could not be read: \
-             {error}",
-        )
-        .replace("{error}", &settings_failure.to_string()),
-        ScanStartFailure::ProgramLookupFailed(lookup_failure) => gettext(
-            "The scan did not start, because the scanner programs could not be looked up: {error}",
-        )
-        .replace("{error}", &lookup_failure.to_string()),
+        ScanStartFailure::DetectionSettingsUnreadable(settings_failure) => {
+            translated_messages::widgets::scan_not_start_clamd(settings_failure)
+        }
+        ScanStartFailure::ProgramLookupFailed(lookup_failure) => {
+            translated_messages::widgets::scan_not_start_scanner(lookup_failure)
+        }
         ScanStartFailure::ScanInputUnavailable {
             input_path,
             input_failure,
-        } => gettext("Unable to safely open scan input {path}: {error}")
-            .replace("{error}", &input_failure.to_string())
-            .replace(
-                "{path}",
-                &sanitize_scanner_line(&input_path.to_string_lossy()),
-            ),
+        } => translated_messages::widgets::unable_safely_open_scan(
+            sanitize_scanner_line(&input_path.to_string_lossy()),
+            input_failure,
+        ),
     }
 }
 

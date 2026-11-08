@@ -8,12 +8,10 @@ mod preferences_dialog;
 mod scans;
 mod shared_widgets;
 mod signatures;
+mod translated_messages;
 
 use std::process::ExitCode;
 
-use gettextrs::{
-    LocaleCategory, bind_textdomain_codeset, bindtextdomain, gettext, setlocale, textdomain,
-};
 use relm4::{adw, gtk::gio::prelude::SettingsExt};
 
 use crate::{
@@ -41,30 +39,11 @@ pub(crate) const APPLICATION_ID: &str = RELEASE_APPLICATION_ID;
 #[cfg(debug_assertions)]
 pub(crate) const APPLICATION_ID: &str = "page.codeberg.wvhulle.Lazaret.Devel";
 pub(crate) const APPLICATION_DATA_NAME: &str = "lazaret";
-const TRANSLATION_DOMAIN: &str = "lazaret";
-const INSTALLED_LOCALE_DIRECTORY: &str = match option_env!("LAZARET_LOCALE_DIRECTORY") {
-    Some(locale_directory) => locale_directory,
-    None => "/usr/local/share/locale",
-};
-
-fn initialize_translations() {
-    unsafe {
-        setlocale(LocaleCategory::LcAll, "");
-    }
-    let _translations_unavailable = bindtextdomain(TRANSLATION_DOMAIN, INSTALLED_LOCALE_DIRECTORY)
-        .and_then(|_bound_directory| bind_textdomain_codeset(TRANSLATION_DOMAIN, "UTF-8"))
-        .and_then(|_bound_codeset| textdomain(TRANSLATION_DOMAIN));
-}
-
 fn main() -> ExitCode {
-    initialize_translations();
     if !settings_schema_is_installed() {
         eprintln!(
             "{}",
-            gettext(
-                "The Lazaret settings schema is not installed. Run make install, or set \
-                 GSETTINGS_SCHEMA_DIR."
-            )
+            translated_messages::startup::settings_schema_missing()
         );
         return ExitCode::FAILURE;
     }
@@ -78,9 +57,10 @@ fn main() -> ExitCode {
     {
         eprintln!(
             "{}",
-            gettext("Lazaret has no page named {page}, so it opens Protection. Pages: {pages}")
-                .replace("{page}", requested_page_name)
-                .replace("{pages}", &known_startup_page_names().join(", "))
+            translated_messages::startup::unknown_page_name(
+                requested_page_name,
+                known_startup_page_names().join(", ")
+            )
         );
     }
     if startup_request.start_in_background && another_instance_is_running() {

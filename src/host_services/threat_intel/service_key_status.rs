@@ -1,7 +1,8 @@
-use gettextrs::gettext;
-
-use crate::host_services::threat_intel::service_key_storage::{
-    KeyStorageFailure, ResolvedApiKey, ThreatIntelService, describe_key_failure, read_api_key,
+use crate::{
+    host_services::threat_intel::service_key_storage::{
+        KeyStorageFailure, ResolvedApiKey, ThreatIntelService, describe_key_failure, read_api_key,
+    },
+    translated_messages,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,10 +27,10 @@ impl ServiceKeyStatus {
 
     pub fn status_text(&self) -> String {
         match self {
-            Self::KeyConfigured => gettext("API key configured"),
-            Self::KeyMissing => gettext("No API key, so this service is off"),
+            Self::KeyConfigured => translated_messages::host::api_key_configured(),
+            Self::KeyMissing => translated_messages::host::no_api_key_service(),
             Self::KeyUnreadable { failure_text } => {
-                gettext("The API key can't be read: {reason}").replace("{reason}", failure_text)
+                translated_messages::host::api_key_cannot_read(failure_text)
             }
         }
     }

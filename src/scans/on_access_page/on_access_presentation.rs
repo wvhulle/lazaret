@@ -1,5 +1,3 @@
-use gettextrs::gettext;
-
 use crate::{
     host_services::{
         clamav_programs::distribution_install_guides::DistributionFamily,
@@ -28,6 +26,7 @@ use crate::{
             StepActionButton, StepActionSlot, StepEvidenceRow, TimelineStep,
         },
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,9 +57,11 @@ fn on_access_setting_row<StepAction: StepActionButton>(
 
 fn clamd_config_failure_text(config_failure: ClamdConfigReadFailure) -> String {
     match config_failure {
-        ClamdConfigReadFailure::NoReadableConfig => gettext("No readable clamd.conf was found"),
+        ClamdConfigReadFailure::NoReadableConfig => {
+            translated_messages::scans::no_readable_clamd_conf()
+        }
         ClamdConfigReadFailure::ReadingTaskAborted => {
-            gettext("Reading clamd.conf stopped before it finished")
+            translated_messages::scans::reading_clamd_conf_stopped()
         }
     }
 }
@@ -69,14 +70,14 @@ fn watched_location_text(watched_location: &WatchedLocation) -> String {
     match watched_location {
         WatchedLocation::WatchedFolder { folder_path } => folder_path.clone(),
         WatchedLocation::WatchedMount { mount_path } => {
-            gettext("{path} (whole mount)").replace("{path}", mount_path)
+            translated_messages::scans::path_whole_mount(mount_path)
         }
     }
 }
 
 fn watch_scope_text(watch_scope: &WatchScope) -> String {
     match watch_scope {
-        WatchScope::NothingWatched => gettext("None configured"),
+        WatchScope::NothingWatched => translated_messages::scans::none_configured(),
         WatchScope::WatchedLocations { .. } => watch_scope
             .watched_locations()
             .into_iter()
@@ -88,7 +89,7 @@ fn watch_scope_text(watch_scope: &WatchScope) -> String {
 
 fn size_limit_text(size_limit: &OnAccessSizeLimit) -> String {
     match size_limit {
-        OnAccessSizeLimit::DefaultLimit => gettext("The ClamAV default"),
+        OnAccessSizeLimit::DefaultLimit => translated_messages::scans::clamav_default(),
         OnAccessSizeLimit::ConfiguredLimit { size_limit } => byte_size_text(*size_limit),
         OnAccessSizeLimit::UnreadableLimit { limit_text } => limit_text.clone(),
     }
@@ -99,7 +100,7 @@ fn on_access_rows<StepAction: StepActionButton>(
 ) -> Vec<ActionableEvidenceRow<StepAction>> {
     match on_access_config {
         OnAccessConfig::ConfigUnreadable(config_failure) => vec![on_access_setting_row(
-            gettext("Configuration"),
+            translated_messages::scans::configuration_label(),
             clamd_config_failure_text(*config_failure),
         )],
         OnAccessConfig::ConfigRead {
@@ -107,8 +108,14 @@ fn on_access_rows<StepAction: StepActionButton>(
             size_limit,
             ..
         } => vec![
-            on_access_setting_row(gettext("Watched folders"), watch_scope_text(watch_scope)),
-            on_access_setting_row(gettext("Largest file scanned"), size_limit_text(size_limit)),
+            on_access_setting_row(
+                translated_messages::scans::watched_folders(),
+                watch_scope_text(watch_scope),
+            ),
+            on_access_setting_row(
+                translated_messages::scans::largest_file_scanned(),
+                size_limit_text(size_limit),
+            ),
         ],
     }
 }
@@ -122,19 +129,19 @@ struct OnAccessVerdict {
 fn kernel_config_failure_text(read_failure: KernelConfigReadFailure) -> String {
     match read_failure {
         KernelConfigReadFailure::NoKernelConfigFound => {
-            gettext("neither /proc/config.gz nor the kernel's config file in /boot exists")
+            translated_messages::scans::neither_proc_config_gz()
         }
         KernelConfigReadFailure::KernelConfigUnreadable { .. } => {
-            gettext("the kernel configuration could not be read")
+            translated_messages::scans::kernel_configuration_not_read()
         }
         KernelConfigReadFailure::CompressedConfigCorrupt => {
-            gettext("/proc/config.gz could not be decompressed")
+            translated_messages::scans::proc_config_not_decompressed()
         }
         KernelConfigReadFailure::KernelReleaseUnreadable { .. } => {
-            gettext("the running kernel release could not be read")
+            translated_messages::scans::running_kernel_not_read()
         }
         KernelConfigReadFailure::ReadingTaskAborted => {
-            gettext("reading the kernel configuration stopped before it finished")
+            translated_messages::scans::reading_kernel_configuration_stopped()
         }
     }
 }
@@ -143,37 +150,29 @@ fn watched_blocking_verdict(on_access_blocking: OnAccessBlocking) -> OnAccessVer
     match on_access_blocking {
         OnAccessBlocking::BlocksDetectedFiles => OnAccessVerdict {
             checked_condition: CheckedCondition::ConditionMet,
-            status_text: gettext("Detected files are blocked"),
+            status_text: translated_messages::scans::detected_files_blocked_status(),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::PreventionOff => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: gettext("Files are checked, but detected files are not blocked"),
+            status_text: translated_messages::scans::files_checked_detected_status(),
             suggested_remedies: vec![SuggestedRemedy::OnAccessPreventionEnable],
         },
         OnAccessBlocking::PreventionConflictsWithMounts => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: gettext(
-                "Files are checked, but detected files are not blocked, because \
-                 OnAccessPrevention doesn't work with OnAccessMountPath",
-            ),
+            status_text: translated_messages::scans::files_onaccessprevention_status(),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::KernelCannotBlock => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: gettext(
-                "Files are checked, but this kernel can't block detected files, because it was \
-                 built without CONFIG_FANOTIFY_ACCESS_PERMISSIONS",
-            ),
+            status_text: translated_messages::scans::files_checked_kernel_status(),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::KernelSupportUnknown(read_failure) => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: gettext(
-                "Files are checked, but whether the kernel can block detected files is unknown, \
-                 because {reason}",
-            )
-            .replace("{reason}", &kernel_config_failure_text(read_failure)),
+            status_text: translated_messages::scans::files_checked_whether_status(
+                kernel_config_failure_text(read_failure),
+            ),
             suggested_remedies: Vec::new(),
         },
     }
@@ -186,10 +185,7 @@ fn running_monitor_verdict(
     match on_access_config {
         OnAccessConfig::ConfigUnreadable(_) => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: gettext(
-                "Running, but clamd.conf could not be read, so what is checked and whether \
-                 detected files are blocked is unknown",
-            ),
+            status_text: translated_messages::scans::running_clamd_conf_status(),
             suggested_remedies: Vec::new(),
         },
         OnAccessConfig::ConfigRead {
@@ -198,7 +194,7 @@ fn running_monitor_verdict(
             ..
         } => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: gettext("Running, but no folders or mounts are watched"),
+            status_text: translated_messages::scans::running_no_folders_status(),
             suggested_remedies: vec![SuggestedRemedy::OnAccessWatchedPathAdd],
         },
         OnAccessConfig::ConfigRead {
@@ -207,10 +203,7 @@ fn running_monitor_verdict(
             ..
         } => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: gettext(
-                "Running, but no folders or mounts are watched, and detected files would not be \
-                 blocked",
-            ),
+            status_text: translated_messages::scans::running_detected_status(),
             suggested_remedies: vec![
                 SuggestedRemedy::OnAccessWatchedPathAdd,
                 SuggestedRemedy::OnAccessPreventionEnable,
@@ -236,14 +229,12 @@ fn on_access_verdict(
     match on_access_evidence.on_access_scanner {
         OnAccessScanner::UnitStateUnknown => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: gettext(
-                "Unknown whether on-access scanning runs, because systemd could not report it",
-            ),
+            status_text: translated_messages::scans::unknown_whether_access_status(),
             suggested_remedies: Vec::new(),
         },
         OnAccessScanner::NeverSetUp => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: gettext("On-access scanning is not set up"),
+            status_text: translated_messages::scans::access_not_set_status(),
             suggested_remedies: vec![SuggestedRemedy::OnAccessScanningEnable],
         },
         OnAccessScanner::UnitStopped { .. } if !daemon_answering => OnAccessVerdict {
@@ -253,7 +244,7 @@ fn on_access_verdict(
         },
         OnAccessScanner::UnitStopped { service_unit } => OnAccessVerdict {
             checked_condition: CheckedCondition::ConditionFailed,
-            status_text: gettext("{unit} is not running").replace("{unit}", service_unit),
+            status_text: translated_messages::scans::unit_not_running_status(service_unit),
             suggested_remedies: vec![SuggestedRemedy::OnAccessScanningEnable],
         },
         OnAccessScanner::MonitorRunning if !daemon_answering => OnAccessVerdict {
@@ -281,12 +272,8 @@ pub fn on_access_step<StepAction: StepActionButton>(
     distribution_family: DistributionFamily,
     header_action: StepActionSlot<StepAction>,
 ) -> TimelineStep<StepAction> {
-    let step_title = gettext("On-access blocking");
-    let mechanism_details = gettext(
-        "clamonacc checks files in the watched folders as they are opened. With prevention on, \
-         the kernel refuses access to a detected file, which is why such a file can't be opened \
-         even though it is still there.",
-    );
+    let step_title = translated_messages::scans::access_blocking_title();
+    let mechanism_details = translated_messages::scans::clamonacc_checks_files_watched();
     let on_access_verdict = on_access_verdict(on_access_evidence, daemon_answering);
     TimelineStep::settled(
         step_title,
@@ -325,56 +312,36 @@ fn setup_finding_step<StepAction: StepActionButton>(
     };
     let (step_title, mechanism_details, status_text) = match setup_finding {
         OnAccessSetupFinding::MountWatchConflicts { setting_conflicts } => (
-            gettext("Mount watching"),
-            gettext(
-                "OnAccessMountPath watches a whole mount through fanotify. ClamAV documents it as \
-                 incompatible with OnAccessPrevention, OnAccessIncludePath, OnAccessExcludePath \
-                 and OnAccessExtraScanning, so detected files on a watched mount are never \
-                 blocked. Watch folders with OnAccessIncludePath to block.",
+            translated_messages::scans::mount_watching(),
+            translated_messages::scans::onaccessmountpath_watches_whole_mount(),
+            translated_messages::scans::onaccessmountpath_cannot_combined_options(
+                conflicting_options_text(setting_conflicts),
             ),
-            gettext("OnAccessMountPath can't be combined with {options}")
-                .replace("{options}", &conflicting_options_text(setting_conflicts)),
         ),
         OnAccessSetupFinding::ClamdUserNotExcluded => (
-            gettext("Scan loop protection"),
-            gettext(
-                "clamd opens every file it is asked to scan. Unless OnAccessExcludeUname or \
-                 OnAccessExcludeUID names the user clamd runs as, clamonacc sees those reads and \
-                 asks clamd to scan the same files again.",
-            ),
-            gettext("clamd isn't excluded, so clamonacc can scan its own reads endlessly"),
+            translated_messages::scans::loop_protection(),
+            translated_messages::scans::clamd_opens_every_file(),
+            translated_messages::scans::clamd_not_excluded_clamonacc(),
         ),
         OnAccessSetupFinding::WholeRootIncluded => (
-            gettext("Watching the whole file system"),
-            gettext(
-                "clamonacc refuses OnAccessIncludePath /. Include the folders that receive files, \
-                 such as home directories, or watch a mount with OnAccessMountPath.",
-            ),
-            gettext("OnAccessIncludePath / is rejected by clamonacc"),
+            translated_messages::scans::watching_whole_file_system(),
+            translated_messages::scans::clamonacc_refuses_onaccessincludepath_include(),
+            translated_messages::scans::onaccessincludepath_rejected_clamonacc(),
         ),
         OnAccessSetupFinding::WatchLimitLow {
             max_user_watches,
             large_tree_path,
         } => (
-            gettext("Folder watch limit"),
+            translated_messages::scans::folder_watch_limit(),
             watch_limit_details(),
-            gettext(
-                "{path} is watched, but fs.inotify.max_user_watches is only {limit}, so folders \
-                 past the limit go unchecked",
-            )
-            .replace("{path}", large_tree_path)
-            .replace("{limit}", &max_user_watches.to_string()),
+            translated_messages::scans::path_watched_fs_inotify(large_tree_path, max_user_watches),
         ),
         OnAccessSetupFinding::WatchLimitUnknown {
             large_tree_path, ..
         } => (
-            gettext("Folder watch limit"),
+            translated_messages::scans::folder_watch_limit(),
             watch_limit_details(),
-            gettext(
-                "Unknown whether {path} fits the folder watch limit, because \
-                 fs.inotify.max_user_watches could not be read",
-            )
-            .replace("{path}", large_tree_path),
+            translated_messages::scans::unknown_whether_path_fits(large_tree_path),
         ),
     };
     no_guidance_step(
@@ -386,11 +353,7 @@ fn setup_finding_step<StepAction: StepActionButton>(
 }
 
 fn watch_limit_details() -> String {
-    gettext(
-        "clamonacc watches every folder below an included path with inotify, one watch per \
-         folder. A whole home directory or larger tree can need more watches than the old default \
-         limit of 8192 allows. Raise fs.inotify.max_user_watches with sysctl.",
-    )
+    translated_messages::scans::clamonacc_watches_every_folder()
 }
 
 pub fn on_access_setup_steps<StepAction: StepActionButton>(

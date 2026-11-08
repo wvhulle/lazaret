@@ -1,11 +1,10 @@
-use gettextrs::gettext;
 use ksni::{TrayMethods, menu::StandardItem};
 
 use crate::{
     APPLICATION_ID, TRAY_ATTENTION_ICON_NAME, TRAY_ICON_NAME,
     application_window::application_window_shell::ApplicationWindowShellInput,
     findings::detections_page::detection_alerts::OPEN_DETECTIONS_ACTION,
-    host_services::desktop::running_instance_forwarding::SHOW_WINDOW_ACTION,
+    host_services::desktop::running_instance_forwarding::SHOW_WINDOW_ACTION, translated_messages,
 };
 
 pub struct SystemTrayMenu {
@@ -95,27 +94,31 @@ impl ksni::Tray for SystemTrayMenu {
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         vec![
             tray_menu_item(
-                gettext("Show Lazaret"),
+                translated_messages::window::show_lazaret(),
                 SHOW_WINDOW_ACTION,
                 TrayClickEffect::PresentsWindow,
             ),
             tray_menu_item(
-                gettext("Show Detections"),
+                translated_messages::window::show_detections(),
                 OPEN_DETECTIONS_ACTION,
                 TrayClickEffect::PresentsWindow,
             ),
             tray_menu_item(
-                gettext("Quick Scan"),
+                translated_messages::window::quick_scan(),
                 "quick-scan",
                 TrayClickEffect::RunsInBackground,
             ),
             tray_menu_item(
-                gettext("Update Definitions"),
+                translated_messages::window::update_definitions(),
                 "update-definitions",
                 TrayClickEffect::RunsInBackground,
             ),
             ksni::MenuItem::Separator,
-            tray_menu_item(gettext("Quit"), "quit", TrayClickEffect::RunsInBackground),
+            tray_menu_item(
+                translated_messages::window::quit_tray_item(),
+                "quit",
+                TrayClickEffect::RunsInBackground,
+            ),
         ]
     }
 }

@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use gettextrs::{gettext, ngettext};
-
 use crate::{
     host_services::clamav_scanner::{
         scan_progress_events::{
@@ -20,31 +18,27 @@ use crate::{
         scanner_exit_text::abnormal_scanner_exit_text,
         scanner_start_failure_text::describe_start_failure,
     },
+    translated_messages,
 };
 
 fn describe_target_failure(target_failure: &ScanTargetFailure) -> String {
     match target_failure {
-        ScanTargetFailure::TargetMissing => {
-            gettext("Scan target does not exist or contains an invalid NUL byte")
-        }
+        ScanTargetFailure::TargetMissing => translated_messages::widgets::scan_target_not_exist(),
         ScanTargetFailure::TargetNotScannable => {
-            gettext("Scan target is not a regular file or directory")
+            translated_messages::widgets::scan_target_not_regular()
         }
         ScanTargetFailure::TargetDirectoryUnreadable {
             target_path,
             directory_failure,
-        } => gettext("Unable to enumerate scan target {path}: {error}")
-            .replace("{error}", &directory_failure.to_string())
-            .replace(
-                "{path}",
-                &sanitize_scanner_line(&target_path.to_string_lossy()),
-            ),
+        } => translated_messages::widgets::unable_enumerate_scan_target(
+            sanitize_scanner_line(&target_path.to_string_lossy()),
+            directory_failure,
+        ),
         ScanTargetFailure::FileListUnwritable(list_failure) => {
-            gettext("Unable to write private clamd file list: {error}")
-                .replace("{error}", &list_failure.to_string())
+            translated_messages::widgets::unable_write_private_clamd(list_failure)
         }
         ScanTargetFailure::EnumerationInterrupted => {
-            gettext("Listing the scan target stopped unexpectedly.")
+            translated_messages::widgets::listing_scan_target_stopped()
         }
     }
 }
@@ -52,7 +46,7 @@ fn describe_target_failure(target_failure: &ScanTargetFailure) -> String {
 fn describe_scan_problem(scan_problem: &ScanProblem) -> String {
     match scan_problem {
         ScanProblem::ScannerFailed(ScanFailureReason::NoFilesScanned) => {
-            gettext("No files could be scanned")
+            translated_messages::widgets::no_files_scanned()
         }
         ScanProblem::ScannerFailed(ScanFailureReason::ScannerReported { scanner_message }) => {
             sanitize_scanner_text(scanner_message)
@@ -74,21 +68,16 @@ fn describe_scan_problem(scan_problem: &ScanProblem) -> String {
 }
 
 fn unscanned_files_title(unscanned_count: usize) -> String {
-    ngettext(
-        "{count} file was not scanned",
-        "{count} files were not scanned",
-        u32::try_from(unscanned_count).unwrap_or(u32::MAX),
-    )
-    .replace("{count}", &unscanned_count.to_string())
+    translated_messages::widgets::count_file_not_scanned(unscanned_count)
 }
 
 fn describe_unscanned_cause(unscanned_cause: UnscannedFileCause) -> String {
     match unscanned_cause {
         UnscannedFileCause::ClamdConnectionLost => {
-            gettext("The connection to clamd was lost during the scan.")
+            translated_messages::widgets::connection_clamd_lost_during()
         }
         UnscannedFileCause::ScannerStoppedReporting => {
-            gettext("The scanner did not report a result for these files.")
+            translated_messages::widgets::scanner_not_report_result()
         }
     }
 }
@@ -109,26 +98,15 @@ pub fn scan_target_name(scan_target: &Path) -> String {
 fn describe_scan_notice(scan_notice: &ScanNotice) -> String {
     match scan_notice {
         ScanNotice::NoNotice => String::new(),
-        ScanNotice::FilesInaccessible { file_count } => ngettext(
-            "{count} file could not be accessed",
-            "{count} files could not be accessed",
-            u32::try_from(*file_count).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &file_count.to_string()),
-        ScanNotice::FilesUnreadable { file_count } => ngettext(
-            "{count} file could not be read",
-            "{count} files could not be read",
-            u32::try_from(*file_count).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &file_count.to_string()),
-        ScanNotice::NonfatalWarnings { warning_count } => ngettext(
-            "{count} non-fatal warning during scan; some files may have been only partially \
-             scanned",
-            "{count} non-fatal warnings during scan; some files may have been only partially \
-             scanned",
-            u32::try_from(*warning_count).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &warning_count.to_string()),
+        ScanNotice::FilesInaccessible { file_count } => {
+            translated_messages::widgets::count_not_accessed_title(*file_count)
+        }
+        ScanNotice::FilesUnreadable { file_count } => {
+            translated_messages::widgets::count_file_not_read(*file_count)
+        }
+        ScanNotice::NonfatalWarnings { warning_count } => {
+            translated_messages::widgets::count_non_fatal_warning(*warning_count)
+        }
     }
 }
 
@@ -136,19 +114,10 @@ pub fn scan_summary_text(scan_outcome: &CompletedScanOutcome) -> String {
     let threat_summary =
         (!scan_outcome.threat_findings.attributed_threats().is_empty()).then(|| {
             let threat_count = scan_outcome.threat_findings.attributed_threats().len();
-            ngettext(
-                "{count} threat found",
-                "{count} threats found",
-                u32::try_from(threat_count).unwrap_or(u32::MAX),
-            )
-            .replace("{count}", &threat_count.to_string())
+            translated_messages::widgets::count_threat_found_outcome(threat_count)
         });
-    let inspected_summary = ngettext(
-        "{count} file scanned",
-        "{count} files scanned",
-        u32::try_from(scan_outcome.inspected_file_count).unwrap_or(u32::MAX),
-    )
-    .replace("{count}", &scan_outcome.inspected_file_count.to_string());
+    let inspected_summary =
+        translated_messages::widgets::count_file_scanned_outcome(scan_outcome.inspected_file_count);
     [inspected_summary]
         .into_iter()
         .chain(threat_summary)
@@ -209,13 +178,8 @@ pub fn problem_path_groups(scan_outcome: &CompletedScanOutcome) -> Vec<ProblemPa
         });
     let skipped_paths = unlisted_skipped_paths(scan_outcome);
     let skipped_group = (!skipped_paths.is_empty()).then(|| ProblemPathGroup {
-        group_title: ngettext(
-            "{count} file could not be accessed",
-            "{count} files could not be accessed",
-            u32::try_from(skipped_paths.len()).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &skipped_paths.len().to_string()),
-        group_explanation: gettext("ClamAV could not open these files."),
+        group_title: translated_messages::widgets::count_not_accessed_title(skipped_paths.len()),
+        group_explanation: translated_messages::widgets::clamav_not_open_files(),
         listed_paths: skipped_paths,
     });
     unscanned_groups.chain(skipped_group).collect()
@@ -227,9 +191,9 @@ fn notice_lines_where(
     include_notice: impl Fn(&ScanNotice) -> bool,
 ) -> Vec<String> {
     let unattributed_notice = match scan_outcome.threat_findings {
-        ThreatFindings::UnattributedThreatsOnly => Some(gettext(
-            "The scanner reported a threat without naming the file.",
-        )),
+        ThreatFindings::UnattributedThreatsOnly => {
+            Some(translated_messages::widgets::scanner_reported_threat_scan())
+        }
         ThreatFindings::NoThreatsFound | ThreatFindings::AttributedThreats(_) => None,
     };
     unattributed_notice

@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     abstractions::Toaster, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
@@ -30,6 +29,7 @@ use crate::{
             system_changes_state::AuditTopic,
         },
     },
+    translated_messages,
 };
 
 pub struct TrustedDetectionsPage {
@@ -118,11 +118,11 @@ impl Component for TrustedDetectionsPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&gettext("Check again")),
+                            set_tooltip_text: Some(&translated_messages::findings::check_again_trusted_tooltip()),
                             connect_clicked => TrustedDetectionsPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                            set_tooltip_text: Some(&gettext("Checking")),
+                            set_tooltip_text: Some(&translated_messages::findings::checking_trusted_tooltip()),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -155,7 +155,7 @@ impl Component for TrustedDetectionsPage {
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(gettext("Status"))
+                        .title(translated_messages::findings::status_title())
                         .build(),
                 )
                 .forward(
@@ -170,17 +170,15 @@ impl Component for TrustedDetectionsPage {
             trust_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
                     audit_topic: AuditTopic::TrustChanges,
-                    group_description: gettext(
-                        "Files trusted and detections ignored or restored through Lazaret, as \
-                         recorded by the system. Software running as you can't remove these \
-                         records.",
-                    ),
-                    empty_title: gettext("No trusted detections were changed through Lazaret"),
+                    group_description:
+                        translated_messages::findings::files_trusted_detections_description(),
+                    empty_title: translated_messages::findings::no_trusted_detections_title(),
                 })
                 .detach(),
         };
         let status_group = &model.status_rows.widget().clone();
-        let status_loading_page = &loading_status_page(&gettext("Checking trusted detections…"));
+        let status_loading_page =
+            &loading_status_page(&translated_messages::findings::checking_trusted_detections());
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -212,8 +210,9 @@ impl Component for TrustedDetectionsPage {
                 copied_command,
             )) => {
                 root.clipboard().set_text(&copied_command);
-                self.toaster
-                    .add_toast(adw::Toast::new(&gettext("Command copied to clipboard")));
+                self.toaster.add_toast(adw::Toast::new(
+                    &translated_messages::findings::command_copied_clipboard(),
+                ));
             }
             TrustedDetectionsPageInput::ToastRequested(toast_text) => {
                 self.toaster.add_toast(plain_text_toast(&toast_text));

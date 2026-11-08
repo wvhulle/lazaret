@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{Sender, adw, adw::prelude::*, gtk};
 
 use crate::{
@@ -10,6 +9,7 @@ use crate::{
     shared_widgets::awaited_dialogs::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,17 +58,17 @@ pub fn present_target_choice<Message: 'static>(
     chosen_message: fn(ChosenTarget) -> Message,
 ) {
     let target_dialog = adw::AlertDialog::new(
-        Some(&gettext("Where Should This File Go?")),
+        Some(&translated_messages::findings::choose_service_heading()),
         Some(&format!(
             "{}\n\n{}",
             choice_request.file_name,
-            gettext(
-                "Each service gets the file itself. The next step shows exactly what is sent and \
-                 who can see it."
-            )
+            translated_messages::findings::each_service_gets_file()
         )),
     );
-    add_dismissing_choice::<TargetDialogChoice>(&target_dialog, &gettext("Cancel"));
+    add_dismissing_choice::<TargetDialogChoice>(
+        &target_dialog,
+        &translated_messages::findings::cancel_submission(),
+    );
     choice_request
         .offered_targets
         .iter()

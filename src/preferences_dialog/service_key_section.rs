@@ -1,9 +1,11 @@
-use gettextrs::gettext;
 use relm4::{Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk};
 
-use crate::host_services::threat_intel::service_key_storage::{
-    KeySource, KeyStorageFailure, ResolvedApiKey, ThreatIntelService, delete_stored_api_key,
-    describe_key_failure, key_source, masked_api_key, read_api_key, save_api_key,
+use crate::{
+    host_services::threat_intel::service_key_storage::{
+        KeySource, KeyStorageFailure, ResolvedApiKey, ThreatIntelService, delete_stored_api_key,
+        describe_key_failure, key_source, masked_api_key, read_api_key, save_api_key,
+    },
+    translated_messages,
 };
 
 const VIRUSTOTAL_KEY_PAGE_URL: &str = "https://www.virustotal.com/gui/my-apikey";
@@ -18,29 +20,22 @@ fn service_group_title(threat_intel_service: ThreatIntelService) -> &'static str
 
 fn service_description(threat_intel_service: ThreatIntelService) -> String {
     match threat_intel_service {
-        ThreatIntelService::VirusTotalService => gettext(
-            "Lookups send VirusTotal only a file's SHA-256 hash. An upload you confirm sends the \
-             quarantined file itself, which VirusTotal shares with its paying customers. Uploads \
-             are skipped when VirusTotal already has a report, and refused above 32 MB.",
-        ),
-        ThreatIntelService::AbuseChService => gettext(
-            "MalwareBazaar lookups send a detection's signature name or a file's SHA-256 hash. An \
-             upload you confirm sends the quarantined file with its ClamAV signature as a tag, \
-             and the sample becomes public. The same abuse.ch key also unlocks URLhaus signature \
-             downloads through fangfrisch; on NixOS, Lazaret reuses fangfrisch's key file when \
-             your user can read it. abuse.ch's fair-use terms say for-profit users may need its \
-             commercial API.",
-        ),
+        ThreatIntelService::VirusTotalService => {
+            translated_messages::preferences::lookups_send_virustotal_file()
+        }
+        ThreatIntelService::AbuseChService => {
+            translated_messages::preferences::malwarebazaar_lookups_send_detection()
+        }
     }
 }
 
 fn service_key_hint(threat_intel_service: ThreatIntelService) -> String {
     match threat_intel_service {
         ThreatIntelService::VirusTotalService => {
-            gettext("Free tier: 4 requests per minute, 500 per day.")
+            translated_messages::preferences::free_tier_4_requests()
         }
         ThreatIntelService::AbuseChService => {
-            gettext("Free from the abuse.ch Authentication Portal.")
+            translated_messages::preferences::free_abuse_ch_authentication()
         }
     }
 }
@@ -57,7 +52,7 @@ fn describe_resolved_key(resolved_key: &ResolvedApiKey) -> String {
         ResolvedApiKey::FromKeyFile(api_key) | ResolvedApiKey::FromKeyring(api_key) => {
             masked_api_key(api_key)
         }
-        ResolvedApiKey::NotConfigured => gettext("Not configured"),
+        ResolvedApiKey::NotConfigured => translated_messages::preferences::not_configured(),
     }
 }
 
@@ -123,7 +118,10 @@ impl ServiceKeySection {
                 let shown_path = key_file_path.display();
                 match &self.system_key_file_status {
                     SystemKeyFileStatus::CheckingKeyFile => {
-                        format!("{shown_path}\n{}", gettext("Checking…"))
+                        format!(
+                            "{shown_path}\n{}",
+                            translated_messages::preferences::checking_label()
+                        )
                     }
                     SystemKeyFileStatus::KeyFileReadable { masked_key } => {
                         format!("{masked_key}\n{shown_path}")
@@ -154,7 +152,7 @@ impl Component for ServiceKeySection {
             set_description: Some(&service_description(model.threat_intel_service)),
 
             adw::ActionRow {
-                set_title: &gettext("Set by your system configuration"),
+                set_title: &translated_messages::preferences::set_system_configuration_title(),
                 set_use_markup: false,
                 set_subtitle_lines: 0,
                 set_visible: model.uses_system_key_file(),
@@ -164,13 +162,13 @@ impl Component for ServiceKeySection {
             },
 
             adw::ActionRow {
-                set_title: &gettext("Key in your keyring"),
+                set_title: &translated_messages::preferences::key_keyring_title(),
                 set_visible: !model.uses_system_key_file(),
                 #[watch]
                 set_subtitle: &model.key_status_text,
 
                 add_suffix = &gtk::Button {
-                    set_label: &gettext("Delete Key"),
+                    set_label: &translated_messages::preferences::delete_key_label(),
                     set_valign: gtk::Align::Center,
                     #[watch]
                     set_visible: model.keyring_key_stored,
@@ -180,7 +178,7 @@ impl Component for ServiceKeySection {
             },
 
             adw::PasswordEntryRow {
-                set_title: &gettext("Paste API Key"),
+                set_title: &translated_messages::preferences::paste_api_key_title(),
                 set_show_apply_button: true,
                 set_visible: !model.uses_system_key_file(),
                 #[track(model.entered_key_cleared)]
@@ -193,7 +191,7 @@ impl Component for ServiceKeySection {
             },
 
             adw::ActionRow {
-                set_title: &gettext("Get a free API key"),
+                set_title: &translated_messages::preferences::get_free_api_title(),
                 set_subtitle: &service_key_hint(model.threat_intel_service),
                 set_activatable: true,
                 set_visible: !model.uses_system_key_file(),
@@ -211,7 +209,7 @@ impl Component for ServiceKeySection {
         let model = Self {
             threat_intel_service,
             key_source: key_source(threat_intel_service),
-            key_status_text: gettext("Checking…"),
+            key_status_text: translated_messages::preferences::checking_label(),
             system_key_file_status: SystemKeyFileStatus::CheckingKeyFile,
             keyring_key_stored: false,
             entered_key_cleared: false,

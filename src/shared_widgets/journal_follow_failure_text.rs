@@ -1,6 +1,7 @@
-use gettextrs::gettext;
-
-use crate::host_services::detection_journal::detection_journal_follower::JournalFollowFailure;
+use crate::{
+    host_services::detection_journal::detection_journal_follower::JournalFollowFailure,
+    translated_messages,
+};
 
 pub fn journal_follow_failure_text(follow_failure: &JournalFollowFailure) -> String {
     let failure_reason = match follow_failure {
@@ -8,12 +9,11 @@ pub fn journal_follow_failure_text(follow_failure: &JournalFollowFailure) -> Str
             read_failure_kind.to_string()
         }
         JournalFollowFailure::EntryTimestampInvalid => {
-            gettext("a journal entry has a timestamp outside the supported range")
+            translated_messages::widgets::journal_entry_timestamp_outside()
         }
         JournalFollowFailure::ReaderThreadFailed { spawn_failure_kind } => {
-            gettext("the journal reader could not start: {error}")
-                .replace("{error}", &spawn_failure_kind.to_string())
+            translated_messages::widgets::journal_reader_not_start(spawn_failure_kind)
         }
     };
-    gettext("Reading the system journal stopped: {error}").replace("{error}", &failure_reason)
+    translated_messages::widgets::journal_reading_stopped(&failure_reason)
 }

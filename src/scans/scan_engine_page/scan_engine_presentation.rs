@@ -1,5 +1,3 @@
-use gettextrs::gettext;
-
 use crate::{
     host_services::{
         clamav_programs::{
@@ -25,6 +23,7 @@ use crate::{
             StepActionSlot, StepEvidenceRow, TimelineStep,
         },
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,10 +47,9 @@ fn probe_failure_text(probe_failure: &ProbeFailure) -> String {
             sanitize_scanner_line(program_stderr)
         }
         ProbeFailure::ProgramStartFailed { start_failure_kind } => {
-            gettext("clamscan could not be started: {error}")
-                .replace("{error}", &start_failure_kind.to_string())
+            translated_messages::scans::clamscan_not_started_error(start_failure_kind)
         }
-        ProbeFailure::ProbeTimedOut => gettext("clamscan did not answer in time"),
+        ProbeFailure::ProbeTimedOut => translated_messages::scans::clamscan_not_answer_time(),
     }
 }
 
@@ -68,11 +66,12 @@ fn engine_status_text(engine_installation: &EngineInstallation) -> String {
     match engine_installation {
         EngineInstallation::VersionReported { version_banner } => version_banner.clone(),
         EngineInstallation::ScannerRefused { refused_path } => {
-            gettext("refused {path}, because your account can replace it")
-                .replace("{path}", refused_path)
+            translated_messages::scans::refused_path_account_replace(refused_path)
         }
         EngineInstallation::VersionUnverified(probe_failure) => probe_failure_text(probe_failure),
-        EngineInstallation::EngineMissing => gettext("ClamAV was not found on this computer"),
+        EngineInstallation::EngineMissing => {
+            translated_messages::scans::clamav_not_found_computer()
+        }
     }
 }
 
@@ -98,11 +97,8 @@ pub fn engine_step<StepAction: StepActionButton>(
     header_action: StepActionSlot<StepAction>,
 ) -> TimelineStep<StepAction> {
     TimelineStep::settled(
-        gettext("ClamAV installed"),
-        gettext(
-            "ClamAV is the engine that recognizes malware. Lazaret uses the copy installed on \
-             this computer and never bundles its own.",
-        ),
+        translated_messages::scans::clamav_installed(),
+        translated_messages::scans::clamav_engine_recognizes_malware(),
         engine_status_text(engine_installation),
         SettledStep {
             header_action,
@@ -137,23 +133,16 @@ fn daemon_status_text(daemon_evidence: &DaemonEvidence) -> String {
                     loaded_version,
                     disk_version,
                 },
-        } => gettext("clamd still uses signatures {loaded}, but {disk} is on disk")
-            .replace("{loaded}", loaded_version)
-            .replace("{disk}", disk_version),
-        DaemonEvidence::ClamdAnswering { .. } => gettext("clamd is answering"),
-        DaemonEvidence::UnitActiveNotAnswering { service_unit } => gettext(
-            "{unit} is running, but clamd does not answer. It may still be loading signatures.",
-        )
-        .replace("{unit}", service_unit),
-        DaemonEvidence::UnitStateUnknown => {
-            gettext("clamd does not answer, and systemd could not report its state")
+        } => translated_messages::scans::clamd_still_uses_signatures(loaded_version, disk_version),
+        DaemonEvidence::ClamdAnswering { .. } => translated_messages::scans::clamd_answering(),
+        DaemonEvidence::UnitActiveNotAnswering { service_unit } => {
+            translated_messages::scans::unit_running_not_answer(service_unit)
         }
+        DaemonEvidence::UnitStateUnknown => translated_messages::scans::clamd_not_answer_systemd(),
         DaemonEvidence::UnitStopped { service_unit } => {
-            gettext("{unit} is not running").replace("{unit}", service_unit)
+            translated_messages::scans::unit_not_running(service_unit)
         }
-        DaemonEvidence::NeverSetUp => {
-            gettext("clamd is not set up, so scans fall back to the slower clamscan")
-        }
+        DaemonEvidence::NeverSetUp => translated_messages::scans::clamd_not_set_up(),
     }
 }
 
@@ -161,25 +150,26 @@ fn loaded_signature_rows(daemon_evidence: &DaemonEvidence) -> Vec<StepEvidenceRo
     let loaded_value = match daemon_evidence {
         DaemonEvidence::ClamdAnswering {
             loaded_signatures: LoadedSignatures::MatchesDisk,
-        } => gettext("The same version as on disk"),
+        } => translated_messages::scans::same_version_disk(),
         DaemonEvidence::ClamdAnswering {
             loaded_signatures:
                 LoadedSignatures::BehindDisk {
                     loaded_version,
                     disk_version,
                 },
-        } => gettext("{loaded}, while {disk} is on disk")
-            .replace("{loaded}", loaded_version)
-            .replace("{disk}", disk_version),
+        } => translated_messages::scans::loaded_disk(loaded_version, disk_version),
         DaemonEvidence::ClamdAnswering {
             loaded_signatures: LoadedSignatures::ComparisonUnavailable,
-        } => gettext("Unknown, the loaded and stored versions could not be compared"),
+        } => translated_messages::scans::unknown_loaded_stored_versions(),
         DaemonEvidence::UnitActiveNotAnswering { .. }
         | DaemonEvidence::UnitStopped { .. }
         | DaemonEvidence::UnitStateUnknown
         | DaemonEvidence::NeverSetUp => return Vec::new(),
     };
-    vec![evidence_row(gettext("Loaded signatures"), loaded_value)]
+    vec![evidence_row(
+        translated_messages::scans::loaded_signatures(),
+        loaded_value,
+    )]
 }
 
 fn daemon_guidance_commands(
@@ -203,11 +193,8 @@ pub fn daemon_step<StepAction: StepActionButton>(
     header_action: StepActionSlot<StepAction>,
 ) -> TimelineStep<StepAction> {
     TimelineStep::settled(
-        gettext("Daemon running"),
-        gettext(
-            "clamd keeps the signatures loaded in memory. On-access blocking and scheduled scans \
-             both send their files to it.",
-        ),
+        translated_messages::scans::daemon_running(),
+        translated_messages::scans::clamd_keeps_signatures_loaded(),
         daemon_status_text(daemon_evidence),
         SettledStep {
             evidence_rows: plain_rows(loaded_signature_rows(daemon_evidence)),
@@ -244,38 +231,30 @@ pub const fn socket_condition(
 fn socket_status_text(socket_ownership: &ClamdSocketOwnership) -> String {
     match socket_ownership {
         ClamdSocketOwnership::SocketProtected { socket_path } => {
-            gettext("Only the system can replace {path}")
-                .replace("{path}", &shown_socket_path(socket_path))
+            translated_messages::scans::system_replace_path(shown_socket_path(socket_path))
         }
         ClamdSocketOwnership::SocketReplaceable {
             socket_path,
             replaceable_path,
-        } => gettext(
-            "Your account can replace {replaceable}, so a program running as you could put a fake \
-             clamd at {path} that reports every file as clean",
-        )
-        .replace("{replaceable}", &shown_socket_path(replaceable_path))
-        .replace("{path}", &shown_socket_path(socket_path)),
+        } => translated_messages::scans::account_replace_replaceable_program(
+            shown_socket_path(replaceable_path),
+            shown_socket_path(socket_path),
+        ),
         ClamdSocketOwnership::SocketMissing { socket_path } => {
-            gettext("No clamd socket at {path}, so clamd isn't running or listens elsewhere")
-                .replace("{path}", &shown_socket_path(socket_path))
+            translated_messages::scans::no_clamd_socket_path(shown_socket_path(socket_path))
         }
         ClamdSocketOwnership::SocketNotCheckable => {
-            gettext("The Flatpak sandbox can't see who owns the clamd socket")
+            translated_messages::scans::flatpak_sandbox_cannot_see()
         }
     }
 }
 
 fn socket_step_title() -> String {
-    gettext("clamd socket protected")
+    translated_messages::scans::clamd_socket_protected()
 }
 
 fn socket_mechanism_details() -> String {
-    gettext(
-        "Scans reach clamd through its socket. Let clamd create it in a directory that only root \
-         or the clamav user can write, such as /run/clamav, so no program running as you can put \
-         a fake clamd in its place.",
-    )
+    translated_messages::scans::reach_clamd_through_socket()
 }
 
 pub fn socket_step(clamd_socket_view: &ClamdSocketView, daemon_answering: bool) -> ScanEngineStep {
@@ -283,7 +262,7 @@ pub fn socket_step(clamd_socket_view: &ClamdSocketView, daemon_answering: bool) 
         ClamdSocketView::SocketInspecting => TimelineStep::running(
             socket_step_title(),
             socket_mechanism_details(),
-            gettext("Checking who can replace the clamd socket…"),
+            translated_messages::scans::checking_replace_clamd_socket(),
             RunningStep {
                 evidence_rows: Vec::new(),
                 cancel_slot: CancelSlot::NotCancellable,

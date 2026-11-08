@@ -1,11 +1,13 @@
 use std::{fs::File, io, os::unix::fs::OpenOptionsExt, path::Path};
 
 use bytesize::ByteSize;
-use gettextrs::gettext;
 use sha2::{Digest, Sha256};
 use zbus::{Connection, proxy};
 
-use crate::host_services::clamav_scanner::scanner_output_parser::sanitize_scanner_line;
+use crate::{
+    host_services::clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+    translated_messages,
+};
 
 const ENGINE_HEURISTIC_PREFIXES: [&str; 2] = ["Heuristics.", "Heuristic."];
 const UNOFFICIAL_SUFFIX: &str = ".UNOFFICIAL";
@@ -163,18 +165,19 @@ pub async fn request_trust_change(trust_choice: TrustChoice) -> TrustOutcome {
 
 pub fn trust_outcome_text(trust_outcome: &TrustOutcome) -> String {
     match trust_outcome {
-        TrustOutcome::TrustApplied => gettext("ClamAV loaded the change"),
-        TrustOutcome::AppliedReloadPending => gettext(
-            "Saved. clamd didn't answer, so it picks up the change when it next reloads its \
-             signatures",
-        ),
-        TrustOutcome::AuthorizationRefused => gettext("Nothing changed without your password"),
-        TrustOutcome::AdminServiceMissing => gettext(
-            "This installation has no ClamAV admin service, so ClamAV's trust list can't be \
-             changed from Lazaret",
-        ),
-        TrustOutcome::TrustFailed(change_failure) => gettext("Nothing changed: {error}")
-            .replace("{error}", &trust_change_failure_text(change_failure)),
+        TrustOutcome::TrustApplied => translated_messages::host::clamav_loaded_change(),
+        TrustOutcome::AppliedReloadPending => translated_messages::host::saved_clamd_not_answer(),
+        TrustOutcome::AuthorizationRefused => {
+            translated_messages::host::nothing_changed_without_password()
+        }
+        TrustOutcome::AdminServiceMissing => {
+            translated_messages::host::installation_no_clamav_admin()
+        }
+        TrustOutcome::TrustFailed(change_failure) => {
+            translated_messages::host::nothing_changed_error(trust_change_failure_text(
+                change_failure,
+            ))
+        }
     }
 }
 

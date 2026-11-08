@@ -1,13 +1,15 @@
 use std::io;
 
 use clamd_configuration::protection_rules::ProtectionReduction;
-use gettextrs::gettext;
 use jiff::Timestamp;
 use systemd::journal::Journal;
 
-use crate::host_services::{
-    clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-    systemd_journal::unit_journal_reader::{journal_field_value, open_system_journal},
+use crate::{
+    host_services::{
+        clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+        systemd_journal::unit_journal_reader::{journal_field_value, open_system_journal},
+    },
+    translated_messages,
 };
 
 const HELPER_SERVICE_UNIT: &str = "lazaret-clamav-admin.service";
@@ -65,14 +67,15 @@ impl AuditedOutcome {
 
     pub fn described(&self) -> String {
         match self {
-            Self::ActionApplied => gettext("Applied"),
-            Self::ActionRolledBack => gettext("Rolled back"),
-            Self::AuthorizationRefused => gettext("Refused without a password"),
-            Self::ActionFailed => gettext("Failed"),
-            Self::OutcomeNotRecorded => gettext("Outcome not recorded"),
+            Self::ActionApplied => translated_messages::host::applied_label(),
+            Self::ActionRolledBack => translated_messages::host::rolled_back(),
+            Self::AuthorizationRefused => translated_messages::host::refused_without_password(),
+            Self::ActionFailed => translated_messages::host::failed_label(),
+            Self::OutcomeNotRecorded => translated_messages::host::outcome_not_recorded(),
             Self::UnrecognizedOutcome { outcome_field } => {
-                gettext("Unrecognized outcome {outcome}")
-                    .replace("{outcome}", &sanitize_scanner_line(outcome_field))
+                translated_messages::host::unrecognized_outcome(sanitize_scanner_line(
+                    outcome_field,
+                ))
             }
         }
     }

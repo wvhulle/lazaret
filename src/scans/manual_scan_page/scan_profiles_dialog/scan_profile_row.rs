@@ -1,4 +1,3 @@
-use gettextrs::{gettext, ngettext};
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -12,6 +11,7 @@ use crate::{
         profile_display_text::{displayed_profile_description, displayed_profile_name},
         scan_profile_store::{ProfileOrigin, ScanProfile},
     },
+    translated_messages,
 };
 
 pub struct ScanProfileRow {
@@ -35,14 +35,11 @@ fn profile_is_deletable(scan_profile: &ScanProfile) -> bool {
 
 fn profile_subtitle(scan_profile: &ScanProfile) -> String {
     let target_count = scan_profile.profile_draft.scan_targets.len();
-    let target_text = ngettext(
-        "{count} target",
-        "{count} targets",
-        u32::try_from(target_count).unwrap_or(u32::MAX),
-    )
-    .replace("{count}", &target_count.to_string());
+    let target_text = translated_messages::scans::count_target(target_count);
     let builtin_text = match scan_profile.profile_origin {
-        ProfileOrigin::Builtin(_builtin_profile) => Some(gettext("Default profile")),
+        ProfileOrigin::Builtin(_builtin_profile) => {
+            Some(translated_messages::scans::default_profile())
+        }
         ProfileOrigin::Custom { .. } => None,
     };
     std::iter::once(sanitize_scanner_line(&displayed_profile_description(
@@ -72,7 +69,7 @@ impl FactoryComponent for ScanProfileRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "media-playback-start-symbolic",
-                set_tooltip_text: Some(&gettext("Run")),
+                set_tooltip_text: Some(&translated_messages::scans::run_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 connect_clicked[sender, index] => move |_clicked_button| {
@@ -82,7 +79,7 @@ impl FactoryComponent for ScanProfileRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "document-edit-symbolic",
-                set_tooltip_text: Some(&gettext("Edit")),
+                set_tooltip_text: Some(&translated_messages::scans::edit_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 connect_clicked[sender, index] => move |_clicked_button| {
@@ -92,7 +89,7 @@ impl FactoryComponent for ScanProfileRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "user-trash-symbolic",
-                set_tooltip_text: Some(&gettext("Delete")),
+                set_tooltip_text: Some(&translated_messages::scans::delete_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_sensitive: profile_is_deletable(&self.scan_profile),
@@ -103,7 +100,7 @@ impl FactoryComponent for ScanProfileRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "document-save-symbolic",
-                set_tooltip_text: Some(&gettext("Export")),
+                set_tooltip_text: Some(&translated_messages::scans::export_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 connect_clicked[sender, index] => move |_clicked_button| {

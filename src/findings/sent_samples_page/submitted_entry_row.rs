@@ -1,9 +1,9 @@
-use gettextrs::gettext;
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
     findings::sent_samples_page::sent_samples_presentation::SubmittedRowView,
     host_services::activity_history::submission_history_store::RemoteEntryLink,
+    translated_messages,
 };
 
 #[derive(Debug)]
@@ -47,7 +47,7 @@ impl FactoryComponent for SubmittedEntryRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "adw-external-link-symbolic",
-                set_tooltip_text: Some(&gettext("Open the Remote Entry")),
+                set_tooltip_text: Some(&translated_messages::findings::open_remote_entry_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_visible: self.has_remote_entry(),

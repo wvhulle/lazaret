@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     FactorySender,
     actions::{RelmAction, RelmActionGroup},
@@ -25,6 +24,7 @@ use crate::{
         quarantine_failure_text::describe_quarantine_failure,
         submission_confirm_dialog::ClamavReportProposal,
     },
+    translated_messages,
 };
 
 relm4::new_action_group!(ThreatRowActions, "threat-row");
@@ -65,27 +65,30 @@ pub fn false_positive_detection(detected_threat: &DetectedThreat) -> Option<Clam
 fn threat_actions_menu(detected_threat: &DetectedThreat) -> gio::Menu {
     let trust_section = gio::Menu::new();
     trust_section.append(
-        Some(&gettext("Trust This File…")),
+        Some(&translated_messages::widgets::trust_file()),
         Some("threat-row.trust-file"),
     );
     if ignore_signature_choice(&detected_threat.threat_identity).is_some() {
         trust_section.append(
-            Some(&gettext("Ignore This Detection Everywhere…")),
+            Some(&translated_messages::widgets::ignore_detection_everywhere()),
             Some("threat-row.ignore-signature"),
         );
     }
     if false_positive_detection(detected_threat).is_some() {
         trust_section.append(
-            Some(&gettext("Report False Positive…")),
+            Some(&translated_messages::widgets::report_false_positive()),
             Some("threat-row.report-false-positive"),
         );
     }
     let scan_section = gio::Menu::new();
     scan_section.append(
-        Some(&gettext("Skip This Path in Lazaret Scans")),
+        Some(&translated_messages::widgets::skip_path_lazaret_scans()),
         Some("threat-row.exclude"),
     );
-    scan_section.append(Some(&gettext("Copy Path")), Some("threat-row.copy-path"));
+    scan_section.append(
+        Some(&translated_messages::widgets::copy_path()),
+        Some("threat-row.copy-path"),
+    );
     let actions_menu = gio::Menu::new();
     actions_menu.append_section(None, &trust_section);
     actions_menu.append_section(None, &scan_section);
@@ -149,10 +152,10 @@ pub enum DetectedThreatRowOutput {
 
 fn severity_badge_text(threat_severity: ThreatSeverity) -> String {
     match threat_severity {
-        ThreatSeverity::Critical => gettext("Critical"),
-        ThreatSeverity::High => gettext("High"),
-        ThreatSeverity::Medium => gettext("Medium"),
-        ThreatSeverity::Low => gettext("Low"),
+        ThreatSeverity::Critical => translated_messages::widgets::critical_severity(),
+        ThreatSeverity::High => translated_messages::widgets::high_label(),
+        ThreatSeverity::Medium => translated_messages::widgets::medium_label(),
+        ThreatSeverity::Low => translated_messages::widgets::low_label(),
     }
 }
 
@@ -172,8 +175,7 @@ impl DetectedThreatRow {
                 displayed_path
             }
             ThreatQuarantineState::MovedToQuarantine => {
-                gettext("Moved to quarantine: {path}. Check its reputation on the Quarantine page.")
-                    .replace("{path}", &displayed_path)
+                translated_messages::widgets::moved_quarantine_path_check(&displayed_path)
             }
             ThreatQuarantineState::QuarantineFailed(move_failure) => {
                 format!(
@@ -221,7 +223,7 @@ impl FactoryComponent for DetectedThreatRow {
             },
 
             add_suffix = &gtk::Button {
-                set_label: &gettext("Quarantine"),
+                set_label: &translated_messages::widgets::quarantine_detected_label(),
                 set_valign: gtk::Align::Center,
                 #[watch]
                 set_sensitive: self.can_request_quarantine(),
@@ -232,7 +234,7 @@ impl FactoryComponent for DetectedThreatRow {
 
             add_suffix = &gtk::MenuButton {
                 set_icon_name: "view-more-symbolic",
-                set_tooltip_text: Some(&gettext("More Actions")),
+                set_tooltip_text: Some(&translated_messages::widgets::more_actions_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_menu_model: Some(&threat_actions_menu(&self.detected_threat)),

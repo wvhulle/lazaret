@@ -1,6 +1,5 @@
 use std::time::{Instant, SystemTime};
 
-use gettextrs::{gettext, ngettext};
 use jiff::Timestamp;
 
 use crate::{
@@ -36,6 +35,7 @@ use crate::{
             interpret_unfinished_update, interpret_updater_finish,
         },
     },
+    translated_messages,
 };
 
 const TRANSCRIPT_LIMIT: usize = 4 * 1024 * 1024;
@@ -109,7 +109,7 @@ impl UpdateRunOutput {
 
     fn latest_line_text(&self) -> String {
         match &self.latest_updater_line {
-            LatestUpdaterLine::NothingPrinted => gettext("Starting the update…"),
+            LatestUpdaterLine::NothingPrinted => translated_messages::signatures::starting_update(),
             LatestUpdaterLine::LinePrinted(output_line) => output_line.clone(),
         }
     }
@@ -348,14 +348,20 @@ pub enum UpdateStreamEnding {
 
 fn service_description(service_state: FreshclamServiceState) -> String {
     match service_state {
-        FreshclamServiceState::DaemonRunning { .. } => gettext("Active"),
-        FreshclamServiceState::TimerScheduled { .. } => gettext("Scheduled by a systemd timer"),
-        FreshclamServiceState::ServiceStopped { .. } => gettext("Installed but stopped"),
+        FreshclamServiceState::DaemonRunning { .. } => {
+            translated_messages::signatures::active_label()
+        }
+        FreshclamServiceState::TimerScheduled { .. } => {
+            translated_messages::signatures::scheduled_systemd_timer()
+        }
+        FreshclamServiceState::ServiceStopped { .. } => {
+            translated_messages::signatures::installed_stopped()
+        }
         FreshclamServiceState::ServiceNotFound => {
-            gettext("No freshclam service detected; updates run manually")
+            translated_messages::signatures::no_freshclam_service_detected()
         }
         FreshclamServiceState::SystemdUnreachable => {
-            gettext("systemd could not be asked about a freshclam service; updates run manually")
+            translated_messages::signatures::systemd_not_asked_freshclam()
         }
     }
 }
@@ -365,18 +371,14 @@ fn directory_description(directory_status: &DatabaseDirectoryStatus) -> String {
         DatabaseDirectoryStatus::DefinitionsAvailable {
             newest_definition_age_days,
             ..
-        } => ngettext(
-            "{count} day old",
-            "{count} days old",
-            u32::try_from(*newest_definition_age_days).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &newest_definition_age_days.to_string()),
+        } => translated_messages::signatures::count_day_old(*newest_definition_age_days),
         DatabaseDirectoryStatus::DefinitionsMissing { .. } => {
-            gettext("No readable virus database was found")
+            translated_messages::signatures::no_readable_virus_database()
         }
         DatabaseDirectoryStatus::DirectoryUnreadable { read_failure, .. } => {
-            gettext("Unknown. {reason}")
-                .replace("{reason}", &database_folder_failure_text(*read_failure))
+            translated_messages::signatures::unknown_reason_update(database_folder_failure_text(
+                *read_failure,
+            ))
         }
     }
 }
@@ -396,18 +398,16 @@ fn directory_path_text(directory_status: &DatabaseDirectoryStatus) -> String {
 fn describe_abnormal_freshclam_exit(abnormal_exit: AbnormalScannerExit) -> String {
     match abnormal_exit {
         AbnormalScannerExit::ScannerError { exit_code } => {
-            gettext("freshclam failed with exit code {code}.")
-                .replace("{code}", &exit_code.to_string())
+            translated_messages::signatures::freshclam_failed_exit_code(exit_code)
         }
         AbnormalScannerExit::KilledBySignal { signal_number } => {
-            gettext("freshclam was stopped by signal {signal}.")
-                .replace("{signal}", &signal_number.to_string())
+            translated_messages::signatures::freshclam_stopped_signal(signal_number)
         }
         AbnormalScannerExit::UnrecognizedWaitStatus { .. } => {
-            gettext("freshclam ended in a way Lazaret does not recognize.")
+            translated_messages::signatures::freshclam_ended_way_lazaret()
         }
         AbnormalScannerExit::WaitFailed { .. } => {
-            gettext("Lazaret lost track of freshclam before it finished.")
+            translated_messages::signatures::lazaret_lost_track_freshclam()
         }
     }
 }
@@ -415,63 +415,63 @@ fn describe_abnormal_freshclam_exit(abnormal_exit: AbnormalScannerExit) -> Strin
 fn describe_failure_reason(failure_reason: &UpdateFailureReason) -> String {
     match failure_reason {
         UpdateFailureReason::AuthorizationRefused => {
-            gettext("Authorization failed. Please try again and enter your password.")
+            translated_messages::signatures::authorization_failed()
         }
         UpdateFailureReason::SystemdUnreachable(_bus_failure) => {
-            gettext("Systemd could not be reached to run the update.")
+            translated_messages::signatures::systemd_not_reached()
         }
         UpdateFailureReason::ServiceJobEnded { job_result } => {
-            gettext("The update service did not finish; systemd reported: {result}")
-                .replace("{result}", &sanitize_scanner_line(job_result))
+            translated_messages::signatures::update_service_not_finish(sanitize_scanner_line(
+                job_result,
+            ))
         }
         UpdateFailureReason::FreshclamEndedAbnormally(abnormal_exit) => {
             describe_abnormal_freshclam_exit(*abnormal_exit)
         }
         UpdateFailureReason::RateLimitedDatabases | UpdateFailureReason::RateLimitedByMirror => {
-            gettext("Update rate limited by mirror. Please wait a few minutes and try again.")
+            translated_messages::signatures::update_rate_limited_mirror()
         }
-        UpdateFailureReason::BlockedByCdn => gettext(
-            "Update blocked by CDN. This may be due to rate limiting. Please wait and try again \
-             later.",
-        ),
+        UpdateFailureReason::BlockedByCdn => translated_messages::signatures::update_blocked_cdn(),
         UpdateFailureReason::MirrorUnavailable => {
-            gettext("ClamAV mirror is currently unavailable. Please try again later.")
+            translated_messages::signatures::clamav_mirror_currently_unavailable()
         }
         UpdateFailureReason::CertificateRejected => {
-            gettext("SSL/TLS certificate error. The mirror may have configuration issues.")
+            translated_messages::signatures::ssl_tls_certificate_error()
         }
         UpdateFailureReason::ConnectionTimedOut => {
-            gettext("Connection timed out. Please check your network connection.")
+            translated_messages::signatures::connection_timed_out()
         }
         UpdateFailureReason::DatabaseLocked => {
-            gettext("Database is locked. Another freshclam instance may be running.")
+            translated_messages::signatures::database_locked_another_freshclam()
         }
         UpdateFailureReason::PermissionDenied => {
-            gettext("Permission denied. You may need elevated privileges to update the database.")
+            translated_messages::signatures::permission_denied_need_elevated()
         }
         UpdateFailureReason::ConnectionFailed => {
-            gettext("Connection error. Please check your network connection.")
+            translated_messages::signatures::connection_error()
         }
         UpdateFailureReason::NameResolutionFailed => {
-            gettext("DNS resolution failed. Please check your network settings.")
+            translated_messages::signatures::dns_resolution_failed()
         }
         UpdateFailureReason::ReportedByUpdater { diagnostic_text } => {
             sanitize_scanner_text(diagnostic_text)
         }
         UpdateFailureReason::UpdaterResultMissing => {
-            gettext("Update failed with an unknown error. Check the logs for details.")
+            translated_messages::signatures::update_failed_unknown_error()
         }
     }
 }
 
 fn describe_report_summary(report_summary: &FreshclamReportSummary) -> Vec<String> {
     let updated_line = (!report_summary.updated_databases.is_empty()).then(|| {
-        gettext("Updated: {databases}")
-            .replace("{databases}", &report_summary.updated_databases.join(", "))
+        translated_messages::signatures::updated_databases(
+            report_summary.updated_databases.join(", "),
+        )
     });
     let current_line = (!report_summary.current_databases.is_empty()).then(|| {
-        gettext("Already current: {databases}")
-            .replace("{databases}", &report_summary.current_databases.join(", "))
+        translated_messages::signatures::already_current_databases(
+            report_summary.current_databases.join(", "),
+        )
     });
     let rate_limited_lines =
         report_summary
@@ -479,12 +479,16 @@ fn describe_report_summary(report_summary: &FreshclamReportSummary) -> Vec<Strin
             .iter()
             .map(
                 |rate_limited_database| match &rate_limited_database.rate_limit_cooldown {
-                    RateLimitCooldown::CooldownUnknown => gettext("Rate limited: {database}")
-                        .replace("{database}", &rate_limited_database.database_name),
+                    RateLimitCooldown::CooldownUnknown => {
+                        translated_messages::signatures::rate_limited_database(
+                            &rate_limited_database.database_name,
+                        )
+                    }
                     RateLimitCooldown::CooldownUntil { cooldown_text } => {
-                        gettext("Rate limited: {database} until {cooldown}")
-                            .replace("{database}", &rate_limited_database.database_name)
-                            .replace("{cooldown}", &sanitize_scanner_line(cooldown_text))
+                        translated_messages::signatures::rate_limited_database_until(
+                            &rate_limited_database.database_name,
+                            sanitize_scanner_line(cooldown_text),
+                        )
                     }
                 },
             );
@@ -498,16 +502,16 @@ fn describe_report_summary(report_summary: &FreshclamReportSummary) -> Vec<Strin
 
 fn describe_update_outcome(update_outcome: &DatabaseUpdateOutcome) -> String {
     let (headline, report_summary) = match update_outcome {
-        DatabaseUpdateOutcome::DefinitionsUpdated(report_summary) => {
-            (gettext("Database update completed"), report_summary)
-        }
-        DatabaseUpdateOutcome::AlreadyCurrent(report_summary) => {
-            (gettext("Database is already up to date"), report_summary)
-        }
+        DatabaseUpdateOutcome::DefinitionsUpdated(report_summary) => (
+            translated_messages::signatures::database_update_completed(),
+            report_summary,
+        ),
+        DatabaseUpdateOutcome::AlreadyCurrent(report_summary) => (
+            translated_messages::signatures::database_already_up_date(),
+            report_summary,
+        ),
         DatabaseUpdateOutcome::ServiceRanWithoutVerdict(report_summary) => (
-            gettext(
-                "The update service ran, but its log does not say whether definitions changed.",
-            ),
+            translated_messages::signatures::update_service_ran_log(),
             report_summary,
         ),
         DatabaseUpdateOutcome::UpdateFailed {
@@ -515,12 +519,11 @@ fn describe_update_outcome(update_outcome: &DatabaseUpdateOutcome) -> String {
             report_summary,
         } => (describe_failure_reason(failure_reason), report_summary),
         DatabaseUpdateOutcome::UpdateRequestedFromDaemon => {
-            return gettext(
-                "The service accepted the signal; it performs the update asynchronously. Check \
-                 its logs for completion.",
-            );
+            return translated_messages::signatures::service_accepted_signal_performs();
         }
-        DatabaseUpdateOutcome::UpdateCancelled => return gettext("Database update cancelled"),
+        DatabaseUpdateOutcome::UpdateCancelled => {
+            return translated_messages::signatures::database_update_cancelled();
+        }
         DatabaseUpdateOutcome::UpdaterNeverStarted(start_failure) => {
             return describe_start_failure(start_failure);
         }
@@ -561,7 +564,7 @@ const fn definitions_changed(update_outcome: &DatabaseUpdateOutcome) -> bool {
 fn describe_start_failure(start_failure: &ScanStartFailure) -> String {
     match start_failure {
         ScanStartFailure::ScannerProgramMissing => {
-            gettext("Install freshclam before requesting database updates.")
+            translated_messages::signatures::install_freshclam_before_requesting()
         }
         ScanStartFailure::ScannerProgramReplaceable { .. }
         | ScanStartFailure::ScannerSpawnFailed(_)

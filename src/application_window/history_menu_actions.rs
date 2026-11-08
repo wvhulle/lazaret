@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{adw, adw::prelude::*};
 
 use crate::{
@@ -9,6 +8,7 @@ use crate::{
         },
         awaited_dialogs::{AlertChoice, add_alert_choice, add_dismissing_choice},
     },
+    translated_messages,
 };
 
 pub const EXPORT_HISTORY_ACTION: &str = "win.export-history";
@@ -84,48 +84,58 @@ pub fn exported_history_file(
 
 pub fn primary_menu_entries() -> Vec<(String, &'static str)> {
     vec![
-        (gettext("Export History…"), EXPORT_HISTORY_ACTION),
-        (gettext("Clear History…"), CLEAR_HISTORY_ACTION),
-        (gettext("Preferences"), "app.preferences"),
-        (gettext("About Lazaret"), "app.about"),
-        (gettext("Quit"), "app.quit"),
+        (
+            translated_messages::window::export_history_menu_item(),
+            EXPORT_HISTORY_ACTION,
+        ),
+        (
+            translated_messages::window::clear_history_menu_item(),
+            CLEAR_HISTORY_ACTION,
+        ),
+        (
+            translated_messages::window::preferences_label(),
+            "app.preferences",
+        ),
+        (translated_messages::window::about_menu_item(), "app.about"),
+        (translated_messages::window::quit_menu_item(), "app.quit"),
     ]
 }
 
 pub fn history_export_dialog() -> adw::AlertDialog {
     let export_dialog = adw::AlertDialog::new(
-        Some(&gettext("Export History?")),
-        Some(&gettext(
-            "Saves every recorded scan and signature update, with their details.",
-        )),
+        Some(&translated_messages::window::export_history_heading()),
+        Some(&translated_messages::window::export_history_body()),
     );
-    add_dismissing_choice::<HistoryExportChoice>(&export_dialog, &gettext("Cancel"));
+    add_dismissing_choice::<HistoryExportChoice>(
+        &export_dialog,
+        &translated_messages::window::cancel_history_button(),
+    );
     add_alert_choice(
         &export_dialog,
         HistoryExportChoice::FormatChosen(HistoryExportFormat::JsonExport),
-        &gettext("JSON"),
+        &translated_messages::window::json_label(),
     );
     add_alert_choice(
         &export_dialog,
         HistoryExportChoice::FormatChosen(HistoryExportFormat::CsvExport),
-        &gettext("CSV"),
+        &translated_messages::window::csv_label(),
     );
     export_dialog
 }
 
 pub fn clear_history_dialog() -> adw::AlertDialog {
     let confirmation_dialog = adw::AlertDialog::new(
-        Some(&gettext("Clear History?")),
-        Some(&gettext(
-            "This permanently deletes every recorded scan and signature update. This can't be \
-             undone.",
-        )),
+        Some(&translated_messages::window::clear_history_heading()),
+        Some(&translated_messages::window::clear_history_body()),
     );
-    add_dismissing_choice::<ClearHistoryChoice>(&confirmation_dialog, &gettext("Cancel"));
+    add_dismissing_choice::<ClearHistoryChoice>(
+        &confirmation_dialog,
+        &translated_messages::window::cancel_history_button(),
+    );
     add_alert_choice(
         &confirmation_dialog,
         ClearHistoryChoice::ClearAllChosen,
-        &gettext("Clear All"),
+        &translated_messages::window::clear_label(),
     );
     confirmation_dialog.set_response_appearance(
         ClearHistoryChoice::ClearAllChosen.response_id(),

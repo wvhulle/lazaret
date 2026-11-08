@@ -1,7 +1,8 @@
-use gettextrs::gettext;
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
-use crate::findings::sent_samples_page::sent_samples_presentation::CandidateRowView;
+use crate::{
+    findings::sent_samples_page::sent_samples_presentation::CandidateRowView, translated_messages,
+};
 
 #[derive(Debug)]
 pub enum QuarantinedCandidateRowOutput {
@@ -28,7 +29,7 @@ impl FactoryComponent for QuarantinedCandidateRow {
             set_subtitle_lines: 0,
 
             add_suffix = &gtk::Button {
-                set_label: &gettext("Submit…"),
+                set_label: &translated_messages::findings::submit_quarantined_label(),
                 set_valign: gtk::Align::Center,
                 #[watch]
                 set_sensitive: self.row_view.allows_sending(),

@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
 };
@@ -15,6 +14,7 @@ use crate::{
         },
     },
     shared_widgets::awaited_dialogs::{chosen_folders_to_open, deliver_local_outcome},
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -169,7 +169,7 @@ impl Component for ProfileEditorDialog {
 
     view! {
         adw::Dialog {
-            set_title: &gettext("Edit Profile"),
+            set_title: &translated_messages::scans::edit_profile_title(),
             set_content_width: 520,
             set_content_height: 560,
 
@@ -177,7 +177,7 @@ impl Component for ProfileEditorDialog {
             set_child = &adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     pack_end = &gtk::Button {
-                        set_label: &gettext("Save"),
+                        set_label: &translated_messages::scans::save_label(),
                         add_css_class: "suggested-action",
                         connect_clicked => ProfileEditorDialogInput::SaveRequested,
                     },
@@ -187,7 +187,7 @@ impl Component for ProfileEditorDialog {
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
                         adw::EntryRow {
-                            set_title: &gettext("Name"),
+                            set_title: &translated_messages::scans::name_title(),
                             set_text: &model.shown_profile_name(),
                             set_sensitive: model.naming_is_editable(),
                             connect_changed[sender] => move |edited_row| {
@@ -196,7 +196,7 @@ impl Component for ProfileEditorDialog {
                         },
 
                         adw::EntryRow {
-                            set_title: &gettext("Description"),
+                            set_title: &translated_messages::scans::description_title(),
                             set_text: &model.shown_profile_description(),
                             set_sensitive: model.naming_is_editable(),
                             connect_changed[sender] => move |edited_row| {
@@ -206,11 +206,11 @@ impl Component for ProfileEditorDialog {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &gettext("Targets"),
+                        set_title: &translated_messages::scans::targets_profile_title(),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::Button {
                             set_icon_name: "folder-new-symbolic",
-                            set_tooltip_text: Some(&gettext("Add Folder")),
+                            set_tooltip_text: Some(&translated_messages::scans::add_folder_profile_tooltip()),
                             set_valign: gtk::Align::Center,
                             add_css_class: "flat",
                             connect_clicked => ProfileEditorDialogInput::AddFolderRequested,
@@ -221,7 +221,7 @@ impl Component for ProfileEditorDialog {
                             set_selection_mode: gtk::SelectionMode::None,
 
                             adw::EntryRow {
-                                set_title: &gettext("Add Path"),
+                                set_title: &translated_messages::scans::add_path_title(),
                                 set_show_apply_button: true,
                                 #[track(model.entry_was_cleared(ProfileListKind::ScanTargets))]
                                 set_text: "",
@@ -243,15 +243,15 @@ impl Component for ProfileEditorDialog {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &gettext("Exclusions"),
-                        set_description: Some(&gettext("Added to the exclusions from Preferences while this profile runs.")),
+                        set_title: &translated_messages::scans::exclusions_title(),
+                        set_description: Some(&translated_messages::scans::added_exclusions_preferences_description()),
 
                         gtk::ListBox {
                             add_css_class: "boxed-list",
                             set_selection_mode: gtk::SelectionMode::None,
 
                             adw::EntryRow {
-                                set_title: &gettext("Add Pattern"),
+                                set_title: &translated_messages::scans::add_pattern_title(),
                                 set_show_apply_button: true,
                                 #[track(model.entry_was_cleared(ProfileListKind::ExcludedPatterns))]
                                 set_text: "",
@@ -333,7 +333,7 @@ impl Component for ProfileEditorDialog {
             }
             ProfileEditorDialogInput::AddFolderRequested => deliver_local_outcome(
                 sender.input_sender().clone(),
-                chosen_folders_to_open(gettext("Add Folder")),
+                chosen_folders_to_open(translated_messages::scans::add_folder_profile_tooltip()),
                 |chosen_paths| {
                     chosen_paths.first().map(|folder_path| {
                         ProfileEditorDialogInput::ListValueAdded {

@@ -1,6 +1,5 @@
 use std::{os::unix::ffi::OsStrExt, path::Path};
 
-use gettextrs::{gettext, ngettext};
 use jiff::Timestamp;
 use relm4::gtk::{gio, gio::prelude::*, glib::variant::ToVariant};
 
@@ -16,6 +15,7 @@ use crate::{
             detection_journal_records::{DetectionSource, JournalDetectionRecord},
         },
     },
+    translated_messages,
 };
 
 pub const OPEN_DETECTION_ACTION: &str = "open-detection";
@@ -114,10 +114,10 @@ fn live_detection_title(detection_record: &JournalDetectionRecord) -> String {
     let signature_text = sanitize_scanner_line(&detection_record.signature_name);
     match detection_record.detection_source {
         DetectionSource::OnAccessScanner => {
-            gettext("Malware blocked: {signature}").replace("{signature}", &signature_text)
+            translated_messages::findings::malware_blocked_signature(&signature_text)
         }
         DetectionSource::ScheduledScan => {
-            gettext("Malware found: {signature}").replace("{signature}", &signature_text)
+            translated_messages::findings::malware_found_signature(&signature_text)
         }
     }
 }
@@ -154,12 +154,7 @@ fn live_detection_notification(detection_record: &JournalDetectionRecord) -> gio
 
 fn missed_detections_notification(missed_count: usize) -> gio::Notification {
     let notification = gio::Notification::new(
-        &ngettext(
-            "{count} detection while Lazaret wasn't running",
-            "{count} detections while Lazaret wasn't running",
-            u32::try_from(missed_count).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &missed_count.to_string()),
+        &translated_messages::findings::count_detection_not_running(missed_count),
     );
     notification.set_priority(gio::NotificationPriority::Urgent);
     notification.set_default_action(&format!("app.{OPEN_DETECTIONS_ACTION}"));
@@ -167,14 +162,11 @@ fn missed_detections_notification(missed_count: usize) -> gio::Notification {
 }
 
 fn uncountable_missed_detections_notification() -> gio::Notification {
-    let notification = gio::Notification::new(&gettext(
-        "Detections while Lazaret wasn't running can't be counted",
+    let notification =
+        gio::Notification::new(&translated_messages::findings::detections_not_running_detection());
+    notification.set_body(Some(
+        &translated_messages::findings::lazaret_not_read_stopped(),
     ));
-    notification.set_body(Some(&gettext(
-        "Lazaret couldn't read where it stopped following the system journal, so it only watches \
-         for new detections. Check the Detections page and the system journal for anything found \
-         while it was closed.",
-    )));
     notification.set_priority(gio::NotificationPriority::Urgent);
     notification.set_default_action(&format!("app.{OPEN_DETECTIONS_ACTION}"));
     notification

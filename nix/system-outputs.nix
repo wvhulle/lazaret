@@ -29,7 +29,7 @@ let
       ../Makefile
       ../xtask/assets
       ../gtk_scene_capture/assets
-      ../po
+      ../locales
       ../data
       ../clamav_admin_service/system_files
       ../clamd_configuration/setting_lists
@@ -67,9 +67,7 @@ let
     // {
       inherit cargoArtifacts;
       doCheck = false;
-      LAZARET_LOCALE_DIRECTORY = "${placeholder "out"}/share/locale";
       nativeBuildInputs = commonArgs.nativeBuildInputs ++ [
-        pkgs.gettext
         pkgs.glib
         pkgs.gnumake
         pkgs.wrapGAppsHook4
@@ -87,8 +85,7 @@ let
         }")
       '';
       postInstall = ''
-        make install-data \
-          TRANSLATION_BUILD_DIRECTORY="$TMPDIR/locale" PREFIX="$out"
+        make install-data PREFIX="$out"
       '';
     }
   );
@@ -308,7 +305,6 @@ in
       treefmtWrapper
       rustfmtToolchain
       pkgs.clamav
-      pkgs.gettext
       pkgs.git
       pkgs.glib
       pkgs.gnumake

@@ -1,5 +1,3 @@
-use gettextrs::{gettext, ngettext};
-
 use crate::{
     host_services::{
         activity_history::{
@@ -25,6 +23,7 @@ use crate::{
         database_migration_failure_text::describe_history_failure,
         quarantine_failure_text::describe_quarantine_failure,
     },
+    translated_messages,
 };
 
 pub fn sample_read_failure_text(read_failure: &SampleReadFailure) -> String {
@@ -33,61 +32,61 @@ pub fn sample_read_failure_text(read_failure: &SampleReadFailure) -> String {
             describe_quarantine_failure(quarantine_failure)
         }
         SampleReadFailure::FileUnreadable(read_failure) => {
-            gettext("The file could not be read: {error}")
-                .replace("{error}", &read_failure.to_string())
+            translated_messages::widgets::file_not_read_submission(read_failure)
         }
-        SampleReadFailure::FileNotRegular => gettext("Only regular files can be sent"),
+        SampleReadFailure::FileNotRegular => translated_messages::widgets::regular_files_sent(),
         SampleReadFailure::FileTooLarge { maximum_size } => {
-            gettext("The file is larger than {size}, the most Lazaret sends.")
-                .replace("{size}", &byte_size_text(*maximum_size))
+            translated_messages::widgets::file_larger_size_submission(byte_size_text(*maximum_size))
         }
         SampleReadFailure::ReadingInterrupted(_interrupted_task) => {
-            gettext("Reading the file stopped unexpectedly")
+            translated_messages::widgets::reading_file_stopped_unexpectedly()
         }
     }
 }
 
 pub fn history_failure_text(history_failure: &ActivityHistoryFailure) -> String {
-    gettext("The submission history could not be read: {error}")
-        .replace("{error}", &describe_history_failure(history_failure))
+    translated_messages::widgets::submission_history_not_read(describe_history_failure(
+        history_failure,
+    ))
 }
 
 pub fn earlier_submission_text(earlier_submission: &SubmissionRecord) -> String {
-    gettext("This file was already sent on {time}. Nothing was sent again.").replace(
-        "{time}",
-        &exact_local_time_text(earlier_submission.submitted_at),
-    )
+    translated_messages::widgets::file_already_sent_time(exact_local_time_text(
+        earlier_submission.submitted_at,
+    ))
 }
 
 pub fn clamav_report_attempt_text(report_attempt: &ClamavReportAttempt) -> String {
     match report_attempt {
-        ClamavReportAttempt::ReportRecorded(_recorded_submission) => gettext(
-            "Report sent. ClamAV's review takes at least 48 hours; Sent Samples shows when a \
-             signature update changes the verdict.",
-        ),
+        ClamavReportAttempt::ReportRecorded(_recorded_submission) => {
+            translated_messages::widgets::report_sent_clamav_review()
+        }
         ClamavReportAttempt::AlreadyReported(earlier_submission) => {
             earlier_submission_text(earlier_submission)
         }
         ClamavReportAttempt::SampleUnreadable(read_failure) => {
-            gettext("The report was not sent: {error}")
-                .replace("{error}", &sample_read_failure_text(read_failure))
+            translated_messages::widgets::report_not_sent_error(sample_read_failure_text(
+                read_failure,
+            ))
         }
         ClamavReportAttempt::ReportNotSent(clamsubmit_failure) => {
             clamsubmit_failure_text(clamsubmit_failure)
         }
         ClamavReportAttempt::HistoryUnavailable(history_failure) => {
-            gettext("The report was not sent: {error}")
-                .replace("{error}", &history_failure_text(history_failure))
+            translated_messages::widgets::report_not_sent_error(history_failure_text(
+                history_failure,
+            ))
         }
         ClamavReportAttempt::ReportSentWithoutRecord(history_failure) => {
-            gettext("Report sent, but it could not be added to Sent Samples: {error}")
-                .replace("{error}", &describe_history_failure(history_failure))
+            translated_messages::widgets::report_sent_not_added(describe_history_failure(
+                history_failure,
+            ))
         }
     }
 }
 
 fn upload_not_sent(failure_reason: &str) -> String {
-    gettext("Nothing was uploaded: {error}").replace("{error}", failure_reason)
+    translated_messages::widgets::nothing_uploaded_error(failure_reason)
 }
 
 pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> String {
@@ -98,16 +97,17 @@ pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> Strin
                     bazaar_status: BazaarSampleStatus::SubmissionRefused { refusal_reason },
                 },
             ..
-        }) => gettext("MalwareBazaar refused the sample: {reason}")
-            .replace("{reason}", &sanitize_scanner_line(refusal_reason)),
+        }) => translated_messages::widgets::malwarebazaar_refused_sample_reason(
+            sanitize_scanner_line(refusal_reason),
+        ),
         BazaarUploadAttempt::SubmissionRecorded(_recorded_submission) => {
-            gettext("MalwareBazaar has the sample. Sent Samples links to its public entry.")
+            translated_messages::widgets::malwarebazaar_sample_sent_samples()
         }
         BazaarUploadAttempt::AlreadySubmitted(earlier_submission) => {
             earlier_submission_text(earlier_submission)
         }
         BazaarUploadAttempt::KeyMissing => {
-            upload_not_sent(&gettext("add an abuse.ch key in Preferences first"))
+            upload_not_sent(&translated_messages::widgets::add_abuse_ch_key())
         }
         BazaarUploadAttempt::KeyUnreadable(key_failure) => {
             upload_not_sent(&describe_key_failure(key_failure))
@@ -115,12 +115,12 @@ pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> Strin
         BazaarUploadAttempt::SampleUnreadable(read_failure) => {
             upload_not_sent(&sample_read_failure_text(read_failure))
         }
-        BazaarUploadAttempt::NotDetectedByClamav => upload_not_sent(&gettext(
-            "MalwareBazaar only takes files a ClamAV signature detected",
-        )),
-        BazaarUploadAttempt::UnwantedProgramOnly => upload_not_sent(&gettext(
-            "MalwareBazaar doesn't take potentially unwanted programs, only malware",
-        )),
+        BazaarUploadAttempt::NotDetectedByClamav => {
+            upload_not_sent(&translated_messages::widgets::malwarebazaar_takes_files_clamav())
+        }
+        BazaarUploadAttempt::UnwantedProgramOnly => {
+            upload_not_sent(&translated_messages::widgets::malwarebazaar_not_take_potentially())
+        }
         BazaarUploadAttempt::BazaarUnavailable(bazaar_failure) => {
             upload_not_sent(&describe_bazaar_failure(bazaar_failure))
         }
@@ -128,8 +128,9 @@ pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> Strin
             upload_not_sent(&history_failure_text(history_failure))
         }
         BazaarUploadAttempt::SentWithoutRecord(history_failure) => {
-            gettext("Uploaded, but it could not be added to Sent Samples: {error}")
-                .replace("{error}", &describe_history_failure(history_failure))
+            translated_messages::widgets::uploaded_not_added_sent(describe_history_failure(
+                history_failure,
+            ))
         }
     }
 }
@@ -142,25 +143,23 @@ pub fn virustotal_upload_attempt_text(upload_attempt: &VirusTotalUploadAttempt) 
                     virustotal_status: VirusTotalSampleStatus::SubmissionRefused { refusal_reason },
                 },
             ..
-        }) => gettext("VirusTotal refused the file: {reason}")
-            .replace("{reason}", &sanitize_scanner_line(refusal_reason)),
-        VirusTotalUploadAttempt::SubmissionRecorded(_recorded_submission) => gettext(
-            "VirusTotal is analysing the file. Refresh on the Sent Samples page shows its verdict.",
-        ),
+        }) => translated_messages::widgets::virustotal_refused_file_reason(sanitize_scanner_line(
+            refusal_reason,
+        )),
+        VirusTotalUploadAttempt::SubmissionRecorded(_recorded_submission) => {
+            translated_messages::widgets::virustotal_analysing_file_refresh()
+        }
         VirusTotalUploadAttempt::AlreadySubmitted(earlier_submission) => {
             earlier_submission_text(earlier_submission)
         }
-        VirusTotalUploadAttempt::ReportAlreadyAvailable(file_report) => ngettext(
-            "VirusTotal already knows this file: {count} of {total} engine detects it. Nothing \
-             was uploaded.",
-            "VirusTotal already knows this file: {count} of {total} engines detect it. Nothing \
-             was uploaded.",
-            u32::try_from(file_report.total_engine_count).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &file_report.detecting_engine_count.to_string())
-        .replace("{total}", &file_report.total_engine_count.to_string()),
+        VirusTotalUploadAttempt::ReportAlreadyAvailable(file_report) => {
+            translated_messages::widgets::virustotal_already_knows_file(
+                file_report.total_engine_count,
+                file_report.detecting_engine_count,
+            )
+        }
         VirusTotalUploadAttempt::KeyMissing => {
-            upload_not_sent(&gettext("add a VirusTotal key in Preferences first"))
+            upload_not_sent(&translated_messages::widgets::add_virustotal_key_preferences())
         }
         VirusTotalUploadAttempt::KeyUnreadable(key_failure) => {
             upload_not_sent(&describe_key_failure(key_failure))
@@ -175,8 +174,9 @@ pub fn virustotal_upload_attempt_text(upload_attempt: &VirusTotalUploadAttempt) 
             upload_not_sent(&history_failure_text(history_failure))
         }
         VirusTotalUploadAttempt::SentWithoutRecord(history_failure) => {
-            gettext("Uploaded, but it could not be added to Sent Samples: {error}")
-                .replace("{error}", &describe_history_failure(history_failure))
+            translated_messages::widgets::uploaded_not_added_sent(describe_history_failure(
+                history_failure,
+            ))
         }
     }
 }

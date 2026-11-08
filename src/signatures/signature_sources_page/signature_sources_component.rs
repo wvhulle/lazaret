@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, abstractions::Toaster, adw, adw::prelude::*, gtk,
     gtk::gio, prelude::FactoryVecDeque,
@@ -24,6 +23,7 @@ use crate::{
         source_check_results::AuditCheck,
         source_check_row::{AuditCheckRow, AuditCheckRowOutput},
     },
+    translated_messages,
 };
 
 pub struct SignatureSourcesPage {
@@ -113,11 +113,11 @@ impl Component for SignatureSourcesPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&gettext("Check again")),
+                            set_tooltip_text: Some(&translated_messages::signatures::check_again_signature_tooltip()),
                             connect_clicked => SignatureSourcesPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                            set_tooltip_text: Some(&gettext("Checking")),
+                            set_tooltip_text: Some(&translated_messages::signatures::checking_signature_tooltip()),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.page_busy()),
@@ -127,15 +127,12 @@ impl Component for SignatureSourcesPage {
                 #[wrap(Some)]
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
-                        set_description: Some(&gettext(
-                            "Where ClamAV's malware signatures come from, and which other \
-                             sources you could add.",
-                        )),
+                        set_description: Some(&translated_messages::signatures::clamav_malware_signatures_description()),
                     },
 
                     #[local_ref]
                     add = source_group -> adw::PreferencesGroup {
-                        set_title: &gettext("Signature Sources"),
+                        set_title: &translated_messages::signatures::sources_title(),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::Image {
                             set_valign: gtk::Align::Center,
@@ -149,10 +146,10 @@ impl Component for SignatureSourcesPage {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &gettext("abuse.ch Key"),
+                        set_title: &translated_messages::signatures::abuse_ch_key_title(),
 
                         adw::ActionRow {
-                            set_title: &gettext("abuse.ch Auth-Key"),
+                            set_title: &translated_messages::signatures::abuse_ch_auth_title(),
                             set_subtitle_lines: 0,
                             set_use_markup: false,
                             #[watch]
@@ -221,8 +218,9 @@ impl Component for SignatureSourcesPage {
                 AuditCheckRowOutput::CopyCommandRequested(copied_command),
             ) => {
                 root.clipboard().set_text(&copied_command);
-                self.toaster
-                    .add_toast(adw::Toast::new(&gettext("Command copied to clipboard")));
+                self.toaster.add_toast(adw::Toast::new(
+                    &translated_messages::signatures::command_copied_clipboard_signature(),
+                ));
             }
             SignatureSourcesPageInput::GuidanceRequested(
                 AuditCheckRowOutput::DocumentationRequested(documentation_url),
@@ -231,9 +229,8 @@ impl Component for SignatureSourcesPage {
                 self.toaster.add_toast(
                     adw::Toast::builder()
                         .title(
-                            gettext("Could not open documentation: {error}").replace(
-                                "{error}",
-                                &sanitize_scanner_line(launch_failure.message()),
+                            translated_messages::signatures::not_open_documentation_title(
+                                sanitize_scanner_line(launch_failure.message()),
                             ),
                         )
                         .use_markup(false)

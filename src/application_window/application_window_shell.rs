@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use gettextrs::gettext;
 use relm4::{
     AsyncComponentSender, Component, ComponentController, Controller,
     actions::RelmAction,
@@ -48,6 +47,7 @@ use crate::{
         ONLINE_SERVICES_PAGE_NAME, PreferencesDialog, PreferencesDialogOutput,
     },
     shared_widgets::quarantine_failure_text::describe_quarantine_failure,
+    translated_messages,
 };
 
 enum WindowContent {
@@ -92,10 +92,10 @@ async fn open_locked_vault(
 fn vault_failure_title(startup_failure: &VaultStartupFailure) -> String {
     match startup_failure {
         VaultStartupFailure::VaultLockFailed(_) | VaultStartupFailure::LockTaskInterrupted(_) => {
-            gettext("The quarantine database could not be locked")
+            translated_messages::window::quarantine_database_not_locked()
         }
         VaultStartupFailure::VaultOpenFailed(_) => {
-            gettext("The quarantine database could not be opened")
+            translated_messages::window::quarantine_database_not_opened()
         }
     }
 }
@@ -103,12 +103,10 @@ fn vault_failure_title(startup_failure: &VaultStartupFailure) -> String {
 fn vault_failure_description(startup_failure: &VaultStartupFailure) -> String {
     match startup_failure {
         VaultStartupFailure::VaultLockFailed(lock_failure) => {
-            gettext("A file operation failed: {error}")
-                .replace("{error}", &lock_failure.to_string())
+            translated_messages::window::file_operation_failed_error(lock_failure)
         }
         VaultStartupFailure::LockTaskInterrupted(interrupted_task) => {
-            gettext("A background quarantine step stopped unexpectedly: {error}")
-                .replace("{error}", &interrupted_task.to_string())
+            translated_messages::window::background_quarantine_step_stopped(interrupted_task)
         }
         VaultStartupFailure::VaultOpenFailed(vault_failure) => {
             describe_quarantine_failure(vault_failure)
@@ -160,7 +158,7 @@ fn present_about_dialog(parent_window: &adw::ApplicationWindow) {
                 .filter(|author_line| !author_line.starts_with('#'))
                 .collect::<Vec<_>>(),
         )
-        .translator_credits(gettext("translator-credits"))
+        .translator_credits(translated_messages::window::translator_credits())
         .build()
         .present(Some(parent_window));
 }

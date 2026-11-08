@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, adw,
     adw::prelude::*,
@@ -14,6 +13,7 @@ use crate::{
         DEVICE_SCAN_ENABLED_KEY, DEVICE_SCAN_MAX_GIGABYTES_KEY, DEVICE_SCAN_SETTING_KEYS,
         DEVICE_SCAN_SKIP_BATTERY_KEY, DeviceAutoScanSettings,
     },
+    translated_messages,
 };
 
 pub struct DeviceAutoScanSection {
@@ -43,13 +43,11 @@ impl Component for DeviceAutoScanSection {
 
     view! {
         adw::PreferencesGroup {
-                set_title: &gettext("Device Auto-Scan"),
-                set_description: Some(&gettext(
-                    "Automatically scan removable and external drives when they are connected.",
-                )),
+                set_title: &translated_messages::scans::device_auto_scan_title(),
+                set_description: Some(&translated_messages::scans::automatically_scan_removable_description()),
 
                 adw::SwitchRow {
-                    set_title: &gettext("Enable Device Auto-Scan"),
+                    set_title: &translated_messages::scans::enable_device_auto_title(),
                     #[watch]
                     #[block_signal(auto_scan_handler)]
                     set_active: model.auto_scan_settings.auto_scan_enabled,
@@ -59,8 +57,8 @@ impl Component for DeviceAutoScanSection {
                 },
 
                 adw::SpinRow {
-                    set_title: &gettext("Max Device Size (GB)"),
-                    set_subtitle: &gettext("0 means no size limit."),
+                    set_title: &translated_messages::scans::max_device_size_title(),
+                    set_subtitle: &translated_messages::scans::no_size_limit_subtitle(),
                     set_adjustment: Some(&gtk::Adjustment::new(32.0, 0.0, 10_000.0, 1.0, 10.0, 0.0)),
                     #[watch]
                     #[block_signal(maximum_size_handler)]
@@ -71,7 +69,7 @@ impl Component for DeviceAutoScanSection {
                 },
 
                 adw::SwitchRow {
-                    set_title: &gettext("Skip on Battery"),
+                    set_title: &translated_messages::scans::skip_battery_device_title(),
                     #[watch]
                     #[block_signal(battery_skip_handler)]
                     set_active: model.auto_scan_settings.skip_on_battery,

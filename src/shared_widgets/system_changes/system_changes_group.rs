@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
 };
@@ -20,6 +19,7 @@ use crate::{
             },
         },
     },
+    translated_messages,
 };
 
 pub struct SystemChangesGroupInit {
@@ -47,8 +47,7 @@ pub enum SystemChangesGroupCommand {
 pub fn system_changes_failure_text(system_changes_view: &SystemChangesView) -> String {
     match system_changes_view {
         SystemChangesView::SystemChangesFailed(read_failure) => {
-            gettext("The system journal can't be read: {error}")
-                .replace("{error}", &read_failure.to_string())
+            translated_messages::widgets::system_journal_cannot_read(read_failure)
         }
         SystemChangesView::SystemChangesLoading | SystemChangesView::SystemChangesLoaded => {
             String::new()
@@ -81,12 +80,12 @@ impl Component for SystemChangesGroup {
 
     view! {
         adw::PreferencesGroup {
-            set_title: &gettext("System changes"),
+            set_title: &translated_messages::widgets::system_changes_title(),
             set_description: Some(&group_init.group_description),
             #[wrap(Some)]
             set_header_suffix = &gtk::Button {
                 set_icon_name: "view-refresh-symbolic",
-                set_tooltip_text: Some(&gettext("Refresh")),
+                set_tooltip_text: Some(&translated_messages::widgets::refresh_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 connect_clicked => SystemChangesGroupInput::ReloadRequested,
@@ -100,7 +99,7 @@ impl Component for SystemChangesGroup {
                 #[local_ref]
                 set_placeholder = system_change_placeholder -> gtk::Stack {
                     add_named[Some(LOAD_FAILED_PAGE_NAME)] = &adw::ActionRow {
-                        set_title: &gettext("System changes can't be read"),
+                        set_title: &translated_messages::widgets::system_changes_cannot_title(),
                         set_use_markup: false,
                         set_subtitle_lines: 0,
                         add_css_class: "dim-label",
@@ -128,7 +127,7 @@ impl Component for SystemChangesGroup {
         };
         let system_change_list = model.system_change_rows.widget();
         let system_change_placeholder = &loading_placeholder_stack(
-            &gettext("Loading system changes…"),
+            &translated_messages::widgets::loading_system_changes(),
             &empty_placeholder_row(&group_init.empty_title),
         );
         let widgets = view_output!();

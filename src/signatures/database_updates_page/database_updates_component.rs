@@ -1,5 +1,4 @@
 use futures::StreamExt;
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     abstractions::Toaster, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
@@ -53,6 +52,7 @@ use crate::{
             signature_update_session::{DatabaseHostStatus, load_host_status},
         },
     },
+    translated_messages,
 };
 
 const UPDATE_BATCH_SIZE: usize = 64;
@@ -131,8 +131,9 @@ impl DatabaseUpdatesPage {
     fn history_failure_text(&self) -> String {
         match &self.update_history {
             UpdateHistoryView::HistoryLoadFailed(load_failure) => {
-                gettext("Failed to load historical logs: {error}")
-                    .replace("{error}", &describe_history_failure(load_failure))
+                translated_messages::signatures::failed_load_historical_logs(
+                    describe_history_failure(load_failure),
+                )
             }
             UpdateHistoryView::HistoryLoading | UpdateHistoryView::HistoryLoaded(_) => {
                 String::new()
@@ -204,7 +205,7 @@ impl DatabaseUpdatesPage {
         };
         notify_outside_the_window(
             "update-finished",
-            &gettext("Database update finished"),
+            &translated_messages::signatures::database_update_finished(),
             &finished_effects.summary_line,
         );
         self.toaster
@@ -253,11 +254,11 @@ impl Component for DatabaseUpdatesPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&gettext("Check again")),
+                            set_tooltip_text: Some(&translated_messages::signatures::check_again_database_tooltip()),
                             connect_clicked => DatabaseUpdatesPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                            set_tooltip_text: Some(&gettext("Checking")),
+                            set_tooltip_text: Some(&translated_messages::signatures::checking_database_tooltip()),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -273,8 +274,8 @@ impl Component for DatabaseUpdatesPage {
                         add: model.update_settings_sections.widget(),
 
                         add = &adw::PreferencesGroup {
-                            set_title: &gettext("Update history"),
-                            set_description: Some(&gettext("Updates started from Lazaret, newest first. Select one to read its transcript.")),
+                            set_title: &translated_messages::signatures::update_history_title(),
+                            set_description: Some(&translated_messages::signatures::updates_started_lazaret_description()),
 
                             #[local_ref]
                             history_list -> gtk::ListBox {
@@ -284,7 +285,7 @@ impl Component for DatabaseUpdatesPage {
                                 #[local_ref]
                                 set_placeholder = history_placeholder -> gtk::Stack {
                                     add_named[Some(LOAD_FAILED_PAGE_NAME)] = &adw::ActionRow {
-                                        set_title: &gettext("Historical logs can't be read"),
+                                        set_title: &translated_messages::signatures::historical_logs_cannot_title(),
                                         set_use_markup: false,
                                         set_subtitle_lines: 0,
                                         add_css_class: "dim-label",
@@ -319,7 +320,7 @@ impl Component for DatabaseUpdatesPage {
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(gettext("Status"))
+                        .title(translated_messages::signatures::status_title())
                         .build(),
                 )
                 .forward(
@@ -345,10 +346,11 @@ impl Component for DatabaseUpdatesPage {
         let status_group = &model.status_rows.widget().clone();
         let history_list = model.history_rows.widget();
         let history_placeholder = &loading_placeholder_stack(
-            &gettext("Loading history…"),
-            &empty_placeholder_row(&gettext("No updates were started from Lazaret yet")),
+            &translated_messages::signatures::loading_history(),
+            &empty_placeholder_row(&translated_messages::signatures::no_updates_started_lazaret()),
         );
-        let status_loading_page = &loading_status_page(&gettext("Checking the signatures…"));
+        let status_loading_page =
+            &loading_status_page(&translated_messages::signatures::checking_signatures());
         let widgets = view_output!();
         Self::refresh_host_status(&sender);
         model.reload_history(&sender);
@@ -397,8 +399,9 @@ impl Component for DatabaseUpdatesPage {
                 copied_command,
             )) => {
                 root.clipboard().set_text(&copied_command);
-                self.toaster
-                    .add_toast(adw::Toast::new(&gettext("Command copied to clipboard")));
+                self.toaster.add_toast(adw::Toast::new(
+                    &translated_messages::signatures::command_copied_clipboard_database(),
+                ));
             }
             DatabaseUpdatesPageInput::HistoryEntryActivated { row_position } => {
                 self.open_transcript(row_position, root);
@@ -432,8 +435,9 @@ impl Component for DatabaseUpdatesPage {
                     &recording_failure,
                 );
                 self.toaster.add_toast(plain_text_toast(
-                    &gettext("The update could not be added to the history: {error}")
-                        .replace("{error}", &describe_history_failure(&recording_failure)),
+                    &translated_messages::signatures::update_not_added_history(
+                        describe_history_failure(&recording_failure),
+                    ),
                 ));
             }
             DatabaseUpdatesPageCommand::HistoryLoaded(load_outcome) => {

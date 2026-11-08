@@ -1,4 +1,3 @@
-use gettextrs::{gettext, ngettext};
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
 };
@@ -26,6 +25,7 @@ use crate::{
         host_read_failure_text::unit_journal_failure_text,
         trust_confirmation_dialog::present_trust_confirmation,
     },
+    translated_messages,
 };
 
 const AUDIT_ENTRY_LIMIT: usize = 500;
@@ -77,11 +77,13 @@ pub async fn load_trusted_detections() -> TrustedDetectionsSnapshot {
 
 pub fn trust_list_failure_text(read_failure: &TrustListReadFailure) -> String {
     match read_failure {
-        TrustListReadFailure::AccessDenied => gettext("Permission denied"),
+        TrustListReadFailure::AccessDenied => translated_messages::findings::permission_denied(),
         TrustListReadFailure::OtherReadFailure { failure_kind } => {
-            gettext("Reading failed: {reason}").replace("{reason}", &failure_kind.to_string())
+            translated_messages::findings::reading_failed_reason(failure_kind)
         }
-        TrustListReadFailure::ReadingTaskAborted => gettext("Reading stopped before it finished"),
+        TrustListReadFailure::ReadingTaskAborted => {
+            translated_messages::findings::reading_stopped_before_finished()
+        }
     }
 }
 
@@ -89,19 +91,22 @@ fn added_text(audit_history: &AuditHistoryReading, adding_action: &AuditedAction
     let audit_entries = match audit_history {
         AuditHistoryReading::EntriesRead(audit_entries) => audit_entries,
         AuditHistoryReading::JournalUnreadable(read_failure) => {
-            return gettext("Unknown who added this. {reason}")
-                .replace("{reason}", &unit_journal_failure_text(*read_failure));
+            return translated_messages::findings::unknown_added_reason(unit_journal_failure_text(
+                *read_failure,
+            ));
         }
     };
     match latest_applied_entry(audit_entries, adding_action) {
         Some(audit_entry) => match audit_entry.requester {
-            Requester::KnownUser { user_id } => gettext("Added {time} by user {uid}")
-                .replace("{time}", &exact_local_time_text(audit_entry.recorded_at))
-                .replace("{uid}", &user_id.to_string()),
-            Requester::UnknownUser => gettext("Added {time} by an unknown user")
-                .replace("{time}", &exact_local_time_text(audit_entry.recorded_at)),
+            Requester::KnownUser { user_id } => translated_messages::findings::added_time_user_uid(
+                exact_local_time_text(audit_entry.recorded_at),
+                user_id,
+            ),
+            Requester::UnknownUser => translated_messages::findings::added_time_unknown_user(
+                exact_local_time_text(audit_entry.recorded_at),
+            ),
         },
-        None => gettext("No record of who added this in the system journal"),
+        None => translated_messages::findings::no_record_added_system(),
     }
 }
 
@@ -198,15 +203,13 @@ fn foreign_allowlist_row(foreign_allowlist: &ForeignAllowlistFile) -> TrustListR
     TrustListRow {
         row_title: foreign_allowlist.file_name.clone(),
         row_subtitle: match &foreign_allowlist.allowlist_entries {
-            AllowlistEntries::EntriesCounted { entry_count } => ngettext(
-                "{count} entry, not added through Lazaret",
-                "{count} entries, not added through Lazaret",
-                u32::try_from(*entry_count).unwrap_or(u32::MAX),
-            )
-            .replace("{count}", &entry_count.to_string()),
+            AllowlistEntries::EntriesCounted { entry_count } => {
+                translated_messages::findings::count_entry_not_added(*entry_count)
+            }
             AllowlistEntries::FileUnreadable(read_failure) => {
-                gettext("Entries can't be counted ({reason}), not added through Lazaret")
-                    .replace("{reason}", &trust_list_failure_text(read_failure))
+                translated_messages::findings::entries_cannot_counted_reason(
+                    trust_list_failure_text(read_failure),
+                )
             }
         },
         shows_hash: false,
@@ -245,7 +248,7 @@ fn lazaret_list_rows<ListEntry>(
             rows_or_empty_notice(list_entries.iter().map(entry_row).collect(), empty_text)
         }
         LazaretListReading::ListUnreadable(read_failure) => vec![unreadable_row(
-            gettext("Lazaret can't read this list"),
+            translated_messages::findings::lazaret_cannot_read_list(),
             read_failure,
         )],
     }
@@ -264,12 +267,12 @@ fn trust_list_group_rows(snapshot: &TrustedDetectionsSnapshot) -> TrustListGroup
             trusted_file_rows: lazaret_list_rows(
                 &trust_list.trusted_files,
                 |trusted_file| trusted_file_row(trusted_file, audit_history),
-                gettext("No trusted files"),
+                translated_messages::findings::no_trusted_files(),
             ),
             ignored_signature_rows: lazaret_list_rows(
                 &trust_list.ignored_signatures,
                 |signature_name| ignored_signature_row(signature_name, audit_history),
-                gettext("No ignored detections"),
+                translated_messages::findings::no_ignored_detections(),
             ),
             foreign_allowlist_rows: trust_list
                 .foreign_allowlists
@@ -278,16 +281,18 @@ fn trust_list_group_rows(snapshot: &TrustedDetectionsSnapshot) -> TrustListGroup
                 .collect(),
         },
         TrustListReading::FolderMissing => TrustListGroupRows {
-            trusted_file_rows: vec![TrustListRow::empty_list(gettext("No trusted files"))],
-            ignored_signature_rows: vec![TrustListRow::empty_list(gettext(
-                "No ignored detections",
-            ))],
+            trusted_file_rows: vec![TrustListRow::empty_list(
+                translated_messages::findings::no_trusted_files(),
+            )],
+            ignored_signature_rows: vec![TrustListRow::empty_list(
+                translated_messages::findings::no_ignored_detections(),
+            )],
             foreign_allowlist_rows: Vec::new(),
         },
         TrustListReading::FolderUnreadable(read_failure) => {
             let folder_row = || {
                 unreadable_row(
-                    gettext("Lazaret can't read the signature folder"),
+                    translated_messages::findings::lazaret_cannot_read_signature(),
                     read_failure,
                 )
             };
@@ -337,12 +342,8 @@ impl Component for TrustedDetectionsSection {
 
     view! {
         adw::PreferencesGroup {
-            set_title: &gettext("Trusted Detections"),
-            set_description: Some(&gettext(
-                "ClamAV never reports what is listed here, in any scan on this computer. Every \
-                 change needs your administrator password and is recorded in the system journal, \
-                 where software running as you can't remove the record.",
-            )),
+            set_title: &translated_messages::findings::trusted_detections_title(),
+            set_description: Some(&translated_messages::findings::clamav_never_reports_description()),
             connect_map => TrustedDetectionsSectionInput::ReloadRequested,
 
             gtk::Box {
@@ -350,30 +351,22 @@ impl Component for TrustedDetectionsSection {
                 set_spacing: 24,
 
                 adw::PreferencesGroup {
-                    set_title: &gettext("Trusted Files"),
-                    set_description: Some(&gettext(
-                        "Files trusted by their SHA-256 hash. Any change to such a file makes \
-                         ClamAV check it again.",
-                    )),
+                    set_title: &translated_messages::findings::trusted_files_title(),
+                    set_description: Some(&translated_messages::findings::files_trusted_sha_description()),
                     #[local_ref]
                     trusted_file_list -> gtk::ListBox {},
                 },
 
                 adw::PreferencesGroup {
-                    set_title: &gettext("Ignored Detections"),
-                    set_description: Some(&gettext(
-                        "Detection names that ClamAV ignores in every file.",
-                    )),
+                    set_title: &translated_messages::findings::ignored_detections_title(),
+                    set_description: Some(&translated_messages::findings::detection_names_clamav_description()),
                     #[local_ref]
                     ignored_signature_list -> gtk::ListBox {},
                 },
 
                 adw::PreferencesGroup {
-                    set_title: &gettext("Other Allowlists"),
-                    set_description: Some(&gettext(
-                        "Allowlist files in the signature folder that Lazaret didn't write. \
-                         Check that you or your administrator added them on purpose.",
-                    )),
+                    set_title: &translated_messages::findings::other_allowlists_title(),
+                    set_description: Some(&translated_messages::findings::allowlist_files_signature_description()),
                     #[watch]
                     set_visible: model.trusted_detections_state.shows_other_allowlists(),
                     #[local_ref]

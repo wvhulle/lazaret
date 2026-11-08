@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -12,6 +11,7 @@ use crate::{
         ActionableEvidenceRow, EvidenceMoment, EvidenceRowControl, OfferedAction, StepActionButton,
         StepChoiceRow, StepEvidenceRow, StepPhase, TimelineStep, TimelineStepRowOutput,
     },
+    translated_messages,
 };
 
 pub enum TimelineDetailRow<StepAction> {
@@ -163,7 +163,7 @@ fn copy_button<StepAction: StepActionButton>(
 ) -> gtk::Button {
     let copy_button = gtk::Button::builder()
         .icon_name("edit-copy-symbolic")
-        .tooltip_text(gettext("Copy"))
+        .tooltip_text(translated_messages::widgets::copy_timeline_tooltip())
         .valign(gtk::Align::Center)
         .css_classes(["flat"])
         .build();

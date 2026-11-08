@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, gtk::gio,
     prelude::FactoryVecDeque,
@@ -18,6 +17,7 @@ use crate::{
     scans::manual_scan_page::exclusions_page::scan_exclusion_row::{
         ScanExclusionRow, ScanExclusionRowOutput, is_preset_pattern,
     },
+    translated_messages,
 };
 
 pub struct ScanExclusionsSection {
@@ -109,20 +109,16 @@ impl Component for ScanExclusionsSection {
             set_spacing: 24,
 
             adw::PreferencesGroup {
-                set_title: &gettext("Preset Exclusions"),
-                set_description: Some(&gettext(
-                    "Common directories to exclude from scanning. Changes save immediately.",
-                )),
+                set_title: &translated_messages::scans::preset_exclusions_title(),
+                set_description: Some(&translated_messages::scans::common_directories_exclude_description()),
 
                 #[local_ref]
                 preset_list -> gtk::ListBox {},
             },
 
             adw::PreferencesGroup {
-                set_title: &gettext("Custom Exclusions"),
-                set_description: Some(&gettext(
-                    "Enter an absolute path or a pattern such as *.tmp. Changes save immediately.",
-                )),
+                set_title: &translated_messages::scans::custom_exclusions_title(),
+                set_description: Some(&translated_messages::scans::enter_absolute_path_description()),
 
                 gtk::ListBox {
                     add_css_class: "boxed-list",
@@ -130,7 +126,7 @@ impl Component for ScanExclusionsSection {
                     set_margin_bottom: 12,
 
                     adw::EntryRow {
-                        set_title: &gettext("/path/to/exclude or *.tmp"),
+                        set_title: &translated_messages::scans::path_exclude_tmp_title(),
                         set_show_apply_button: true,
                         #[track(model.draft_cleared)]
                         set_text: "",

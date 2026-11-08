@@ -1,5 +1,4 @@
 use futures::StreamExt;
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     abstractions::Toaster, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
@@ -42,6 +41,7 @@ use crate::{
             system_changes_state::AuditTopic,
         },
     },
+    translated_messages,
 };
 
 pub struct OnAccessPage {
@@ -132,11 +132,11 @@ impl Component for OnAccessPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&gettext("Check again")),
+                            set_tooltip_text: Some(&translated_messages::scans::check_again_access_tooltip()),
                             connect_clicked => OnAccessPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                            set_tooltip_text: Some(&gettext("Checking")),
+                            set_tooltip_text: Some(&translated_messages::scans::checking_access_tooltip()),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -170,7 +170,7 @@ impl Component for OnAccessPage {
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(gettext("Status"))
+                        .title(translated_messages::scans::status_access_title())
                         .build(),
                 )
                 .forward(sender.input_sender(), OnAccessPageInput::StepRequested),
@@ -185,24 +185,23 @@ impl Component for OnAccessPage {
             system_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
                     audit_topic: AuditTopic::OnAccessChanges,
-                    group_description: gettext(
-                        "On-access settings changed through Lazaret, as recorded by the system. \
-                         Software running as you can't remove these records.",
-                    ),
-                    empty_title: gettext("No on-access settings were changed through Lazaret"),
+                    group_description:
+                        translated_messages::scans::access_settings_changed_description(),
+                    empty_title: translated_messages::scans::no_access_settings_title(),
                 })
                 .detach(),
             clamonacc_log_group: ServiceLogGroup::builder()
                 .launch(ServiceLogGroupInit {
-                    group_title: gettext("clamonacc log"),
-                    missing_log_title: gettext("clamonacc has not written to the journal"),
+                    group_title: translated_messages::scans::clamonacc_log_title(),
+                    missing_log_title: translated_messages::scans::clamonacc_not_written_title(),
                     export_file_name: "clamonacc-logs.txt",
                     log_updates: unit_journal_log_updates(&ON_ACCESS_SERVICE_UNITS).boxed(),
                 })
                 .forward(sender.input_sender(), page_input_for_log_output),
         };
         let status_group = &model.status_rows.widget().clone();
-        let status_loading_page = &loading_status_page(&gettext("Checking on-access scanning…"));
+        let status_loading_page =
+            &loading_status_page(&translated_messages::scans::checking_access_scanning());
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -243,8 +242,9 @@ impl Component for OnAccessPage {
                 copied_command,
             )) => {
                 root.clipboard().set_text(&copied_command);
-                self.toaster
-                    .add_toast(adw::Toast::new(&gettext("Command copied to clipboard")));
+                self.toaster.add_toast(adw::Toast::new(
+                    &translated_messages::scans::command_copied_clipboard_access(),
+                ));
             }
             OnAccessPageInput::LogToastRequested(toast_text) => {
                 self.toaster.add_toast(plain_text_toast(&toast_text));

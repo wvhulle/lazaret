@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -26,6 +25,7 @@ use crate::{
         threat_intel::file_reputation_check::{ReputationAnswers, SourceAnswer},
     },
     shared_widgets::submission_confirm_dialog::ClamavReportProposal,
+    translated_messages,
 };
 
 pub fn quarantined_false_positive_detection(
@@ -80,12 +80,12 @@ impl QuarantineEntryRow {
 
     fn recheck_label(&self) -> String {
         match &self.row_state.recheck_state {
-            RowRecheckState::Rechecking => gettext("Checking…"),
+            RowRecheckState::Rechecking => translated_messages::findings::checking_label(),
             RowRecheckState::Rechecked(ContentVerdict::NoLongerDetected) => {
-                gettext("No longer detected")
+                translated_messages::findings::no_longer_detected()
             }
             RowRecheckState::Rechecked(ContentVerdict::StillDetected { .. }) => {
-                gettext("Still detected")
+                translated_messages::findings::still_detected()
             }
             RowRecheckState::Rechecked(ContentVerdict::VerdictUnavailable(_))
             | RowRecheckState::NotRechecked => String::new(),
@@ -112,10 +112,9 @@ impl QuarantineEntryRow {
     fn payload_hash_text(&self) -> String {
         match &self.entry_record.payload_hash {
             RecordedPayloadHash::KnownSha256 { sha256_hex } => sha256_hex.clone(),
-            RecordedPayloadHash::IntegrityUnknown => gettext(
-                "Unknown. This quarantine record has no usable hash, so the file cannot be \
-                 verified, checked online, trusted or restored. You can still delete it.",
-            ),
+            RecordedPayloadHash::IntegrityUnknown => {
+                translated_messages::findings::unknown_quarantine_record_no()
+            }
         }
     }
 
@@ -139,8 +138,8 @@ impl QuarantineEntryRow {
 
     fn source_answer_text(&self, chosen_source: fn(&ReputationAnswers) -> &SourceAnswer) -> String {
         match &self.row_state.row_reputation {
-            RowReputation::NotChecked => gettext("Not checked yet"),
-            RowReputation::CheckingReputation => gettext("Checking…"),
+            RowReputation::NotChecked => translated_messages::findings::not_checked(),
+            RowReputation::CheckingReputation => translated_messages::findings::checking_label(),
             RowReputation::ReputationChecked(reputation_answers) => {
                 chosen_source(reputation_answers).displayed_text()
             }
@@ -222,14 +221,14 @@ impl FactoryComponent for QuarantineEntryRow {
             },
 
             add_suffix = &gtk::Label {
-                set_label: &gettext("Integrity Unknown"),
+                set_label: &translated_messages::findings::integrity_unknown_label(),
                 set_valign: gtk::Align::Center,
                 set_css_classes: &["caption-heading", "warning"],
                 set_visible: self.known_sha256_hex().is_none(),
             },
 
             add_suffix = &gtk::Button {
-                set_label: &gettext("Restore"),
+                set_label: &translated_messages::findings::restore_label(),
                 set_valign: gtk::Align::Center,
                 #[watch]
                 set_sensitive: self.known_sha256_hex().is_some() && self.actions_available(),
@@ -239,7 +238,7 @@ impl FactoryComponent for QuarantineEntryRow {
             },
 
             add_suffix = &gtk::Button {
-                set_label: &gettext("Delete"),
+                set_label: &translated_messages::findings::delete_entry_label(),
                 set_valign: gtk::Align::Center,
                 add_css_class: "destructive-action",
                 #[watch]
@@ -250,12 +249,12 @@ impl FactoryComponent for QuarantineEntryRow {
             },
 
             add_row = &adw::ActionRow {
-                set_title: &gettext("Reputation"),
-                set_subtitle: &gettext("Only the file's SHA-256 hash is sent. The file itself never leaves this computer."),
+                set_title: &translated_messages::findings::reputation_title(),
+                set_subtitle: &translated_messages::findings::file_sha_256_subtitle(),
                 set_subtitle_lines: 0,
 
                 add_suffix = &gtk::Button {
-                    set_label: &gettext("Check"),
+                    set_label: &translated_messages::findings::check_label(),
                     set_valign: gtk::Align::Center,
                     #[watch]
                     set_sensitive: self.known_sha256_hex().is_some() && !self.reputation_check_running(),
@@ -273,7 +272,7 @@ impl FactoryComponent for QuarantineEntryRow {
                 set_subtitle: &self.source_answer_text(bazaar_source),
 
                 add_suffix = &gtk::Button {
-                    set_label: &gettext("Add Key"),
+                    set_label: &translated_messages::findings::add_key_label(),
                     set_valign: gtk::Align::Center,
                     #[watch]
                     set_visible: self.source_needs_key(bazaar_source),
@@ -286,7 +285,7 @@ impl FactoryComponent for QuarantineEntryRow {
                 set_subtitle: &self.source_answer_text(virustotal_source),
 
                 add_suffix = &gtk::Button {
-                    set_label: &gettext("Add Key"),
+                    set_label: &translated_messages::findings::add_key_label(),
                     set_valign: gtk::Align::Center,
                     #[watch]
                     set_visible: self.source_needs_key(virustotal_source),
@@ -294,7 +293,7 @@ impl FactoryComponent for QuarantineEntryRow {
                 },
 
                 add_suffix = &gtk::Button {
-                    set_label: &gettext("View Report"),
+                    set_label: &translated_messages::findings::view_report_label(),
                     set_valign: gtk::Align::Center,
                     #[watch]
                     set_visible: self.virustotal_report_url().is_some(),
@@ -303,27 +302,27 @@ impl FactoryComponent for QuarantineEntryRow {
             },
 
             add_row = &adw::ActionRow {
-                set_title: &gettext("False Positive"),
-                set_subtitle: &gettext("Trust… stops ClamAV reporting this exact file on this computer and lists it under Trusted Detections; restore it afterwards. Report… sends it to Cisco Talos, so a later signature update fixes the detection for everyone."),
+                set_title: &translated_messages::findings::false_positive_title(),
+                set_subtitle: &translated_messages::findings::trust_stops_clamav_subtitle(),
                 set_subtitle_lines: 0,
 
                 add_suffix = &gtk::Button {
-                    set_label: &gettext("Report…"),
+                    set_label: &translated_messages::findings::report_label(),
                     set_valign: gtk::Align::Center,
                     set_visible: quarantined_false_positive_detection(&self.entry_record).is_some(),
                     connect_clicked => QuarantineEntryRowInput::FalsePositiveReportRequested,
                 },
 
                 add_suffix = &gtk::Button {
-                    set_label: &gettext("Submit…"),
+                    set_label: &translated_messages::findings::submit_quarantine_label(),
                     set_valign: gtk::Align::Center,
-                    set_tooltip_text: Some(&gettext("Send it to ClamAV, MalwareBazaar or VirusTotal")),
+                    set_tooltip_text: Some(&translated_messages::findings::send_clamav_malwarebazaar_tooltip()),
                     set_sensitive: self.known_sha256_hex().is_some(),
                     connect_clicked => QuarantineEntryRowInput::SubmissionRequested,
                 },
 
                 add_suffix = &gtk::Button {
-                    set_label: &gettext("Trust…"),
+                    set_label: &translated_messages::findings::trust_label(),
                     set_valign: gtk::Align::Center,
                     set_sensitive: self.known_sha256_hex().is_some(),
                     connect_clicked => QuarantineEntryRowInput::TrustFileRequested,
@@ -340,7 +339,7 @@ impl FactoryComponent for QuarantineEntryRow {
 
                 add_suffix = &gtk::Button {
                     set_icon_name: "edit-copy-symbolic",
-                    set_tooltip_text: Some(&gettext("Copy Hash")),
+                    set_tooltip_text: Some(&translated_messages::findings::copy_hash_tooltip()),
                     set_valign: gtk::Align::Center,
                     set_visible: self.known_sha256_hex().is_some(),
                     add_css_class: "flat",

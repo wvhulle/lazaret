@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{Sender, adw, adw::prelude::*, gtk};
 
 use crate::{
@@ -12,6 +11,7 @@ use crate::{
     shared_widgets::awaited_dialogs::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,7 +82,7 @@ fn assembled_body(
     [
         file_line,
         shown_path.to_owned(),
-        gettext("What is sent:"),
+        translated_messages::widgets::what_is_sent_label(),
         sent_items_text(sent_items),
         audience_text,
     ]
@@ -90,12 +90,7 @@ fn assembled_body(
 }
 
 fn clamav_audience_text() -> String {
-    gettext(
-        "Cisco Talos, the team behind ClamAV, reviews it. Samples are processed by automation, \
-         only Talos can access them, and they are never made public or shared with other \
-         companies. A review takes at least 48 hours, and its outcome shows up in a later \
-         signature database version.",
-    )
+    translated_messages::widgets::cisco_talos_team_behind()
 }
 
 pub fn confirmation_text(submission_proposal: &SubmissionProposal) -> ConfirmationText {
@@ -103,33 +98,27 @@ pub fn confirmation_text(submission_proposal: &SubmissionProposal) -> Confirmati
         SubmissionProposal::ClamavReportProposed(report_proposal) => {
             let (heading, mut sent_items) = match &report_proposal.report_kind {
                 ClamavReportKind::FalsePositive { detection_name } => (
-                    gettext("Report a False Positive to ClamAV?"),
+                    translated_messages::widgets::report_false_positive_clamav(),
                     vec![
-                        gettext("The file's content"),
-                        gettext("The detection name {detection}")
-                            .replace("{detection}", detection_name),
+                        translated_messages::widgets::file_content(),
+                        translated_messages::widgets::detection_name(detection_name),
                     ],
                 ),
                 ClamavReportKind::MissedMalware => (
-                    gettext("Report Missed Malware to ClamAV?"),
-                    vec![gettext("The file's content")],
+                    translated_messages::widgets::report_missed_malware_clamav(),
+                    vec![translated_messages::widgets::file_content()],
                 ),
             };
-            sent_items.push(gettext(
-                "Your name and email address, so Talos can contact you",
-            ));
+            sent_items.push(translated_messages::widgets::name_email_address_talos());
             ConfirmationText {
                 heading,
                 body_text: assembled_body(
-                    gettext(
-                        "Lazaret sends this file to ClamAV with clamsubmit. Only send files that \
-                         contain nothing private.",
-                    ),
+                    translated_messages::widgets::lazaret_sends_file_clamav(),
                     &sent_items,
                     clamav_audience_text(),
                     &report_proposal.shown_path,
                 ),
-                confirm_label: gettext("Send Report"),
+                confirm_label: translated_messages::widgets::send_report_button(),
             }
         }
         SubmissionProposal::SampleUploadProposed(upload_proposal) => {
@@ -139,43 +128,36 @@ pub fn confirmation_text(submission_proposal: &SubmissionProposal) -> Confirmati
 }
 
 fn sample_upload_text(upload_proposal: &SampleUploadProposal) -> ConfirmationText {
-    let hashed_content = gettext("The file's content, named by its SHA-256 hash, not by its name");
+    let hashed_content = translated_messages::widgets::file_content_named_sha();
     match &upload_proposal.upload_service {
         UploadService::MalwareBazaarUpload { signature_name } => ConfirmationText {
-            heading: gettext("Upload to MalwareBazaar?"),
+            heading: translated_messages::widgets::upload_malwarebazaar_heading(),
             body_text: assembled_body(
-                gettext("Lazaret uploads this file to MalwareBazaar, run by abuse.ch."),
+                translated_messages::widgets::lazaret_uploads_file_malwarebazaar(),
                 &[
                     hashed_content,
-                    gettext("The tag {tag}, from ClamAV's detection")
-                        .replace("{tag}", &bazaar_signature_tag(signature_name)),
-                    gettext("Your abuse.ch key; the sample is listed without your account name"),
+                    translated_messages::widgets::tag_clamav_detection(bazaar_signature_tag(
+                        signature_name,
+                    )),
+                    translated_messages::widgets::abuse_ch_key_sample(),
                 ],
-                gettext(
-                    "MalwareBazaar is public: anyone can download the sample once it is uploaded, \
-                     and an upload can't be taken back. Only upload malware, never a document \
-                     that could hold personal data.",
-                ),
+                translated_messages::widgets::malwarebazaar_public_anyone_download(),
                 &upload_proposal.shown_path,
             ),
-            confirm_label: gettext("Upload Publicly"),
+            confirm_label: translated_messages::widgets::upload_publicly_button(),
         },
         UploadService::VirusTotalUpload => ConfirmationText {
-            heading: gettext("Upload to VirusTotal?"),
+            heading: translated_messages::widgets::upload_virustotal_heading(),
             body_text: assembled_body(
-                gettext("Lazaret uploads this file to VirusTotal for analysis."),
+                translated_messages::widgets::lazaret_uploads_file_virustotal(),
                 &[
                     hashed_content,
-                    gettext("Your VirusTotal key, which links the upload to your account"),
+                    translated_messages::widgets::virustotal_key_links_upload(),
                 ],
-                gettext(
-                    "VirusTotal shares uploaded files with its paying customers, who can download \
-                     them, and anyone can look up the result by the file's hash. Never upload a \
-                     document that could hold personal data.",
-                ),
+                translated_messages::widgets::virustotal_shares_uploaded_files(),
                 &upload_proposal.shown_path,
             ),
-            confirm_label: gettext("Upload"),
+            confirm_label: translated_messages::widgets::upload_button(),
         },
     }
 }
@@ -190,7 +172,10 @@ fn contact_from_rows(name_row: &adw::EntryRow, email_row: &adw::EntryRow) -> Rep
 fn confirmation_dialog(confirmation: &ConfirmationText) -> adw::AlertDialog {
     let submission_dialog =
         adw::AlertDialog::new(Some(&confirmation.heading), Some(&confirmation.body_text));
-    add_dismissing_choice::<SubmissionDialogChoice>(&submission_dialog, &gettext("Cancel"));
+    add_dismissing_choice::<SubmissionDialogChoice>(
+        &submission_dialog,
+        &translated_messages::widgets::cancel_submission(),
+    );
     add_alert_choice(
         &submission_dialog,
         SubmissionDialogChoice::SendChosen,
@@ -214,9 +199,11 @@ pub fn present_clamav_report_confirmation<Message: 'static>(
     let report_dialog = confirmation_dialog(&confirmation_text(
         &SubmissionProposal::ClamavReportProposed(report_proposal.clone()),
     ));
-    let name_row = adw::EntryRow::builder().title(gettext("Your Name")).build();
+    let name_row = adw::EntryRow::builder()
+        .title(translated_messages::widgets::name_title())
+        .build();
     let email_row = adw::EntryRow::builder()
-        .title(gettext("Your Email Address"))
+        .title(translated_messages::widgets::email_address_title())
         .input_purpose(gtk::InputPurpose::Email)
         .build();
     let contact_list = gtk::ListBox::builder()

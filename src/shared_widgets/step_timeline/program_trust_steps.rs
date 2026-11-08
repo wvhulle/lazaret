@@ -1,5 +1,3 @@
-use gettextrs::gettext;
-
 use crate::{
     host_services::{
         clamav_programs::trusted_program_lookup::ClamavProgram,
@@ -11,6 +9,7 @@ use crate::{
         step_evidence_builders::{CheckedCondition, evidence_row, no_guidance_step, plain_rows},
         timeline_step_contents::{SettledStep, StepActionButton, StepEvidenceRow, TimelineStep},
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,12 +38,12 @@ fn program_trust_rows(program_trust_finding: &ProgramTrustFinding) -> Vec<StepEv
             trusted_path,
             ignored_paths,
         } => std::iter::once(evidence_row(
-            gettext("{program} in use").replace("{program}", program_name),
+            translated_messages::widgets::program_use(program_name),
             trusted_path.clone(),
         ))
         .chain(ignored_paths.iter().map(|ignored_path| {
             evidence_row(
-                gettext("Ignored {program}").replace("{program}", program_name),
+                translated_messages::widgets::ignored_program(program_name),
                 ignored_path.clone(),
             )
         }))
@@ -56,7 +55,7 @@ fn program_trust_rows(program_trust_finding: &ProgramTrustFinding) -> Vec<StepEv
             .iter()
             .map(|replaceable_path| {
                 evidence_row(
-                    gettext("Refused {program}").replace("{program}", program_name),
+                    translated_messages::widgets::refused_program(program_name),
                     replaceable_path.clone(),
                 )
             })
@@ -110,23 +109,21 @@ pub fn program_trust_condition(
 
 fn program_trust_title(program_group: TrustedProgramGroup) -> String {
     match program_group {
-        TrustedProgramGroup::ScannerPrograms => gettext("Scanner programs can be trusted"),
-        TrustedProgramGroup::UpdaterPrograms => gettext("freshclam can be trusted"),
+        TrustedProgramGroup::ScannerPrograms => {
+            translated_messages::widgets::scanner_programs_trusted()
+        }
+        TrustedProgramGroup::UpdaterPrograms => translated_messages::widgets::freshclam_trusted(),
     }
 }
 
 fn program_trust_details(program_group: TrustedProgramGroup) -> String {
     match program_group {
-        TrustedProgramGroup::ScannerPrograms => gettext(
-            "Malware running as you could put a fake clamdscan earlier on your search path that \
-             reports every file as clean. Lazaret only runs ClamAV programs that your account \
-             can't replace, such as the ones installed for the whole system.",
-        ),
-        TrustedProgramGroup::UpdaterPrograms => gettext(
-            "Malware running as you could put a fake freshclam earlier on your search path that \
-             pretends to fetch new signatures. Lazaret only runs ClamAV programs that your \
-             account can't replace, such as the ones installed for the whole system.",
-        ),
+        TrustedProgramGroup::ScannerPrograms => {
+            translated_messages::widgets::malware_running_clamdscan()
+        }
+        TrustedProgramGroup::UpdaterPrograms => {
+            translated_messages::widgets::malware_running_freshclam()
+        }
     }
 }
 
@@ -148,7 +145,7 @@ pub fn program_trust_step<StepAction: StepActionButton>(
             program_trust_title(program_group),
             program_trust_details(program_group),
             program_trust_condition(program_trust, program_group).node_state(),
-            gettext("Unknown, because checking the ClamAV programs stopped before it finished"),
+            translated_messages::widgets::unknown_checking_clamav_programs(),
         )),
     }
 }
@@ -169,12 +166,9 @@ fn program_findings_step<StepAction: StepActionButton>(
     let node_state =
         program_findings_condition(program_trust_findings.iter().copied()).node_state();
     let status_text = if any_program_refused {
-        gettext("A ClamAV program can be replaced by your account, so Lazaret refuses to run it")
+        translated_messages::widgets::clamav_program_replaced_account()
     } else {
-        gettext(
-            "A ClamAV program in your account shadows the system copy. Lazaret ignores it, but \
-             check where it came from",
-        )
+        translated_messages::widgets::clamav_program_account_shadows()
     };
     Some(TimelineStep::settled(
         program_trust_title(program_group),

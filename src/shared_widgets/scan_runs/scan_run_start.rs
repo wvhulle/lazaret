@@ -1,7 +1,6 @@
 use std::{path::PathBuf, time::Instant};
 
 use futures::{StreamExt, future::ready, stream};
-use gettextrs::gettext;
 use jiff::Timestamp;
 use relm4::{
     Component, ComponentSender,
@@ -41,6 +40,7 @@ use crate::{
             },
         },
     },
+    translated_messages,
 };
 
 const PROGRESS_BATCH_SIZE: usize = 256;
@@ -156,9 +156,13 @@ pub fn finished_results_status(finished_scan: &FinishedScan) -> ScanResultsStatu
 
 pub fn notify_finished_scan(finished_scan: &FinishedScan) {
     let notification_title = match finished_results_status(finished_scan) {
-        ScanResultsStatus::ThreatsDetected => gettext("Threats Detected"),
-        ScanResultsStatus::NoThreatsDetected => gettext("No threats found"),
-        ScanResultsStatus::FinishedWithProblems => gettext("The scan did not finish cleanly"),
+        ScanResultsStatus::ThreatsDetected => translated_messages::widgets::threats_detected_run(),
+        ScanResultsStatus::NoThreatsDetected => {
+            translated_messages::widgets::no_threats_found_run()
+        }
+        ScanResultsStatus::FinishedWithProblems => {
+            translated_messages::widgets::scan_not_finish_run()
+        }
         ScanResultsStatus::ScanCancelled => return,
     };
     notify_outside_the_window(

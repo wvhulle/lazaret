@@ -1,5 +1,4 @@
 use futures::{StreamExt, stream::BoxStream};
-use gettextrs::gettext;
 use jiff::tz::TimeZone;
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk,
@@ -21,6 +20,7 @@ use crate::{
             ShownLogRow, exported_log_text, filtered_log_rows,
         },
     },
+    translated_messages,
 };
 
 pub struct ServiceLogGroupInit {
@@ -104,7 +104,7 @@ impl Component for ServiceLogGroup {
 
                 gtk::ToggleButton {
                     set_icon_name: "dialog-warning-symbolic",
-                    set_tooltip_text: Some(&gettext("Only detections, warnings and errors")),
+                    set_tooltip_text: Some(&translated_messages::widgets::detections_warnings_errors_tooltip()),
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: model.log_view.has_log_rows(),
@@ -117,7 +117,7 @@ impl Component for ServiceLogGroup {
 
                 gtk::Button {
                     set_icon_name: "edit-copy-symbolic",
-                    set_tooltip_text: Some(&gettext("Copy")),
+                    set_tooltip_text: Some(&translated_messages::widgets::copy_service_tooltip()),
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: model.log_view.has_log_rows(),
@@ -126,7 +126,7 @@ impl Component for ServiceLogGroup {
 
                 gtk::Button {
                     set_icon_name: "document-save-symbolic",
-                    set_tooltip_text: Some(&gettext("Export Text")),
+                    set_tooltip_text: Some(&translated_messages::widgets::export_text_tooltip()),
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: model.log_view.has_log_rows(),
@@ -139,7 +139,7 @@ impl Component for ServiceLogGroup {
                 set_spacing: 6,
 
                 gtk::SearchEntry {
-                    set_placeholder_text: Some(&gettext("Search log")),
+                    set_placeholder_text: Some(&translated_messages::widgets::search_log_placeholder()),
                     #[watch]
                     set_visible: model.log_view.has_log_rows(),
                     connect_search_changed[sender] => move |search_entry| {
@@ -153,7 +153,7 @@ impl Component for ServiceLogGroup {
                     add_named[Some(LOADING_PAGE_NAME)] = &gtk::ListBox {
                         add_css_class: "boxed-list",
                         set_selection_mode: gtk::SelectionMode::None,
-                        append: &loading_placeholder_row(&gettext("Reading the log…")),
+                        append: &loading_placeholder_row(&translated_messages::widgets::reading_log()),
                     },
                     add_named[Some(MISSING_LOG_PAGE_NAME)] = &gtk::ListBox {
                         add_css_class: "boxed-list",
@@ -163,7 +163,7 @@ impl Component for ServiceLogGroup {
                     add_named[Some(NO_MATCHING_ROWS_PAGE_NAME)] = &gtk::ListBox {
                         add_css_class: "boxed-list",
                         set_selection_mode: gtk::SelectionMode::None,
-                        append: &empty_placeholder_row(&gettext("No log lines match")),
+                        append: &empty_placeholder_row(&translated_messages::widgets::no_log_lines_match()),
                     },
                     add_named[Some(LOADED_PAGE_NAME)] = &gtk::Frame {
                         gtk::ScrolledWindow {
@@ -222,7 +222,10 @@ impl Component for ServiceLogGroup {
             ServiceLogGroupInput::CopyLogRequested => {
                 if let Some(log_text) = self.exported_log() {
                     root.clipboard().set_text(&log_text);
-                    Self::request_toast(&sender, gettext("Log copied to clipboard"));
+                    Self::request_toast(
+                        &sender,
+                        translated_messages::widgets::log_copied_clipboard(),
+                    );
                 }
             }
             ServiceLogGroupInput::ExportLogRequested => {
@@ -259,7 +262,7 @@ impl Component for ServiceLogGroup {
                 self.refill_log_table();
             }
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::TextSaved) => {
-                Self::request_toast(&sender, gettext("Exported."));
+                Self::request_toast(&sender, translated_messages::widgets::exported_label());
             }
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::ExportCancelled) => {}
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::ExportFailed(

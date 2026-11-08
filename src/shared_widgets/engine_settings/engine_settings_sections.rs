@@ -3,7 +3,6 @@ use std::time::Duration;
 use clamd_configuration::{
     override_reports::OverrideLifetime, protection_rules::ProtectionReduction,
 };
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, adw,
     adw::prelude::*, gtk, gtk::glib, prelude::FactoryVecDeque,
@@ -52,6 +51,7 @@ use crate::{
             },
         },
     },
+    translated_messages,
 };
 
 const UNLOCK_DURATION: Duration = Duration::from_secs(120);
@@ -66,9 +66,9 @@ pub enum EngineSettingsSection {
 impl EngineSettingsSection {
     fn group_title(self) -> String {
         match self {
-            Self::ScannerEngine => gettext("clamd settings"),
-            Self::OnAccessScanning => gettext("On-access scanning settings"),
-            Self::SignatureUpdates => gettext("Update settings"),
+            Self::ScannerEngine => translated_messages::widgets::clamd_settings(),
+            Self::OnAccessScanning => translated_messages::widgets::access_scanning_settings(),
+            Self::SignatureUpdates => translated_messages::widgets::update_settings(),
         }
     }
 
@@ -341,11 +341,11 @@ pub enum EngineSettingsSectionsCommand {
 pub fn describe_engine_settings_notice(settings_notice: &EngineSettingsNotice) -> String {
     match settings_notice {
         EngineSettingsNotice::ChangeSnippetCopied => {
-            gettext("Copied. Add it to your configuration to apply it.")
+            translated_messages::widgets::copied_add_configuration_apply()
         }
-        EngineSettingsNotice::StaleConfirmationDropped => gettext(
-            "The change was not made: the settings locked again or another change started first.",
-        ),
+        EngineSettingsNotice::StaleConfirmationDropped => {
+            translated_messages::widgets::change_not_made_settings()
+        }
         EngineSettingsNotice::LiveChangeReported(change_outcome) => {
             describe_live_change_outcome(change_outcome)
         }
@@ -362,12 +362,9 @@ pub fn engine_settings_notice_toast(settings_notice: &EngineSettingsNotice) -> a
 fn describe_live_change_outcome(change_outcome: &LiveChangeOutcome) -> String {
     match change_outcome {
         LiveChangeOutcome::SettingsApplied => {
-            gettext("Applied, but not yet in your system configuration.")
+            translated_messages::widgets::applied_not_system_configuration()
         }
-        LiveChangeOutcome::PreviousRestored => gettext(
-            "ClamAV didn't come back healthy with that value, so the previous settings were \
-             restored.",
-        ),
+        LiveChangeOutcome::PreviousRestored => translated_messages::widgets::clamav_not_come_back(),
         LiveChangeOutcome::NothingChanged(change_failure) => {
             live_change_failure_text(change_failure)
         }
@@ -376,15 +373,15 @@ fn describe_live_change_outcome(change_outcome: &LiveChangeOutcome) -> String {
 
 fn live_change_failure_text(change_failure: &LiveChangeFailure) -> String {
     let change_not_made = |failure_reason: &str| {
-        gettext("The change was not made: {error}")
-            .replace("{error}", &sanitize_scanner_line(failure_reason))
+        translated_messages::widgets::change_not_made_error(sanitize_scanner_line(failure_reason))
     };
     match change_failure {
-        LiveChangeFailure::AuthorizationRefused => gettext("Nothing changed without your password"),
-        LiveChangeFailure::AdminServiceMissing => gettext(
-            "This installation has no ClamAV admin service, so ClamAV's settings can't be changed \
-             from Lazaret",
-        ),
+        LiveChangeFailure::AuthorizationRefused => {
+            translated_messages::widgets::nothing_changed_without_password()
+        }
+        LiveChangeFailure::AdminServiceMissing => {
+            translated_messages::widgets::installation_no_clamav_admin()
+        }
         LiveChangeFailure::UnknownAdminServiceAnswer {
             admin_service_answer,
         } => change_not_made(admin_service_answer),
@@ -399,12 +396,7 @@ fn live_change_failure_text(change_failure: &LiveChangeFailure) -> String {
 }
 
 fn live_tunable_config_description(config_path: &str) -> String {
-    gettext(
-        "{path} combines your system configuration with the changes made here. While locked, \
-         settings are read-only: use Copy configuration line to copy one for your configuration. \
-         After unlocking, the allowed settings change directly.",
-    )
-    .replace("{path}", config_path)
+    translated_messages::widgets::path_combines_system_configuration(config_path)
 }
 
 struct ProposedLiveChange {
@@ -446,7 +438,7 @@ fn present_live_change_confirmation(
     } = proposed_change;
     let effect = change_effect(&setting_key, current_values, &new_values);
     let confirmation_dialog = adw::AlertDialog::new(
-        Some(&gettext("Change this setting?")),
+        Some(&translated_messages::widgets::change_setting()),
         Some(&change_confirmation_text(
             &setting_key,
             current_values,
@@ -454,14 +446,17 @@ fn present_live_change_confirmation(
             effect,
         )),
     );
-    add_dismissing_choice::<SettingChangeChoice>(&confirmation_dialog, &gettext("Cancel"));
+    add_dismissing_choice::<SettingChangeChoice>(
+        &confirmation_dialog,
+        &translated_messages::widgets::cancel_engine(),
+    );
     add_alert_choice(
         &confirmation_dialog,
         SettingChangeChoice::ChangeApplied,
         &if effect != ProtectionReduction::NoReduction {
-            gettext("Reduce Protection")
+            translated_messages::widgets::reduce_protection()
         } else {
-            gettext("Apply")
+            translated_messages::widgets::apply_label()
         },
     );
     if effect != ProtectionReduction::NoReduction {
@@ -612,18 +607,13 @@ impl EngineSettingsSections {
         self.active_overrides()
             .iter()
             .filter_map(|active_override| match active_override.override_lifetime {
-                OverrideLifetime::ExpiresAt { expires_at } => Some(
-                    gettext("{key} {value}, until {time}")
-                        .replace(
-                            "{key}",
-                            &sanitize_scanner_line(&active_override.setting_key),
-                        )
-                        .replace(
-                            "{value}",
-                            &sanitize_scanner_line(&active_override.setting_value),
-                        )
-                        .replace("{time}", &exact_local_time_text(expires_at)),
-                ),
+                OverrideLifetime::ExpiresAt { expires_at } => {
+                    Some(translated_messages::widgets::key_value_until_time(
+                        sanitize_scanner_line(&active_override.setting_key),
+                        sanitize_scanner_line(&active_override.setting_value),
+                        exact_local_time_text(expires_at),
+                    ))
+                }
                 OverrideLifetime::Permanent => None,
             })
             .collect::<Vec<_>>()
@@ -703,24 +693,19 @@ impl EngineSettingsSections {
                 match self.admin_service_notice() {
                     AdminServiceNotice::LiveTuningNotInstalled => format!(
                         "{managed_description}\n\n{}",
-                        gettext(
-                            "Live tuning is not installed. On NixOS, enable \
-                             services.lazaret.liveTuning; on Debian and Ubuntu, install the \
-                             Lazaret package, which includes the ClamAV admin service."
-                        )
+                        translated_messages::widgets::live_tuning_not_installed()
                     ),
                     AdminServiceNotice::AdminServiceUnreachable => format!(
                         "{managed_description}\n\n{}",
-                        gettext(
-                            "Settings can't be changed here right now: the Lazaret ClamAV admin \
-                             service could not be reached."
-                        )
+                        translated_messages::widgets::settings_cannot_changed_here()
                     ),
                     AdminServiceNotice::NothingToExplain => managed_description,
                 }
             }
-            ConfigLoad::LoadingConfig => gettext("Reading the configuration…"),
-            ConfigLoad::ConfigMissing => gettext("Configuration file not found"),
+            ConfigLoad::LoadingConfig => translated_messages::widgets::reading_configuration(),
+            ConfigLoad::ConfigMissing => {
+                translated_messages::widgets::configuration_file_not_found()
+            }
         }
     }
 
@@ -842,9 +827,9 @@ impl EngineSettingsSections {
 
     fn unlock_label(&self) -> String {
         if self.is_unlocked() {
-            gettext("Lock")
+            translated_messages::widgets::lock_label()
         } else {
-            gettext("Unlock")
+            translated_messages::widgets::unlock_label()
         }
     }
 }
@@ -889,12 +874,8 @@ impl Component for EngineSettingsSections {
                 set_spacing: 24,
 
                 adw::PreferencesGroup {
-                    set_title: &gettext("Change Settings"),
-                    set_description: Some(&gettext(
-                        "Unlock to change the settings your system allows at runtime. Unlocking \
-                         grants nothing by itself: each change shows what will happen and asks \
-                         for administrator authorization. It locks again after two minutes.",
-                    )),
+                    set_title: &translated_messages::widgets::change_settings_title(),
+                    set_description: Some(&translated_messages::widgets::unlock_change_settings_description()),
                     #[watch]
                     set_visible: model.offers_live_changes(),
 
@@ -915,7 +896,7 @@ impl Component for EngineSettingsSections {
 
                     adw::ActionRow {
                         set_use_markup: false,
-                        set_title: &gettext("Changes your system configuration doesn't know about"),
+                        set_title: &translated_messages::widgets::changes_system_configuration_title(),
                         set_subtitle_selectable: true,
                         set_subtitle_lines: 0,
                         #[watch]
@@ -925,7 +906,7 @@ impl Component for EngineSettingsSections {
 
                         add_suffix = &gtk::Button {
                             set_icon_name: "edit-copy-symbolic",
-                            set_tooltip_text: Some(&gettext("Copy")),
+                            set_tooltip_text: Some(&translated_messages::widgets::copy_engine_tooltip()),
                             set_valign: gtk::Align::Center,
                             add_css_class: "flat",
                             connect_clicked => EngineSettingsSectionsInput::DriftSnippetCopyRequested,
@@ -934,7 +915,7 @@ impl Component for EngineSettingsSections {
 
                     adw::ActionRow {
                         set_use_markup: false,
-                        set_title: &gettext("Reduced protection that ends on its own"),
+                        set_title: &translated_messages::widgets::reduced_protection_ends_title(),
                         set_subtitle_lines: 0,
                         #[watch]
                         set_subtitle: &model.temporary_reductions_text(),
@@ -943,7 +924,7 @@ impl Component for EngineSettingsSections {
                     },
 
                     adw::ButtonRow {
-                        set_title: &gettext("Reset to System Configuration"),
+                        set_title: &translated_messages::widgets::reset_system_configuration_title(),
                         #[watch]
                         set_visible: !model.active_overrides().is_empty(),
                         #[watch]
@@ -954,11 +935,8 @@ impl Component for EngineSettingsSections {
 
                 #[local_ref]
                 detection_switch_group -> adw::PreferencesGroup {
-                    set_title: &gettext("Detection"),
-                    set_description: Some(&gettext(
-                        "What ClamAV reports in every scan on this computer. Lazaret passes the \
-                         same choices to clamscan, so both scanners agree.",
-                    )),
+                    set_title: &translated_messages::widgets::detection_title(),
+                    set_description: Some(&translated_messages::widgets::clamav_reports_every_description()),
                     #[watch]
                     set_visible: model.shows_detection_switches(),
                 },
@@ -973,7 +951,7 @@ impl Component for EngineSettingsSections {
 
 
                     adw::ActionRow {
-                        set_title: &gettext("No settings in this section"),
+                        set_title: &translated_messages::widgets::no_settings_section_title(),
                         #[watch]
                         set_visible: model.shows_empty_section_row(),
                     },

@@ -8,11 +8,10 @@ use clamd_configuration::{
     protection_rules::ProtectionReduction,
     tunable_record::{BaseSettings, LiveOverrides, TunableSettingName},
 };
-use gettextrs::gettext;
 use jiff::Timestamp;
 use zbus::{Connection, proxy};
 
-use crate::host_services::desktop::flatpak_sandbox::readable_host_path;
+use crate::{host_services::desktop::flatpak_sandbox::readable_host_path, translated_messages};
 
 #[proxy(
     interface = "page.codeberg.wvhulle.Lazaret.ClamavAdmin",
@@ -299,26 +298,26 @@ pub fn change_effect(
 
 fn reduction_headline(protection_reduction: ProtectionReduction) -> Option<String> {
     match protection_reduction {
-        ProtectionReduction::BlockingTurnedOff => Some(gettext(
-            "Detected files will no longer be blocked when opened. They are only reported.",
-        )),
-        ProtectionReduction::CheckTurnedOff => Some(gettext(
-            "ClamAV will stop checking for this kind of file or threat on this computer.",
-        )),
-        ProtectionReduction::WatchedFolderRemoved => Some(gettext(
-            "Files in the removed folder will no longer be checked when they are opened.",
-        )),
-        ProtectionReduction::SkippedLocationAdded => Some(gettext(
-            "ClamAV will skip the new entry entirely, so malware there goes unnoticed.",
-        )),
-        ProtectionReduction::ScanLimitLowered => Some(gettext(
-            "Files or archives above the new limit will be skipped without being checked.",
-        )),
-        ProtectionReduction::CurrentValuesUnknown => Some(gettext(
-            "The current value could not be read, so this change may reduce protection.",
-        )),
+        ProtectionReduction::BlockingTurnedOff => {
+            Some(translated_messages::host::detected_files_no_longer())
+        }
+        ProtectionReduction::CheckTurnedOff => {
+            Some(translated_messages::host::clamav_stop_checking_kind())
+        }
+        ProtectionReduction::WatchedFolderRemoved => {
+            Some(translated_messages::host::files_removed_folder_no())
+        }
+        ProtectionReduction::SkippedLocationAdded => {
+            Some(translated_messages::host::clamav_skip_new_entry())
+        }
+        ProtectionReduction::ScanLimitLowered => {
+            Some(translated_messages::host::files_archives_above_new())
+        }
+        ProtectionReduction::CurrentValuesUnknown => {
+            Some(translated_messages::host::current_value_not_read())
+        }
         ProtectionReduction::DetectionTrusted => {
-            Some(gettext("ClamAV will no longer report what you trust here."))
+            Some(translated_messages::host::clamav_no_longer_report())
         }
         ProtectionReduction::NoReduction => None,
     }
@@ -330,17 +329,15 @@ pub fn change_confirmation_text(
     new_values: &[String],
     protection_reduction: ProtectionReduction,
 ) -> String {
-    let change_lines = gettext("{key}\nNow: {current}\nNew: {new}")
-        .replace("{key}", setting_key)
-        .replace("{current}", &current_values.join(", "))
-        .replace("{new}", &new_values.join(", "));
+    let change_lines = translated_messages::host::key_now_current_new(
+        setting_key,
+        current_values.join(", "),
+        new_values.join(", "),
+    );
     match reduction_headline(protection_reduction) {
         Some(headline) => format!(
             "{headline}\n\n{change_lines}\n\n{}",
-            gettext(
-                "The system records that this change reduced protection, and the sidebar keeps \
-                 flagging the page of the changed setting until you undo it.",
-            )
+            translated_messages::host::system_records_change_reduced()
         ),
         None => change_lines,
     }

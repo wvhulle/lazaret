@@ -1,5 +1,3 @@
-use gettextrs::{gettext, ngettext};
-
 use crate::{
     host_services::{
         clamav_admin_service::live_settings_client::StoredOverridesFailure,
@@ -15,6 +13,7 @@ use crate::{
             SettledStep, StepActionButton, StepActionSlot, StepEvidenceRow, TimelineStep,
         },
     },
+    translated_messages,
 };
 
 const ON_ACCESS_KEY_PREFIX: &str = "OnAccess";
@@ -41,27 +40,24 @@ fn reduced_settings_status(
 ) -> String {
     let setting_count = u32::try_from(reduced_settings.len()).unwrap_or(u32::MAX);
     match change_time {
-        OverridesChangeTime::ChangedAt { changed_at } => ngettext(
-            "{count} setting checks less than configured since {time}",
-            "{count} settings check less than configured since {time}",
-            setting_count,
-        )
-        .replace("{time}", &exact_local_time_text(changed_at)),
-        OverridesChangeTime::ChangeTimeUnknown => ngettext(
-            "{count} setting checks less than configured, since a time that could not be read",
-            "{count} settings check less than configured, since a time that could not be read",
-            setting_count,
-        ),
+        OverridesChangeTime::ChangedAt { changed_at } => {
+            translated_messages::widgets::count_settings_reduced_since(
+                setting_count,
+                exact_local_time_text(changed_at),
+            )
+        }
+        OverridesChangeTime::ChangeTimeUnknown => {
+            translated_messages::widgets::count_settings_reduced_unknown_time(setting_count)
+        }
     }
-    .replace("{count}", &reduced_settings.len().to_string())
 }
 
 fn override_change_time_row(change_time: OverridesChangeTime) -> StepEvidenceRow {
     evidence_row(
-        gettext("Changed"),
+        translated_messages::widgets::changed_label(),
         match change_time {
             OverridesChangeTime::ChangedAt { changed_at } => exact_local_time_text(changed_at),
-            OverridesChangeTime::ChangeTimeUnknown => gettext("Unknown"),
+            OverridesChangeTime::ChangeTimeUnknown => translated_messages::widgets::unknown_label(),
         },
     )
 }
@@ -70,21 +66,13 @@ fn overrides_failure_text(read_failure: OverridesReadFailure) -> String {
     match read_failure {
         OverridesReadFailure::StoredOverridesUnusable(
             StoredOverridesFailure::OverridesFileUnreadable { failure_kind },
-        ) => gettext(
-            "Unknown whether settings were reduced, because the runtime changes could not be \
-             read: {error}",
-        )
-        .replace("{error}", &failure_kind.to_string()),
+        ) => translated_messages::widgets::reduction_unknown_unread(failure_kind),
         OverridesReadFailure::StoredOverridesUnusable(
             StoredOverridesFailure::OverridesFileInvalid,
-        ) => gettext(
-            "Unknown whether settings were reduced, because the runtime changes file is not in \
-             the expected format. ClamAV runs with the system configuration until it is fixed.",
-        ),
-        OverridesReadFailure::ReadingTaskInterrupted => gettext(
-            "Unknown whether settings were reduced, because reading the runtime changes stopped \
-             before it finished",
-        ),
+        ) => translated_messages::widgets::reduction_unknown_file(),
+        OverridesReadFailure::ReadingTaskInterrupted => {
+            translated_messages::widgets::reduction_unknown_reading()
+        }
     }
 }
 
@@ -148,12 +136,8 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
     match runtime_reductions {
         RuntimeReductions::NothingReduced => None,
         RuntimeReductions::OverridesUnreadable(read_failure) => Some(TimelineStep::settled(
-            gettext("Settings changed at runtime"),
-            gettext(
-                "Someone with the administrator password can change ClamAV settings at runtime. \
-                 Lazaret could not read those changes, so it can't tell whether they check less \
-                 than your configuration does.",
-            ),
+            translated_messages::widgets::settings_changed_runtime(),
+            translated_messages::widgets::administrator_can_change(),
             overrides_failure_text(*read_failure),
             SettledStep {
                 header_action,
@@ -167,20 +151,17 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
             let grouped_settings = reduced_settings_in_group(reduced_settings, setting_group);
             (!grouped_settings.is_empty()).then(|| {
                 TimelineStep::settled(
-                    gettext("Protection reduced on purpose"),
-                    gettext(
-                        "Someone with the administrator password changed ClamAV settings at \
-                         runtime in a way that checks less than your configuration does. The \
-                         system changes of the page that owns the setting show who and when.",
-                    ),
+                    translated_messages::widgets::protection_reduced_purpose(),
+                    translated_messages::widgets::administrator_changed_runtime(),
                     reduced_settings_status(&grouped_settings, *change_time),
                     SettledStep {
                         evidence_rows: plain_rows(grouped_settings.iter().map(|reduced_setting| {
                             evidence_row(
                                 reduced_setting.setting_key.clone(),
-                                gettext("{base} in your configuration, {changed} now")
-                                    .replace("{base}", &reduced_setting.base_value)
-                                    .replace("{changed}", &reduced_setting.changed_value),
+                                translated_messages::widgets::base_configuration_changed_now(
+                                    &reduced_setting.base_value,
+                                    &reduced_setting.changed_value,
+                                ),
                             )
                         })),
                         header_action,
@@ -196,17 +177,9 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
             let grouped_settings = overridden_settings_in_group(overridden_settings, setting_group);
             (!grouped_settings.is_empty()).then(|| {
                 TimelineStep::settled(
-                    gettext("Settings changed at runtime"),
-                    gettext(
-                        "Someone with the administrator password changed ClamAV settings at \
-                         runtime. Your clamd.conf could not be read, so Lazaret can't tell \
-                         whether these changes check less than your configuration does. The \
-                         system changes of the page that owns the setting show who and when.",
-                    ),
-                    gettext(
-                        "Settings were changed at runtime, but clamd.conf could not be read to \
-                         compare them",
-                    ),
+                    translated_messages::widgets::settings_changed_runtime(),
+                    translated_messages::widgets::administrator_changed_clamd(),
+                    translated_messages::widgets::settings_changed_runtime_clamd(),
                     SettledStep {
                         evidence_rows: plain_rows(
                             grouped_settings
@@ -214,8 +187,7 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
                                 .map(|overridden_setting| {
                                     evidence_row(
                                         overridden_setting.setting_key.clone(),
-                                        gettext("{changed} now").replace(
-                                            "{changed}",
+                                        translated_messages::widgets::changed_now(
                                             &overridden_setting.changed_value,
                                         ),
                                     )

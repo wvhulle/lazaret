@@ -1,9 +1,11 @@
-use gettextrs::gettext;
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
-use crate::host_services::clamav_scanner::{
-    scan_exclusion_rules::{ExclusionEntry, PRESET_DIRECTORY_NAMES},
-    scanner_output_parser::sanitize_scanner_line,
+use crate::{
+    host_services::clamav_scanner::{
+        scan_exclusion_rules::{ExclusionEntry, PRESET_DIRECTORY_NAMES},
+        scanner_output_parser::sanitize_scanner_line,
+    },
+    translated_messages,
 };
 
 pub fn is_preset_pattern(exclusion_pattern: &str) -> bool {
@@ -12,12 +14,12 @@ pub fn is_preset_pattern(exclusion_pattern: &str) -> bool {
 
 fn preset_description(exclusion_pattern: &str) -> String {
     match exclusion_pattern {
-        "node_modules" => gettext("Node.js dependencies"),
-        ".git" => gettext("Git repository data"),
-        ".venv" => gettext("Python virtual environment"),
-        "build" => gettext("Build output directory"),
-        "dist" => gettext("Distribution output directory"),
-        "__pycache__" => gettext("Python bytecode cache"),
+        "node_modules" => translated_messages::scans::node_js_dependencies(),
+        ".git" => translated_messages::scans::git_repository_data(),
+        ".venv" => translated_messages::scans::python_virtual_environment(),
+        "build" => translated_messages::scans::build_output_directory(),
+        "dist" => translated_messages::scans::distribution_output_directory(),
+        "__pycache__" => translated_messages::scans::python_bytecode_cache(),
         _other_pattern => String::new(),
     }
 }
@@ -74,7 +76,7 @@ impl FactoryComponent for ScanExclusionRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "user-trash-symbolic",
-                set_tooltip_text: Some(&gettext("Remove")),
+                set_tooltip_text: Some(&translated_messages::scans::remove_exclusion_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_visible: !self.is_preset(),

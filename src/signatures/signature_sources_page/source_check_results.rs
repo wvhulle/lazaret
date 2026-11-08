@@ -1,4 +1,4 @@
-use gettextrs::gettext;
+use crate::translated_messages;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AuditStatus {
@@ -22,12 +22,12 @@ const STATUS_SEVERITY_ORDER: [AuditStatus; 6] = [
 impl AuditStatus {
     pub fn status_label(self) -> String {
         match self {
-            Self::CheckPassed => gettext("Pass"),
-            Self::NeedsReview => gettext("Warning"),
-            Self::CheckFailed => gettext("Fail"),
-            Self::StatusUnknown => gettext("Unknown"),
-            Self::CheckSkipped => gettext("Skipped"),
-            Self::CheckInProgress => gettext("Checking"),
+            Self::CheckPassed => translated_messages::signatures::pass_label(),
+            Self::NeedsReview => translated_messages::signatures::warning_label(),
+            Self::CheckFailed => translated_messages::signatures::fail_label(),
+            Self::StatusUnknown => translated_messages::signatures::unknown_label(),
+            Self::CheckSkipped => translated_messages::signatures::skipped_label(),
+            Self::CheckInProgress => translated_messages::signatures::checking_label(),
         }
     }
 

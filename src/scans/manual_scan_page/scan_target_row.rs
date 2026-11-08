@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use gettextrs::gettext;
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -8,7 +7,10 @@ use relm4::{
     prelude::{DynamicIndex, FactoryComponent},
 };
 
-use crate::host_services::clamav_scanner::scanner_output_parser::sanitize_scanner_line;
+use crate::{
+    host_services::clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+    translated_messages,
+};
 
 pub struct ScanTargetRow {
     pub target_path: PathBuf,
@@ -43,7 +45,7 @@ impl FactoryComponent for ScanTargetRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "edit-delete-symbolic",
-                set_tooltip_text: Some(&gettext("Remove")),
+                set_tooltip_text: Some(&translated_messages::scans::remove_target_tooltip()),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 connect_clicked[sender, index] => move |_clicked_button| {

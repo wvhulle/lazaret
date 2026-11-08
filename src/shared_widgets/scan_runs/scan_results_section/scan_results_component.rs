@@ -1,5 +1,4 @@
 use futures::{StreamExt, stream};
-use gettextrs::{gettext, ngettext};
 use relm4::{
     Component, ComponentParts, ComponentSender, adw,
     adw::prelude::*,
@@ -44,6 +43,7 @@ use crate::{
         submission_confirm_dialog::{ClamavReportProposal, present_clamav_report_confirmation},
         trust_confirmation_dialog::present_trust_confirmation,
     },
+    translated_messages,
 };
 
 const EXPORT_FILE_NAME: &str = "lazaret_scan_results.txt";
@@ -159,12 +159,7 @@ impl ScanResultsSection {
 
     fn quarantine_all_label(&self) -> String {
         let remaining_threats = self.remaining_threat_count();
-        ngettext(
-            "Quarantine {count} Threat",
-            "Quarantine {count} Threats",
-            u32::try_from(remaining_threats).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &remaining_threats.to_string())
+        translated_messages::widgets::quarantine_count_threat(remaining_threats)
     }
 
     fn confirm_quarantine(
@@ -175,17 +170,20 @@ impl ScanResultsSection {
         sender: &ComponentSender<Self>,
     ) {
         let confirmation_dialog = adw::AlertDialog::new(
-            Some(&gettext("Move to Quarantine?")),
+            Some(&translated_messages::widgets::move_quarantine()),
             Some(&format!(
                 "{confirmation_body}\n{}",
-                gettext("This removes each original file from its current location.")
+                translated_messages::widgets::removes_each_original_file()
             )),
         );
-        add_dismissing_choice::<QuarantineDialogChoice>(&confirmation_dialog, &gettext("Cancel"));
+        add_dismissing_choice::<QuarantineDialogChoice>(
+            &confirmation_dialog,
+            &translated_messages::widgets::cancel_scan(),
+        );
         add_alert_choice(
             &confirmation_dialog,
             QuarantineDialogChoice::QuarantineChosen,
-            &gettext("Quarantine"),
+            &translated_messages::widgets::quarantine_label(),
         );
         confirmation_dialog.set_response_appearance(
             QuarantineDialogChoice::QuarantineChosen.response_id(),
@@ -339,7 +337,7 @@ impl Component for ScanResultsSection {
             },
 
             adw::PreferencesGroup {
-                set_title: &gettext("Detected Threats"),
+                set_title: &translated_messages::widgets::detected_threats_title(),
                 #[watch]
                 set_visible: !model.threat_rows.is_empty(),
 
@@ -351,7 +349,7 @@ impl Component for ScanResultsSection {
             },
 
             adw::PreferencesGroup {
-                set_title: &gettext("Problems"),
+                set_title: &translated_messages::widgets::problems_title(),
                 #[watch]
                 set_visible: model.results_view.has_problems(),
 
@@ -401,12 +399,10 @@ impl Component for ScanResultsSection {
             ScanResultsSectionInput::ResultsShown(results_view) => self.show_results(results_view),
             ScanResultsSectionInput::QuarantineThreatRequested(row_index) => {
                 if let Some(threat_row) = self.threat_rows.get(row_index.current_index()) {
-                    let confirmation_body = gettext("Move '{path}' to quarantine?").replace(
-                        "{path}",
-                        &sanitize_scanner_line(
+                    let confirmation_body =
+                        translated_messages::widgets::move_path_quarantine(sanitize_scanner_line(
                             &threat_row.detected_threat.file_path.to_string_lossy(),
-                        ),
-                    );
+                        ));
                     self.confirm_quarantine(vec![row_index], confirmation_body, root, &sender);
                 }
             }
@@ -418,12 +414,8 @@ impl Component for ScanResultsSection {
                     .filter(|threat_row| threat_row.can_request_quarantine())
                     .map(|threat_row| threat_row.row_index.clone())
                     .collect();
-                let confirmation_body = ngettext(
-                    "Move {count} detected file to quarantine?",
-                    "Move {count} detected files to quarantine?",
-                    u32::try_from(remaining_threats).unwrap_or(u32::MAX),
-                )
-                .replace("{count}", &remaining_threats.to_string());
+                let confirmation_body =
+                    translated_messages::widgets::move_count_detected_file(remaining_threats);
                 self.confirm_quarantine(confirmed_rows, confirmation_body, root, &sender);
             }
             ScanResultsSectionInput::QuarantineConfirmed(confirmed_rows) => {
@@ -434,7 +426,7 @@ impl Component for ScanResultsSection {
                     root.clipboard()
                         .set_text(&threat_row.detected_threat.file_path.to_string_lossy());
                     let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                        gettext("Path copied to clipboard"),
+                        translated_messages::widgets::path_copied_clipboard(),
                     ));
                 }
             }
@@ -445,9 +437,9 @@ impl Component for ScanResultsSection {
                         exclusion_entry_for_threat(&threat_row.detected_threat.file_path),
                     );
                     let exclusion_message = if newly_excluded {
-                        gettext("This file will be skipped in future scans")
+                        translated_messages::widgets::file_skipped_future_scans()
                     } else {
-                        gettext("This exclusion already exists")
+                        translated_messages::widgets::exclusion_already_exists()
                     };
                     let _page_closed =
                         sender.output(ScanResultsSectionOutput::ToastRequested(exclusion_message));
@@ -503,7 +495,7 @@ impl Component for ScanResultsSection {
                 root.clipboard()
                     .set_text(&format_scan_report(&self.results_view));
                 let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                    gettext("Results copied to clipboard"),
+                    translated_messages::widgets::results_copied_clipboard(),
                 ));
             }
             ScanResultsSectionInput::ResultsDismissRequested => {
@@ -580,7 +572,7 @@ impl Component for ScanResultsSection {
             }
             ScanResultsSectionCommand::ReportExportFinished(TextExportOutcome::TextSaved) => {
                 let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                    gettext("Results exported"),
+                    translated_messages::widgets::results_exported(),
                 ));
             }
             ScanResultsSectionCommand::ReportExportFinished(TextExportOutcome::ExportCancelled) => {

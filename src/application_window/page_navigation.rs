@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use futures::StreamExt;
-use gettextrs::gettext;
 use jiff::Timestamp;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
@@ -121,6 +120,7 @@ use crate::{
             SignatureSourcesPage, SignatureSourcesPageInput, SignatureSourcesPageOutput,
         },
     },
+    translated_messages,
 };
 
 pub struct PageNavigationInit {
@@ -277,10 +277,14 @@ fn forwarded_removable_drives_output(
 
 fn device_scan_started_toast(drive_name: &str) -> adw::Toast {
     let started_toast = adw::Toast::builder()
-        .title(gettext("Scanning {drive}").replace("{drive}", drive_name))
+        .title(translated_messages::window::scanning_drive_title(
+            drive_name,
+        ))
         .use_markup(false)
         .build();
-    started_toast.set_button_label(Some(&gettext("Open Removable Drives")));
+    started_toast.set_button_label(Some(
+        &translated_messages::window::open_removable_drives_button(),
+    ));
     started_toast.set_action_name(Some("win.show-page"));
     started_toast.set_action_target_value(Some(
         &ApplicationPage::RemovableDrives.page_name().to_variant(),
@@ -1079,27 +1083,25 @@ impl Component for PageNavigation {
                     },
                 ),
                 Err(failure_text) => self.show_plain_toast(
-                    gettext("Could not export the history: {error}")
-                        .replace("{error}", &failure_text),
+                    translated_messages::window::not_export_history_toast(&failure_text),
                 ),
             },
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::TextSaved) => {
-                self.show_plain_toast(gettext("History exported"));
+                self.show_plain_toast(translated_messages::window::history_exported_toast());
             }
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::ExportCancelled) => {}
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::ExportFailed(
                 export_failure,
             )) => self.show_plain_toast(describe_export_failure(&export_failure)),
             PageNavigationCommand::HistoryCleared(Ok(())) => {
-                self.show_plain_toast(gettext("History cleared"));
+                self.show_plain_toast(translated_messages::window::history_cleared_toast());
                 self.reload_every_history();
             }
             PageNavigationCommand::HistoryCleared(Err(clear_failure)) => {
                 log_failure_to_journal("clearing the history failed", &clear_failure);
-                self.show_plain_toast(
-                    gettext("Could not clear the history: {error}")
-                        .replace("{error}", &describe_history_failure(&clear_failure)),
-                );
+                self.show_plain_toast(translated_messages::window::not_clear_history_toast(
+                    describe_history_failure(&clear_failure),
+                ));
             }
         }
     }

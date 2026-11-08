@@ -1,17 +1,19 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, gtk::gio,
     prelude::FactoryVecDeque,
 };
 
-use crate::application_window::{
-    application_pages::ApplicationPage,
-    history_menu_actions::primary_menu_entries,
-    sidebar_area_status::SidebarAreaSummary,
-    sidebar_navigation::{
-        sidebar_entry_presentation::{EntrySummary, SidebarGroup},
-        sidebar_entry_row::SidebarEntryRow,
+use crate::{
+    application_window::{
+        application_pages::ApplicationPage,
+        history_menu_actions::primary_menu_entries,
+        sidebar_area_status::SidebarAreaSummary,
+        sidebar_navigation::{
+            sidebar_entry_presentation::{EntrySummary, SidebarGroup},
+            sidebar_entry_row::SidebarEntryRow,
+        },
     },
+    translated_messages,
 };
 
 pub struct SidebarNavigationColumn {
@@ -86,7 +88,7 @@ impl Component for SidebarNavigationColumn {
                 add_top_bar = &adw::HeaderBar {
                     pack_end = &gtk::MenuButton {
                         set_icon_name: "open-menu-symbolic",
-                        set_tooltip_text: Some(&gettext("Menu")),
+                        set_tooltip_text: Some(&translated_messages::window::menu_tooltip()),
                         set_menu_model: Some(&primary_menu()),
                         set_primary: true,
                     },

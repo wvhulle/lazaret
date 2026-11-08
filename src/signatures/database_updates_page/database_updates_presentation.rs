@@ -1,4 +1,3 @@
-use gettextrs::{gettext, ngettext};
 use jiff::{SignedDuration, Timestamp};
 
 use crate::{
@@ -38,6 +37,7 @@ use crate::{
     signatures::database_updates_page::signature_update_run::signature_update_session::{
         LastManualUpdate, SignatureUpdateProgress, SignatureUpdateView,
     },
+    translated_messages,
 };
 
 const DATABASE_FRESH_LIMIT: SignedDuration = SignedDuration::from_hours(4 * 24);
@@ -53,8 +53,8 @@ pub enum DatabaseUpdateAction {
 impl StepActionButton for DatabaseUpdateAction {
     fn button_label(&self) -> String {
         match self {
-            Self::UpdateSignatures => gettext("Update Now"),
-            Self::CancelSignatureUpdate => gettext("Cancel"),
+            Self::UpdateSignatures => translated_messages::signatures::update_now(),
+            Self::CancelSignatureUpdate => translated_messages::signatures::cancel_label(),
         }
     }
 
@@ -154,28 +154,24 @@ fn database_status_text(
 ) -> String {
     match database_evidence {
         DatabaseEvidence::BuiltAt { built_at } if *built_at <= moment_context.reference_moment => {
-            gettext("Definitions built {when} ({date})")
-                .replace(
-                    "{when}",
-                    &moment_context
-                        .moment_formatters
-                        .relative_moment_text(*built_at, moment_context.reference_moment),
-                )
-                .replace(
-                    "{date}",
-                    &moment_context
-                        .moment_formatters
-                        .calendar_date_text(*built_at),
-                )
+            translated_messages::signatures::definitions_built_date(
+                moment_context
+                    .moment_formatters
+                    .relative_moment_text(*built_at, moment_context.reference_moment),
+                moment_context
+                    .moment_formatters
+                    .calendar_date_text(*built_at),
+            )
         }
         DatabaseEvidence::BuiltAt { .. } | DatabaseEvidence::AgeUndetermined => {
-            gettext("Definitions exist, but their age could not be determined")
+            translated_messages::signatures::definitions_exist_not_determined()
         }
-        DatabaseEvidence::DatabaseMissing => gettext("No virus definitions were found"),
-        DatabaseEvidence::InspectionInterrupted => gettext(
-            "The age of the definitions is unknown, because checking them stopped before it \
-             finished",
-        ),
+        DatabaseEvidence::DatabaseMissing => {
+            translated_messages::signatures::no_virus_definitions_found()
+        }
+        DatabaseEvidence::InspectionInterrupted => {
+            translated_messages::signatures::age_definitions_unknown_checking()
+        }
     }
 }
 
@@ -204,17 +200,20 @@ fn updater_row(
 ) -> StepEvidenceRow {
     let evidence_moment = EvidenceMoment::from(updater_evidence.last_completed_run);
     let evidence_value = if updater_failed(updater_evidence) {
-        gettext("Its last update failed")
+        translated_messages::signatures::last_update_failed()
     } else {
         match updater_evidence.last_completed_run {
             UpdaterRunHistory::JournalUnreadable(read_failure) => unknown_run_text(read_failure),
-            UpdaterRunHistory::NoCompletedUpdate => gettext("No completed update recorded yet"),
+            UpdaterRunHistory::NoCompletedUpdate => {
+                translated_messages::signatures::no_completed_update_recorded()
+            }
             UpdaterRunHistory::CompletedUpdate { .. } => String::new(),
         }
     };
     timed_evidence_row(
-        gettext("{updater} updated")
-            .replace("{updater}", updater_evidence.updater_program.program_name()),
+        translated_messages::signatures::updater_updated(
+            updater_evidence.updater_program.program_name(),
+        ),
         evidence_moment,
         evidence_value,
         moment_context,
@@ -225,29 +224,30 @@ fn third_party_file_row(
     signature_file: &ThirdPartySignatureFile,
     moment_context: MomentContext,
 ) -> StepEvidenceRow {
+    let file_size_text = byte_size_text(signature_file.file_size);
     timed_evidence_row(
-        gettext("{provider} fetched").replace(
-            "{provider}",
-            &signature_file_source_name(provider_of_signature_file(&signature_file.file_name)),
-        ),
+        translated_messages::signatures::provider_fetched(signature_file_source_name(
+            provider_of_signature_file(&signature_file.file_name),
+        )),
         EvidenceMoment::PastEvent {
             happened_at: signature_file.modified_at,
         },
         match signature_file.signature_lines {
-            SignatureLineCount::LinesCounted { signature_count } => ngettext(
-                "{count} signature, {size} ({file})",
-                "{count} signatures, {size} ({file})",
-                u32::try_from(signature_count).unwrap_or(u32::MAX),
-            )
-            .replace("{count}", &signature_count.to_string()),
-            SignatureLineCount::FileUnreadable { failure_kind } => gettext(
-                "Unknown number of signatures, the file could not be read: {error}, {size} \
-                 ({file})",
-            )
-            .replace("{error}", &failure_kind.to_string()),
-        }
-        .replace("{size}", &byte_size_text(signature_file.file_size))
-        .replace("{file}", &signature_file.file_name),
+            SignatureLineCount::LinesCounted { signature_count } => {
+                translated_messages::signatures::count_signature_size_file(
+                    signature_count,
+                    &file_size_text,
+                    &signature_file.file_name,
+                )
+            }
+            SignatureLineCount::FileUnreadable { failure_kind } => {
+                translated_messages::signatures::unknown_number_signatures_file(
+                    failure_kind,
+                    &file_size_text,
+                    &signature_file.file_name,
+                )
+            }
+        },
         moment_context,
     )
 }
@@ -262,9 +262,10 @@ fn third_party_rows(
             .map(|signature_file| third_party_file_row(signature_file, moment_context))
             .collect(),
         ThirdPartySignatureListing::FolderUnreadable(read_failure) => vec![evidence_row(
-            gettext("Other signature sources"),
-            gettext("Unknown. {reason}")
-                .replace("{reason}", &database_folder_failure_text(*read_failure)),
+            translated_messages::signatures::other_signature_sources(),
+            translated_messages::signatures::unknown_reason_database(database_folder_failure_text(
+                *read_failure,
+            )),
         )],
     }
 }
@@ -296,11 +297,11 @@ fn manual_update_row(
         ),
         LastManualUpdate::NotRunThisSession => (
             EvidenceMoment::CurrentFact,
-            gettext("Fetch the newest signatures from every updater now"),
+            translated_messages::signatures::fetch_newest_signatures(),
         ),
     };
     timed_evidence_row(
-        gettext("Manual update"),
+        translated_messages::signatures::manual_update(),
         evidence_moment,
         evidence_value,
         moment_context,
@@ -312,11 +313,11 @@ fn update_host_rows(signature_update: &SignatureUpdateView) -> Vec<StepEvidenceR
         SignatureUpdateView::HostStatusLoading => Vec::new(),
         SignatureUpdateView::HostStatusKnown(known_host) => vec![
             evidence_row(
-                gettext("Update service"),
+                translated_messages::signatures::update_service(),
                 known_host.update_service_text.clone(),
             ),
             evidence_row(
-                gettext("Database folder"),
+                translated_messages::signatures::database_folder(),
                 known_host.database_folder_text.clone(),
             ),
         ],
@@ -329,7 +330,10 @@ fn updater_output_rows(update_progress: &SignatureUpdateProgress) -> Vec<StepEvi
         | SignatureUpdateProgress::UncancellableUpdateRunning { latest_output_line } => {
             vec![StepEvidenceRow {
                 evidence_moment: EvidenceMoment::HappeningNow,
-                ..evidence_row(gettext("Updater output"), latest_output_line.clone())
+                ..evidence_row(
+                    translated_messages::signatures::updater_output(),
+                    latest_output_line.clone(),
+                )
             }]
         }
         SignatureUpdateProgress::UpdateCancelling
@@ -339,14 +343,11 @@ fn updater_output_rows(update_progress: &SignatureUpdateProgress) -> Vec<StepEvi
 }
 
 fn signature_step_title() -> String {
-    gettext("Signatures current")
+    translated_messages::signatures::current_label()
 }
 
 fn signature_mechanism_details() -> String {
-    gettext(
-        "Signatures describe known malware, and new ones are published constantly. Old signatures \
-         miss recent threats even when everything else is running.",
-    )
+    translated_messages::signatures::describe_known_malware_new()
 }
 
 fn signature_status_rows(
@@ -427,16 +428,17 @@ pub fn signature_update_step(
     };
     let signature_step = match &update_progress {
         SignatureUpdateProgress::CancellableUpdateRunning { .. } => running_signature_step(
-            gettext("Updating signatures…"),
+            translated_messages::signatures::updating_signatures(),
             CancelSlot::Cancellable {
                 cancel_action: DatabaseUpdateAction::CancelSignatureUpdate,
             },
         ),
-        SignatureUpdateProgress::UncancellableUpdateRunning { .. } => {
-            running_signature_step(gettext("Updating signatures…"), CancelSlot::NotCancellable)
-        }
+        SignatureUpdateProgress::UncancellableUpdateRunning { .. } => running_signature_step(
+            translated_messages::signatures::updating_signatures(),
+            CancelSlot::NotCancellable,
+        ),
         SignatureUpdateProgress::UpdateCancelling => running_signature_step(
-            gettext("Cancelling the update…"),
+            translated_messages::signatures::cancelling_update(),
             CancelSlot::NotCancellable,
         ),
         SignatureUpdateProgress::ReadyToUpdate => settled_signature_step(

@@ -1,5 +1,3 @@
-use gettextrs::{gettext, ngettext};
-
 use crate::{
     findings::sent_samples_page::{
         sent_samples_state::{
@@ -33,6 +31,7 @@ use crate::{
         quarantine_failure_text::describe_quarantine_failure,
         submission_outcome_text::history_failure_text,
     },
+    translated_messages,
 };
 
 const SHORT_HASH_LENGTH: usize = 12;
@@ -47,18 +46,24 @@ pub const fn service_name(submission_service: SubmissionService) -> &'static str
 
 pub fn kind_text(submission_kind: SubmissionKind) -> String {
     match submission_kind {
-        SubmissionKind::FalsePositive => gettext("False positive"),
-        SubmissionKind::MissedMalware => gettext("Missed malware"),
-        SubmissionKind::MalwareSample => gettext("Malware sample"),
+        SubmissionKind::FalsePositive => translated_messages::findings::false_positive(),
+        SubmissionKind::MissedMalware => translated_messages::findings::missed_malware(),
+        SubmissionKind::MalwareSample => translated_messages::findings::malware_sample(),
     }
 }
 
 pub fn target_choice_label(submission_target: SubmissionTarget) -> String {
     match submission_target {
-        SubmissionTarget::ClamavFalsePositive => gettext("Report False Positive to ClamAV"),
-        SubmissionTarget::ClamavMissedMalware => gettext("Report Missed Malware to ClamAV"),
-        SubmissionTarget::MalwareBazaarSample => gettext("Upload to MalwareBazaar"),
-        SubmissionTarget::VirusTotalSample => gettext("Upload to VirusTotal"),
+        SubmissionTarget::ClamavFalsePositive => {
+            translated_messages::findings::report_false_positive_clamav()
+        }
+        SubmissionTarget::ClamavMissedMalware => {
+            translated_messages::findings::report_missed_malware_clamav()
+        }
+        SubmissionTarget::MalwareBazaarSample => {
+            translated_messages::findings::upload_malwarebazaar()
+        }
+        SubmissionTarget::VirusTotalSample => translated_messages::findings::upload_virustotal(),
     }
 }
 
@@ -68,22 +73,19 @@ pub fn short_hash(content_sha256: &str) -> String {
 
 fn settled_version_text(
     database_version: SignatureDatabaseVersion,
-    versioned_text: String,
+    versioned_text: impl FnOnce(&str) -> String,
     unversioned_text: String,
 ) -> String {
     match database_version {
         SignatureDatabaseVersion::DailyVersion { version_number } => {
-            versioned_text.replace("{version}", &version_number.to_string())
+            versioned_text(&version_number.to_string())
         }
         SignatureDatabaseVersion::VersionUnreadable => unversioned_text,
     }
 }
 
 fn awaiting_clamav_text() -> String {
-    gettext(
-        "Awaiting ClamAV review. Reviews take at least 48 hours; a later signature update shows \
-         the outcome.",
-    )
+    translated_messages::findings::awaiting_clamav_review_reviews()
 }
 
 pub fn status_text(submission_state: &SubmissionState) -> String {
@@ -100,29 +102,32 @@ pub fn status_text(submission_state: &SubmissionState) -> String {
             ..
         } => settled_version_text(
             *database_version,
-            gettext("Fixed in database version {version}"),
-            gettext("Fixed in the current signature database"),
+            |version_text| translated_messages::findings::fixed_database_version(version_text),
+            translated_messages::findings::fixed_current_signature_database(),
         ),
         SubmissionState::ClamavMissedMalware {
             review_status: MissedMalwareReview::NowDetected { database_version },
         } => settled_version_text(
             *database_version,
-            gettext("Detected since database version {version}"),
-            gettext("Detected by the current signature database"),
+            |version_text| {
+                translated_messages::findings::detected_since_database_version(version_text)
+            },
+            translated_messages::findings::detected_current_signature_database(),
         ),
         SubmissionState::MalwareBazaarSample {
             bazaar_status: BazaarSampleStatus::UploadAccepted,
-        } => gettext("Uploaded; waiting for MalwareBazaar to list it"),
+        } => translated_messages::findings::uploaded_waiting_malwarebazaar_list(),
         SubmissionState::MalwareBazaarSample {
             bazaar_status: BazaarSampleStatus::ListedOnMalwareBazaar,
-        } => gettext("Listed on MalwareBazaar"),
+        } => translated_messages::findings::listed_malwarebazaar(),
         SubmissionState::MalwareBazaarSample {
             bazaar_status: BazaarSampleStatus::SubmissionRefused { refusal_reason },
-        } => gettext("MalwareBazaar refused it: {reason}")
-            .replace("{reason}", &sanitize_scanner_line(refusal_reason)),
+        } => translated_messages::findings::malwarebazaar_refused_reason(sanitize_scanner_line(
+            refusal_reason,
+        )),
         SubmissionState::VirusTotalSample {
             virustotal_status: VirusTotalSampleStatus::VirusTotalAnalysisQueued { .. },
-        } => gettext("Queued for analysis on VirusTotal"),
+        } => translated_messages::findings::queued_analysis_virustotal(),
         SubmissionState::VirusTotalSample {
             virustotal_status:
                 VirusTotalSampleStatus::VirusTotalAnalysed {
@@ -130,17 +135,14 @@ pub fn status_text(submission_state: &SubmissionState) -> String {
                     engine_count,
                     ..
                 },
-        } => ngettext(
-            "{count} of {total} engine flags it as malicious",
-            "{count} of {total} engines flag it as malicious",
-            u32::try_from(*engine_count).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &malicious_count.to_string())
-        .replace("{total}", &engine_count.to_string()),
+        } => {
+            translated_messages::findings::count_total_engine_flags(*engine_count, malicious_count)
+        }
         SubmissionState::VirusTotalSample {
             virustotal_status: VirusTotalSampleStatus::SubmissionRefused { refusal_reason },
-        } => gettext("VirusTotal refused it: {reason}")
-            .replace("{reason}", &sanitize_scanner_line(refusal_reason)),
+        } => translated_messages::findings::virustotal_refused_reason(sanitize_scanner_line(
+            refusal_reason,
+        )),
     }
 }
 
@@ -157,20 +159,12 @@ pub fn submitted_row_view(
     moment_formatters: &MomentFormatters,
 ) -> SubmittedRowView {
     let submission_target = submission_record.submission_state.submission_target();
-    let summary_line = gettext("{service} · {kind} · {hash} · {date}")
-        .replace(
-            "{service}",
-            service_name(submission_target.submission_service()),
-        )
-        .replace("{kind}", &kind_text(submission_target.submission_kind()))
-        .replace(
-            "{hash}",
-            &short_hash(&submission_record.submitted_file.content_sha256),
-        )
-        .replace(
-            "{date}",
-            &moment_formatters.exact_moment_text(submission_record.submitted_at),
-        );
+    let summary_line = translated_messages::findings::service_kind_hash_date(
+        service_name(submission_target.submission_service()),
+        kind_text(submission_target.submission_kind()),
+        short_hash(&submission_record.submitted_file.content_sha256),
+        moment_formatters.exact_moment_text(submission_record.submitted_at),
+    );
     SubmittedRowView {
         row_title: sanitize_scanner_line(&submission_record.submitted_file.file_name),
         row_subtitle: format!(
@@ -212,8 +206,7 @@ pub fn candidate_row_view(
                 format!("{detection_text} · {}", short_hash(sha256_hex))
             }
             RecordedPayloadHash::IntegrityUnknown => {
-                gettext("{detection} · No usable hash, so Lazaret can't prove what it would send")
-                    .replace("{detection}", &detection_text)
+                translated_messages::findings::detection_no_usable_hash(&detection_text)
             }
         },
         send_availability: send_availability(&offered_target_activities(
@@ -225,7 +218,7 @@ pub fn candidate_row_view(
 
 pub fn service_filter_label(service_filter: ServiceFilter) -> String {
     match service_filter {
-        ServiceFilter::AllServices => gettext("All services"),
+        ServiceFilter::AllServices => translated_messages::findings::all_services_option(),
         ServiceFilter::OnlyService(submission_service) => {
             service_name(submission_service).to_owned()
         }
@@ -234,10 +227,16 @@ pub fn service_filter_label(service_filter: ServiceFilter) -> String {
 
 pub fn progress_filter_label(progress_filter: ProgressFilter) -> String {
     match progress_filter {
-        ProgressFilter::AllProgress => gettext("Any status"),
-        ProgressFilter::OnlyProgress(SubmissionProgress::AwaitingOutcome) => gettext("Waiting"),
-        ProgressFilter::OnlyProgress(SubmissionProgress::OutcomeKnown) => gettext("Settled"),
-        ProgressFilter::OnlyProgress(SubmissionProgress::RefusedByService) => gettext("Refused"),
+        ProgressFilter::AllProgress => translated_messages::findings::any_status_option(),
+        ProgressFilter::OnlyProgress(SubmissionProgress::AwaitingOutcome) => {
+            translated_messages::findings::waiting_label()
+        }
+        ProgressFilter::OnlyProgress(SubmissionProgress::OutcomeKnown) => {
+            translated_messages::findings::settled_label()
+        }
+        ProgressFilter::OnlyProgress(SubmissionProgress::RefusedByService) => {
+            translated_messages::findings::refused_label()
+        }
     }
 }
 
@@ -246,7 +245,9 @@ pub fn filter_summary_text(submission_filters: &SubmissionFilters) -> String {
         submission_filters.service_filter,
         submission_filters.progress_filter,
     ) {
-        (ServiceFilter::AllServices, ProgressFilter::AllProgress) => gettext("All submissions"),
+        (ServiceFilter::AllServices, ProgressFilter::AllProgress) => {
+            translated_messages::findings::all_submissions_option()
+        }
         (ServiceFilter::AllServices, progress_filter) => progress_filter_label(progress_filter),
         (service_filter, ProgressFilter::AllProgress) => service_filter_label(service_filter),
         (service_filter, progress_filter) => format!(
@@ -259,19 +260,25 @@ pub fn filter_summary_text(submission_filters: &SubmissionFilters) -> String {
 
 pub fn empty_submissions_text(submission_listing: &SubmissionListing) -> String {
     match submission_listing {
-        SubmissionListing::ListingLoading => gettext("Loading submissions…"),
+        SubmissionListing::ListingLoading => translated_messages::findings::loading_submissions(),
         SubmissionListing::ListingLoaded(listed_submissions) if listed_submissions.is_empty() => {
-            gettext("Nothing submitted")
+            translated_messages::findings::nothing_submitted()
         }
-        SubmissionListing::ListingLoaded(_) => gettext("No submission matches the filters"),
+        SubmissionListing::ListingLoaded(_) => {
+            translated_messages::findings::no_submission_matches_filters()
+        }
         SubmissionListing::ListingFailed(history_failure) => history_failure_text(history_failure),
     }
 }
 
 pub fn empty_candidates_text(candidate_listing: &CandidateListing) -> String {
     match candidate_listing {
-        CandidateListing::CandidatesLoading => gettext("Loading quarantine…"),
-        CandidateListing::CandidatesLoaded(_) => gettext("Quarantine is empty"),
+        CandidateListing::CandidatesLoading => {
+            translated_messages::findings::loading_quarantine_sent()
+        }
+        CandidateListing::CandidatesLoaded(_) => {
+            translated_messages::findings::quarantine_empty_sent()
+        }
         CandidateListing::CandidatesFailed(quarantine_failure) => {
             describe_quarantine_failure(quarantine_failure)
         }
@@ -281,8 +288,9 @@ pub fn empty_candidates_text(candidate_listing: &CandidateListing) -> String {
 fn refresh_failure_text(refresh_failure: &RemoteRefreshFailure) -> String {
     match refresh_failure {
         RemoteRefreshFailure::KeyMissing { submission_service } => {
-            gettext("{service} needs a key to check uploads")
-                .replace("{service}", service_name(*submission_service))
+            translated_messages::findings::service_needs_key_check(service_name(
+                *submission_service,
+            ))
         }
         RemoteRefreshFailure::KeyUnreadable(key_failure) => describe_key_failure(key_failure),
         RemoteRefreshFailure::BazaarLookupFailed(bazaar_failure) => {
@@ -299,13 +307,8 @@ fn refresh_failure_text(refresh_failure: &RemoteRefreshFailure) -> String {
 
 pub fn refresh_summary_text(refresh_summary: &RemoteRefreshSummary) -> String {
     let updated_text = match refresh_summary.updated_count {
-        0 => gettext("No upload changed"),
-        updated_count => ngettext(
-            "{count} upload has a new status",
-            "{count} uploads have a new status",
-            u32::try_from(updated_count).unwrap_or(u32::MAX),
-        )
-        .replace("{count}", &updated_count.to_string()),
+        0 => translated_messages::findings::no_upload_changed(),
+        updated_count => translated_messages::findings::count_upload_new_status(updated_count),
     };
     refresh_summary
         .refresh_failures

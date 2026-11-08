@@ -1,8 +1,11 @@
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt, path::PathBuf};
 
-use crate::host_services::clamav_scanner::{
-    scanner_command_builder::ScannerBackend,
-    scanner_exit_classification::{AbnormalScannerExit, ScannerExit},
+use crate::{
+    host_services::clamav_scanner::{
+        scanner_command_builder::ScannerBackend,
+        scanner_exit_classification::{AbnormalScannerExit, ScannerExit},
+    },
+    translated_messages,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -362,7 +365,7 @@ pub fn is_blocked_by_on_access(file_path: &std::path::Path) -> bool {
 pub fn displayed_threat_name(threat_identity: &ThreatIdentity) -> String {
     match threat_identity {
         ThreatIdentity::Signature { signature_name } => sanitize_scanner_line(signature_name),
-        ThreatIdentity::BlockedByOnAccess => gettextrs::gettext("Blocked by on-access scanning"),
+        ThreatIdentity::BlockedByOnAccess => translated_messages::host::blocked_access_scanning(),
     }
 }
 

@@ -1,6 +1,5 @@
 use std::{path::PathBuf, time::Instant};
 
-use gettextrs::gettext;
 use jiff::Timestamp;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
@@ -59,6 +58,7 @@ use crate::{
             },
         },
     },
+    translated_messages,
 };
 
 pub struct RemovableDrivesPageInit {
@@ -77,8 +77,9 @@ fn describe_page_notice(page_notice: &DrivesPageNotice) -> String {
     match page_notice {
         DrivesPageNotice::NoNoticeShown => String::new(),
         DrivesPageNotice::ScanNotRecorded(recording_failure) => {
-            gettext("The drive scan could not be added to the history: {error}")
-                .replace("{error}", &describe_history_failure(recording_failure))
+            translated_messages::scans::drive_scan_not_added(describe_history_failure(
+                recording_failure,
+            ))
         }
     }
 }
@@ -139,8 +140,8 @@ pub enum RemovableDrivesPageCommand {
 fn notify_drive_skipped_during_scan() {
     notify_outside_the_window(
         "device-scan-skipped",
-        &gettext("Device Auto-Scan"),
-        &gettext("A device was connected during another scan, so it was not scanned."),
+        &translated_messages::scans::device_auto_scan(),
+        &translated_messages::scans::device_connected_during_another(),
     );
 }
 
@@ -367,13 +368,13 @@ impl Component for RemovableDrivesPage {
                 add_top_bar = &adw::HeaderBar {
                     #[wrap(Some)]
                     set_title_widget = &adw::WindowTitle {
-                        set_title: &gettext("Removable Drives"),
+                        set_title: &translated_messages::scans::removable_drives_title(),
                         #[watch]
                         set_subtitle: &model.header_subtitle(),
                     },
 
                     pack_end = &gtk::Button {
-                        set_label: &gettext("Cancel"),
+                        set_label: &translated_messages::scans::cancel_removable_label(),
                         add_css_class: "destructive-action",
                         #[watch]
                         set_visible: model.device_scan_flow.scan_is_running(),
@@ -414,7 +415,7 @@ impl Component for RemovableDrivesPage {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &gettext("Found so far"),
+                        set_title: &translated_messages::scans::found_far_removable_title(),
                         #[watch]
                         set_visible: model.device_scan_flow.scan_is_running() && !model.found_threat_rows.is_empty(),
 
@@ -447,11 +448,8 @@ impl Component for RemovableDrivesPage {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &gettext("Drives this session"),
-                        set_description: Some(&gettext(
-                            "Drives connected since Lazaret started, newest first, and what \
-                             happened to each. This list is kept only until Lazaret quits.",
-                        )),
+                        set_title: &translated_messages::scans::drives_session_title(),
+                        set_description: Some(&translated_messages::scans::drives_connected_since_description()),
 
                         #[local_ref]
                         drive_event_list -> gtk::ListBox {
@@ -459,7 +457,7 @@ impl Component for RemovableDrivesPage {
                             set_selection_mode: gtk::SelectionMode::None,
                             #[wrap(Some)]
                             set_placeholder = &adw::ActionRow {
-                                set_title: &gettext("No drive was connected yet"),
+                                set_title: &translated_messages::scans::no_drive_connected_title(),
                                 add_css_class: "dim-label",
                             },
                         },
@@ -507,7 +505,7 @@ impl Component for RemovableDrivesPage {
             scan_results_section: ScanResultsSection::builder()
                 .launch(ScanResultsSectionInit {
                     quarantine_vault: page_init.quarantine_vault,
-                    dismiss_label: gettext("Close Results"),
+                    dismiss_label: translated_messages::scans::close_results_button(),
                 })
                 .forward(
                     sender.input_sender(),
@@ -538,11 +536,9 @@ impl Component for RemovableDrivesPage {
                 .launch(ActivityHistoryGroupInit {
                     activity_history: page_init.activity_history,
                     history_filter: ActivityHistoryFilter::DeviceScans,
-                    group_title: gettext("Drive scans"),
-                    group_description: gettext(
-                        "Drives Lazaret scanned when they were connected, newest first. Select \
-                         one to read its transcript.",
-                    ),
+                    group_title: translated_messages::scans::drive_scans_title(),
+                    group_description:
+                        translated_messages::scans::drives_lazaret_scanned_description(),
                 })
                 .detach(),
             page_notice: DrivesPageNotice::NoNoticeShown,

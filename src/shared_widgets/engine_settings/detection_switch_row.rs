@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -11,6 +10,7 @@ use crate::{
     shared_widgets::engine_settings::config_setting_row::{
         RowChangeActivity, SettingAvailability, SettingLockReason, setting_lock_tooltip,
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -42,37 +42,34 @@ pub enum DetectionSwitchRowOutput {
 fn option_title(detection_option: DetectionOption) -> String {
     match detection_option {
         DetectionOption::PotentiallyUnwantedPrograms => {
-            gettext("Detect Potentially Unwanted Programs")
+            translated_messages::widgets::detect_potentially_unwanted_programs()
         }
-        DetectionOption::HeuristicAlerts => gettext("Heuristic Detections"),
-        DetectionOption::OfficeMacros => gettext("Flag Office Files With Macros"),
-        DetectionOption::EncryptedContent => gettext("Flag Encrypted Archives and Documents"),
-        DetectionOption::ArchiveContents => gettext("Look Inside Archives"),
-        DetectionOption::OversizedFiles => gettext("Flag Files Too Large to Check Fully"),
+        DetectionOption::HeuristicAlerts => translated_messages::widgets::heuristic_detections(),
+        DetectionOption::OfficeMacros => translated_messages::widgets::flag_office_files_macros(),
+        DetectionOption::EncryptedContent => {
+            translated_messages::widgets::flag_encrypted_archives_documents()
+        }
+        DetectionOption::ArchiveContents => translated_messages::widgets::look_inside_archives(),
+        DetectionOption::OversizedFiles => translated_messages::widgets::flag_files_too_large(),
     }
 }
 
 fn option_description(detection_option: DetectionOption) -> String {
     match detection_option {
         DetectionOption::PotentiallyUnwantedPrograms => {
-            gettext("Adware, hacking tools and remote-access tools. Expect more false positives.")
+            translated_messages::widgets::adware_hacking_tools_remote()
         }
-        DetectionOption::HeuristicAlerts => gettext(
-            "Suspicious files that no signature names, such as broken executables and phishing \
-             tricks.",
-        ),
-        DetectionOption::OfficeMacros => gettext(
-            "Macros are a common way to deliver malware, but many legitimate documents use them.",
-        ),
+        DetectionOption::HeuristicAlerts => {
+            translated_messages::widgets::suspicious_files_no_signature()
+        }
+        DetectionOption::OfficeMacros => translated_messages::widgets::macros_common_way_deliver(),
         DetectionOption::EncryptedContent => {
-            gettext("ClamAV can't look inside them, so they could hide malware.")
+            translated_messages::widgets::clamav_cannot_look_inside()
         }
-        DetectionOption::ArchiveContents => {
-            gettext("Checks the files inside zip, rar and other archives.")
+        DetectionOption::ArchiveContents => translated_messages::widgets::checks_files_inside_zip(),
+        DetectionOption::OversizedFiles => {
+            translated_messages::widgets::otherwise_files_above_size()
         }
-        DetectionOption::OversizedFiles => gettext(
-            "Otherwise files above the size and recursion limits pass unchecked without notice.",
-        ),
     }
 }
 
@@ -80,9 +77,11 @@ impl DetectionSwitchRow {
     fn availability_note(&self) -> String {
         match self.switch_state.switch_availability {
             SettingAvailability::ChangeableNow => String::new(),
-            SettingAvailability::LockedUntilUnlocked => gettext("Unlock to change this setting."),
+            SettingAvailability::LockedUntilUnlocked => {
+                translated_messages::widgets::unlock_change_setting()
+            }
             SettingAvailability::NotAllowedAtRuntime => {
-                gettext("Your administrator doesn't allow changing this setting from Lazaret.")
+                translated_messages::widgets::administrator_not_allow_detection()
             }
         }
     }

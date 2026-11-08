@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     abstractions::Toaster, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
@@ -47,6 +46,7 @@ use crate::{
             timeline_step_row::{TimelineStepRow, show_timeline_steps},
         },
     },
+    translated_messages,
 };
 
 pub struct ScheduledScansPage {
@@ -89,7 +89,7 @@ fn system_scan_toast(
         .use_markup(false)
         .build();
     if scan_found_threats(start_outcome, scan_service) {
-        run_toast.set_button_label(Some(&gettext("Review")));
+        run_toast.set_button_label(Some(&translated_messages::scans::review_button()));
         run_toast.set_action_name(Some("win.show-page"));
         run_toast
             .set_action_target_value(Some(&ApplicationPage::Detections.page_name().to_variant()));
@@ -143,11 +143,11 @@ impl Component for ScheduledScansPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&gettext("Check again")),
+                            set_tooltip_text: Some(&translated_messages::scans::check_again_scheduled_tooltip()),
                             connect_clicked => ScheduledScansPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                            set_tooltip_text: Some(&gettext("Checking")),
+                            set_tooltip_text: Some(&translated_messages::scans::checking_scheduled_tooltip()),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -162,7 +162,7 @@ impl Component for ScheduledScansPage {
                         add: status_group,
 
                     adw::PreferencesGroup {
-                        set_title: &gettext("System scan"),
+                        set_title: &translated_messages::scans::system_scan_title(),
                         #[watch]
                         set_description: Some(&gtk::glib::markup_escape_text(&model.system_scan_control.group_description())),
                         #[watch]
@@ -170,20 +170,20 @@ impl Component for ScheduledScansPage {
 
                         adw::ActionRow {
                             set_use_markup: false,
-                            set_title: &gettext("Folders scanned"),
+                            set_title: &translated_messages::scans::folders_scanned_title(),
                             #[watch]
                             set_subtitle: &model.system_scan_control.scanned_folders_text(),
 
                             add_suffix = &gtk::Stack {
                                 add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
-                                    set_label: &gettext("Run Now"),
+                                    set_label: &translated_messages::scans::run_now_label(),
                                     set_valign: gtk::Align::Center,
                                     #[watch]
                                     set_sensitive: model.system_scan_control.accepts_run(),
                                     connect_clicked => ScheduledScansPageInput::SystemScanRequested,
                                 },
                                 add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                                    set_tooltip_text: Some(&gettext("Starting the scan…")),
+                                    set_tooltip_text: Some(&translated_messages::scans::starting_scan_tooltip()),
                                 },
                                 #[watch]
                                 set_visible_child_name: busy_page_name(model.system_scan_control.run_is_starting()),
@@ -211,7 +211,7 @@ impl Component for ScheduledScansPage {
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(gettext("Status"))
+                        .title(translated_messages::scans::status_scheduled_title())
                         .build(),
                 )
                 .forward(
@@ -226,17 +226,16 @@ impl Component for ScheduledScansPage {
                 .launch(ActivityHistoryGroupInit {
                     activity_history,
                     history_filter: ActivityHistoryFilter::ScheduledScans,
-                    group_title: gettext("Scheduled runs"),
-                    group_description: gettext(
-                        "Scans Lazaret's schedule ran, newest first. Select one to read its \
-                         transcript.",
+                    group_title: translated_messages::scans::scheduled_runs_title(),
+                    group_description: translated_messages::scans::lazaret_schedule_ran_description(
                     ),
                 })
                 .detach(),
             system_scan_control: SystemScanControl::new(),
         };
         let status_group = &model.status_rows.widget().clone();
-        let status_loading_page = &loading_status_page(&gettext("Checking the schedule…"));
+        let status_loading_page =
+            &loading_status_page(&translated_messages::scans::checking_schedule());
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -280,8 +279,9 @@ impl Component for ScheduledScansPage {
                 copied_command,
             )) => {
                 root.clipboard().set_text(&copied_command);
-                self.toaster
-                    .add_toast(adw::Toast::new(&gettext("Command copied to clipboard")));
+                self.toaster.add_toast(adw::Toast::new(
+                    &translated_messages::scans::command_copied_clipboard_scheduled(),
+                ));
             }
             ScheduledScansPageInput::SystemScanRequested => {
                 match self.system_scan_control.run_requested() {

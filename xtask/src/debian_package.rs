@@ -11,13 +11,12 @@ use crate::{
     tool_commands::{run_tool, tool_stdout},
 };
 
-const BUILD_TOOL_PACKAGES: [&str; 11] = [
+const BUILD_TOOL_PACKAGES: [&str; 10] = [
     "rustup",
     "build-essential",
     "dpkg-dev",
     "pkg-config",
     "ca-certificates",
-    "gettext",
     "libgtk-4-dev",
     "libadwaita-1-dev",
     "libsystemd-dev",

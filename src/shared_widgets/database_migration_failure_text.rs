@@ -1,8 +1,9 @@
-use gettextrs::gettext;
-
-use crate::host_services::{
-    activity_history::activity_history_database::ActivityHistoryFailure,
-    lazaret_database::database_migration_runner::DatabaseMigrationFailure,
+use crate::{
+    host_services::{
+        activity_history::activity_history_database::ActivityHistoryFailure,
+        lazaret_database::database_migration_runner::DatabaseMigrationFailure,
+    },
+    translated_messages,
 };
 
 pub fn describe_migration_failure(migration_failure: &DatabaseMigrationFailure) -> String {
@@ -10,21 +11,18 @@ pub fn describe_migration_failure(migration_failure: &DatabaseMigrationFailure) 
         DatabaseMigrationFailure::DatabaseFromNewerRelease {
             found_version,
             known_version,
-        } => gettext(
-            "This database was made by a newer Lazaret: it has layout version {found}, and this \
-             version knows up to {known}. Update Lazaret to open it.",
-        )
-        .replace("{found}", &found_version.to_string())
-        .replace("{known}", &known_version.to_string()),
+        } => {
+            translated_messages::widgets::database_made_newer_lazaret(found_version, known_version)
+        }
         DatabaseMigrationFailure::MigrationStepFailed {
             migration_name,
             database_failure,
-        } => gettext("Updating the database layout failed at step {step}: {error}")
-            .replace("{step}", migration_name)
-            .replace("{error}", &database_failure.to_string()),
+        } => translated_messages::widgets::updating_database_layout_failed(
+            migration_name,
+            database_failure,
+        ),
         DatabaseMigrationFailure::VersionCheckFailed(database_failure) => {
-            gettext("The database layout version could not be checked: {error}")
-                .replace("{error}", &database_failure.to_string())
+            translated_messages::widgets::database_layout_not_checked(database_failure)
         }
     }
 }

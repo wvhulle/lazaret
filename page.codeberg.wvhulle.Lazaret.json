@@ -35,8 +35,7 @@
         ],
         "env": {
             "RUST_BACKTRACE": "1",
-            "RUSTUP_TOOLCHAIN": "stable",
-            "LAZARET_LOCALE_DIRECTORY": "/app/share/locale"
+            "RUSTUP_TOOLCHAIN": "stable"
         }
     },
     "cleanup": [

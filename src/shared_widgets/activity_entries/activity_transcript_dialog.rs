@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Component, ComponentParts, ComponentSender, abstractions::Toaster, adw, adw::prelude::*, gtk,
 };
@@ -11,6 +10,7 @@ use crate::{
     shared_widgets::activity_entries::activity_export_formats::{
         activity_detail_text, activity_summary_text,
     },
+    translated_messages,
 };
 
 pub struct ActivityTranscriptDialog {
@@ -51,7 +51,7 @@ impl Component for ActivityTranscriptDialog {
                     add_top_bar = &adw::HeaderBar {
                         pack_start = &gtk::Button {
                             set_icon_name: "edit-copy-symbolic",
-                            set_tooltip_text: Some(&gettext("Copy")),
+                            set_tooltip_text: Some(&translated_messages::widgets::copy_activity_tooltip()),
                             connect_clicked => ActivityTranscriptDialogInput::CopyRequested,
                         },
                     },
@@ -105,7 +105,7 @@ impl Component for ActivityTranscriptDialog {
             ActivityTranscriptDialogInput::CopyRequested => {
                 root.clipboard().set_text(&self.transcript_text);
                 self.toaster
-                    .toast(&gettext("Log details copied to clipboard"));
+                    .toast(&translated_messages::widgets::log_details_copied_toast());
             }
         }
     }

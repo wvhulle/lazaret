@@ -1,12 +1,13 @@
-use gettextrs::gettext;
-
-use crate::host_services::{
-    clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-    protection_evidence::host_protection_evidence::{
-        DaemonEvidence, ProtectionEvidence, ScanServiceEvidence, ScanUnitResult,
-        ScheduledScanEvidence,
+use crate::{
+    host_services::{
+        clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+        protection_evidence::host_protection_evidence::{
+            DaemonEvidence, ProtectionEvidence, ScanServiceEvidence, ScanUnitResult,
+            ScheduledScanEvidence,
+        },
+        systemd_bus::host_systemd_units::{SystemdBusFailure, UnitStartOutcome},
     },
-    systemd_bus::host_systemd_units::{SystemdBusFailure, UnitStartOutcome},
+    translated_messages,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -130,7 +131,7 @@ impl SystemScanControl {
                 scanned_folders, ..
             } if !scanned_folders.is_empty() => scanned_folders.join(", "),
             SystemScanAvailability::SystemScanService { .. } => {
-                gettext("The scan unit names no folders")
+                translated_messages::scans::unit_names_no_folders()
             }
             SystemScanAvailability::NoSystemScanService => String::new(),
         }
@@ -142,15 +143,11 @@ impl SystemScanControl {
                 service_unit,
                 daemon_answering: true,
                 ..
-            } => gettext(
-                "Your system's scan service {unit} scans these folders with the system's own \
-                 settings. Running it needs administrator authorization.",
-            )
-            .replace("{unit}", service_unit),
+            } => translated_messages::scans::system_scan_service_unit(service_unit),
             SystemScanAvailability::SystemScanService {
                 daemon_answering: false,
                 ..
-            } => gettext("Needs the daemon, see Scan Engine"),
+            } => translated_messages::scans::needs_daemon_see_scan(),
             SystemScanAvailability::NoSystemScanService => String::new(),
         }
     }
@@ -172,10 +169,13 @@ pub fn scan_found_threats(
 
 fn systemd_failure_text(bus_failure: &SystemdBusFailure) -> String {
     match bus_failure {
-        SystemdBusFailure::BusCallFailed(bus_error) => gettext("systemd did not answer: {error}")
-            .replace("{error}", &sanitize_scanner_line(&bus_error.to_string())),
+        SystemdBusFailure::BusCallFailed(bus_error) => {
+            translated_messages::scans::systemd_not_answer_error(sanitize_scanner_line(
+                &bus_error.to_string(),
+            ))
+        }
         SystemdBusFailure::UnrecognizedLoadState => {
-            gettext("systemd reported a unit state Lazaret does not recognize")
+            translated_messages::scans::systemd_reported_unit_state()
         }
     }
 }
@@ -185,20 +185,18 @@ pub fn unit_run_toast_text(
     scan_service: &ScanServiceEvidence,
 ) -> String {
     if scan_found_threats(start_outcome, scan_service) {
-        return gettext("The scan found malware");
+        return translated_messages::scans::found_malware();
     }
     match start_outcome {
-        UnitStartOutcome::UnitFinished => gettext("The scan finished"),
+        UnitStartOutcome::UnitFinished => translated_messages::scans::finished_label(),
         UnitStartOutcome::JobEnded { job_result } => {
-            gettext("The scan did not finish cleanly: {result}")
-                .replace("{result}", &sanitize_scanner_line(job_result))
+            translated_messages::scans::not_finish_cleanly_result(sanitize_scanner_line(job_result))
         }
         UnitStartOutcome::AuthorizationRefused => {
-            gettext("Starting the scan needs administrator authorization")
+            translated_messages::scans::starting_scan_needs_administrator()
         }
         UnitStartOutcome::BusFailure(bus_failure) => {
-            gettext("The scan could not be started: {error}")
-                .replace("{error}", &systemd_failure_text(bus_failure))
+            translated_messages::scans::not_started_error(systemd_failure_text(bus_failure))
         }
     }
 }

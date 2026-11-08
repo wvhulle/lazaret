@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use relm4::{
     Sender, adw,
     adw::prelude::*,
@@ -10,6 +9,7 @@ use crate::{
     shared_widgets::awaited_dialogs::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -38,9 +38,9 @@ impl CloseAction {
 
     pub fn choice_label(self) -> String {
         match self {
-            Self::QuitCompletely => gettext("Quit completely"),
-            Self::HideToTray => gettext("Minimize to tray"),
-            Self::AskEachTime => gettext("Always ask"),
+            Self::QuitCompletely => translated_messages::window::quit_completely(),
+            Self::HideToTray => translated_messages::window::minimize_tray(),
+            Self::AskEachTime => translated_messages::window::always_ask(),
         }
     }
 
@@ -101,18 +101,22 @@ pub fn present_close_confirmation<Message: 'static>(
     answered_message: fn(CloseAnswer) -> Message,
 ) {
     let close_dialog = adw::AlertDialog::new(
-        Some(&gettext("Close Lazaret?")),
-        Some(&gettext(
-            "Detection alerts stop while Lazaret isn't running. Keep it running in the \
-             background, or quit completely?",
-        )),
+        Some(&translated_messages::window::close_lazaret()),
+        Some(&translated_messages::window::detection_alerts_stop_lazaret()),
     );
-    add_dismissing_choice::<CloseAnswer>(&close_dialog, &gettext("Cancel"));
-    add_alert_choice(&close_dialog, CloseAnswer::QuitChosen, &gettext("Quit"));
+    add_dismissing_choice::<CloseAnswer>(
+        &close_dialog,
+        &translated_messages::window::cancel_close_button(),
+    );
+    add_alert_choice(
+        &close_dialog,
+        CloseAnswer::QuitChosen,
+        &translated_messages::window::quit_close_button(),
+    );
     add_alert_choice(
         &close_dialog,
         CloseAnswer::KeepRunningChosen,
-        &gettext("Keep Running"),
+        &translated_messages::window::keep_running(),
     );
     close_dialog.set_default_response(Some(CloseAnswer::KeepRunningChosen.response_id()));
     deliver_local_outcome(

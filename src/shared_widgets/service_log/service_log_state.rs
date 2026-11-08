@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use jiff::{Timestamp, tz::TimeZone};
 
 use crate::{
@@ -17,6 +16,7 @@ use crate::{
         host_read_failure_text::unit_journal_failure_text,
         loading_indicators::{LOADED_PAGE_NAME, LOADING_PAGE_NAME},
     },
+    translated_messages,
 };
 
 pub const MISSING_LOG_PAGE_NAME: &str = "missing-log";
@@ -49,15 +49,25 @@ impl ShownRowLevel {
 
     pub fn level_label_text(&self) -> String {
         match self {
-            Self::ThreatDetected => gettext("Detection"),
-            Self::Severity(LogSeverityLevel::Emergency) => gettext("Emergency"),
-            Self::Severity(LogSeverityLevel::Alert) => gettext("Alert"),
-            Self::Severity(LogSeverityLevel::Critical) => gettext("Critical"),
-            Self::Severity(LogSeverityLevel::Error) => gettext("Error"),
-            Self::Severity(LogSeverityLevel::Warning) => gettext("Warning"),
-            Self::Severity(LogSeverityLevel::Notice) => gettext("Notice"),
-            Self::Severity(LogSeverityLevel::Informational) => gettext("Info"),
-            Self::Severity(LogSeverityLevel::Debug) => gettext("Debug"),
+            Self::ThreatDetected => translated_messages::widgets::detection_label(),
+            Self::Severity(LogSeverityLevel::Emergency) => {
+                translated_messages::widgets::emergency_label()
+            }
+            Self::Severity(LogSeverityLevel::Alert) => translated_messages::widgets::alert_label(),
+            Self::Severity(LogSeverityLevel::Critical) => {
+                translated_messages::widgets::critical_level()
+            }
+            Self::Severity(LogSeverityLevel::Error) => translated_messages::widgets::error_level(),
+            Self::Severity(LogSeverityLevel::Warning) => {
+                translated_messages::widgets::warning_label()
+            }
+            Self::Severity(LogSeverityLevel::Notice) => {
+                translated_messages::widgets::notice_label()
+            }
+            Self::Severity(LogSeverityLevel::Informational) => {
+                translated_messages::widgets::info_label()
+            }
+            Self::Severity(LogSeverityLevel::Debug) => translated_messages::widgets::debug_label(),
             Self::Severity(LogSeverityLevel::SeverityMissing) => String::new(),
             Self::Severity(LogSeverityLevel::UnrecognizedSeverity { priority_field }) => {
                 sanitize_scanner_line(priority_field)
@@ -268,19 +278,20 @@ impl ServiceLogView {
 
     pub fn source_text(&self) -> String {
         match self {
-            Self::LogReading => gettext("Checking…"),
+            Self::LogReading => translated_messages::widgets::checking_label(),
             Self::LogRead(ServiceLogContents::FromLogFile { log_path, .. }) => {
                 sanitize_scanner_line(&log_path.to_string_lossy())
             }
             Self::LogRead(ServiceLogContents::FromSystemJournal { .. }) => {
-                gettext("System journal")
+                translated_messages::widgets::system_journal()
             }
             Self::LogRead(ServiceLogContents::NoReadableLog) => {
-                gettext("Neither a log file nor journal lines were found.")
+                translated_messages::widgets::neither_log_file_nor()
             }
             Self::LogRead(ServiceLogContents::JournalUnreadable(read_failure)) => {
-                gettext("No log file was found. {reason}")
-                    .replace("{reason}", &unit_journal_failure_text(*read_failure))
+                translated_messages::widgets::no_log_file_found(unit_journal_failure_text(
+                    *read_failure,
+                ))
             }
         }
     }

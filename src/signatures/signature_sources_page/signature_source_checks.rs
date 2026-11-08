@@ -1,6 +1,5 @@
 use std::{io, path::Path};
 
-use gettextrs::gettext;
 use tokio::task::spawn_blocking;
 
 use crate::{
@@ -14,6 +13,7 @@ use crate::{
     },
     shared_widgets::host_read_failure_text::database_folder_failure_text,
     signatures::signature_sources_page::source_check_results::{AuditCheck, AuditStatus},
+    translated_messages,
 };
 
 const FANGFRISCH_CONFIG_PATH: &str = "/etc/fangfrisch/fangfrisch.conf";
@@ -29,29 +29,20 @@ fn settings_credential_check(
     if distribution_family == DistributionFamily::NixosFamily {
         return inactive_check
             .with_recommendation(
-                gettext(
-                    "{provider} needs a {credential}, and fangfrisch only reads it from its \
-                     settings. On NixOS, services.clamav.fangfrisch.settings is copied into the \
-                     Nix store, which every user of this computer can read, so the {credential} \
-                     would be exposed. Leave {provider} off, or run fangfrisch with a settings \
-                     file kept outside the Nix store, such as an agenix or sops-nix secret.",
-                )
-                .replace("{credential}", &credential_text)
-                .replace("{provider}", provider_name),
+                translated_messages::signatures::provider_needs_credential_fangfrisch(
+                    provider_name,
+                    &credential_text,
+                ),
             )
             .with_documentation(settings_credential.signup_url);
     }
     inactive_check
         .with_recommendation(
-            gettext(
-                "{provider} needs a {credential} from its website. fangfrisch reads it from its \
-                 settings file, usually {path}. Add these lines there, replace the placeholder \
-                 with your {credential}, and make the file readable by root only, so other users \
-                 can't see it.",
-            )
-            .replace("{path}", FANGFRISCH_CONFIG_PATH)
-            .replace("{credential}", &credential_text)
-            .replace("{provider}", provider_name),
+            translated_messages::signatures::provider_needs_credential_website(
+                provider_name,
+                &credential_text,
+                FANGFRISCH_CONFIG_PATH,
+            ),
         )
         .with_suggested_commands([
             settings_credential.fangfrisch_credential_lines,
@@ -68,7 +59,7 @@ fn inactive_provider_check(
     let inactive_check = AuditCheck::new(
         provider_name.to_owned(),
         AuditStatus::CheckSkipped,
-        gettext("Not in use"),
+        translated_messages::signatures::not_use(),
     )
     .starting_collapsed();
     match signature_provider.credential {
@@ -88,20 +79,16 @@ fn inactive_provider_check(
         }
         ProviderCredential::NoCredential(enabling_snippets) => inactive_check
             .with_recommendation(
-                gettext("Add these lines to fangfrisch's settings file, usually {path}.")
-                    .replace("{path}", FANGFRISCH_CONFIG_PATH),
+                translated_messages::signatures::add_lines_fangfrisch_settings(
+                    FANGFRISCH_CONFIG_PATH,
+                ),
             )
             .with_suggested_commands([enabling_snippets.fangfrisch_lines]),
         ProviderCredential::KeyFileSupported(enabling_snippets) => inactive_check
-            .with_recommendation(
-                gettext(
-                    "{provider} needs a free abuse.ch Auth-Key. Add these lines to fangfrisch's \
-                     settings file, usually {path}, replace the placeholder with your key, and \
-                     make the file readable by root only, so other users can't see it.",
-                )
-                .replace("{path}", FANGFRISCH_CONFIG_PATH)
-                .replace("{provider}", provider_name),
-            )
+            .with_recommendation(translated_messages::signatures::provider_needs_free_abuse(
+                provider_name,
+                FANGFRISCH_CONFIG_PATH,
+            ))
             .with_suggested_commands([
                 enabling_snippets.fangfrisch_lines,
                 FANGFRISCH_CONFIG_PROTECTION_COMMAND,
@@ -128,7 +115,7 @@ pub fn signature_source_checks(
                         .provider_name()
                         .to_owned(),
                     AuditStatus::CheckPassed,
-                    gettext("In use"),
+                    translated_messages::signatures::use_label(),
                 )
             } else {
                 inactive_provider_check(signature_provider, distribution_family)
@@ -147,8 +134,9 @@ pub fn unreadable_source_checks(read_failure: DatabaseFolderReadFailure) -> Vec<
                     .provider_name()
                     .to_owned(),
                 AuditStatus::StatusUnknown,
-                gettext("Unknown. {reason}")
-                    .replace("{reason}", &database_folder_failure_text(read_failure)),
+                translated_messages::signatures::unknown_reason_source(
+                    database_folder_failure_text(read_failure),
+                ),
             )
         })
         .collect()

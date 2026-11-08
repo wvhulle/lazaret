@@ -1,4 +1,3 @@
-use gettextrs::gettext;
 use jiff::Timestamp;
 
 use crate::{
@@ -17,6 +16,7 @@ use crate::{
             },
         },
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,7 +48,7 @@ pub struct MomentContext {
 }
 
 pub fn daemon_awaited_text() -> String {
-    gettext("Needs the daemon, see Scan Engine")
+    translated_messages::widgets::needs_daemon_see_scan()
 }
 
 pub const fn evidence_row(evidence_name: String, evidence_value: String) -> StepEvidenceRow {
@@ -106,5 +106,5 @@ pub fn remedy_commands(
 }
 
 pub fn unknown_run_text(read_failure: UnitJournalReadFailure) -> String {
-    gettext("Unknown. {reason}").replace("{reason}", &unit_journal_failure_text(read_failure))
+    translated_messages::widgets::unknown_reason(unit_journal_failure_text(read_failure))
 }

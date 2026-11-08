@@ -1,18 +1,18 @@
-use gettextrs::gettext;
-
-use crate::host_services::{
-    clamav_programs::database_directory_status::DatabaseFolderReadFailure,
-    systemd_journal::unit_journal_reader::UnitJournalReadFailure,
+use crate::{
+    host_services::{
+        clamav_programs::database_directory_status::DatabaseFolderReadFailure,
+        systemd_journal::unit_journal_reader::UnitJournalReadFailure,
+    },
+    translated_messages,
 };
 
 pub fn unit_journal_failure_text(read_failure: UnitJournalReadFailure) -> String {
     match read_failure {
         UnitJournalReadFailure::JournalReadFailed { failure_kind } => {
-            gettext("The system journal could not be read: {error}")
-                .replace("{error}", &failure_kind.to_string())
+            translated_messages::widgets::system_journal_not_read(failure_kind)
         }
         UnitJournalReadFailure::ReadingTaskInterrupted => {
-            gettext("Reading the system journal stopped before it finished")
+            translated_messages::widgets::journal_reading_incomplete()
         }
     }
 }
@@ -20,11 +20,10 @@ pub fn unit_journal_failure_text(read_failure: UnitJournalReadFailure) -> String
 pub fn database_folder_failure_text(read_failure: DatabaseFolderReadFailure) -> String {
     match read_failure {
         DatabaseFolderReadFailure::FolderUnreadable { failure_kind } => {
-            gettext("The signature folder could not be read: {error}")
-                .replace("{error}", &failure_kind.to_string())
+            translated_messages::widgets::signature_folder_not_read(failure_kind)
         }
         DatabaseFolderReadFailure::ReadingTaskInterrupted => {
-            gettext("Reading the signature folder stopped before it finished")
+            translated_messages::widgets::reading_signature_folder_stopped()
         }
     }
 }

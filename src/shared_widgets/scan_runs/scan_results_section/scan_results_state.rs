@@ -1,10 +1,11 @@
 use std::time::Duration;
 
-use gettextrs::{gettext, ngettext};
-
-use crate::host_services::clamav_scanner::{
-    scan_progress_estimates::elapsed_duration_text,
-    scanner_output_parser::{DetectedThreat, displayed_threat_name, sanitize_scanner_line},
+use crate::{
+    host_services::clamav_scanner::{
+        scan_progress_estimates::elapsed_duration_text,
+        scanner_output_parser::{DetectedThreat, displayed_threat_name, sanitize_scanner_line},
+    },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,28 +64,15 @@ impl ScanResultsView {
 
     pub fn summary_text(&self) -> String {
         let scanned_text = if self.inspected_file_count < self.planned_file_count {
-            ngettext(
-                "{done} of {total} file scanned",
-                "{done} of {total} files scanned",
-                u32::try_from(self.planned_file_count).unwrap_or(u32::MAX),
+            translated_messages::widgets::done_total_file_scanned(
+                self.planned_file_count,
+                self.inspected_file_count,
             )
-            .replace("{done}", &self.inspected_file_count.to_string())
-            .replace("{total}", &self.planned_file_count.to_string())
         } else {
-            ngettext(
-                "{count} file scanned",
-                "{count} files scanned",
-                u32::try_from(self.inspected_file_count).unwrap_or(u32::MAX),
-            )
-            .replace("{count}", &self.inspected_file_count.to_string())
+            translated_messages::widgets::count_file_scanned_results(self.inspected_file_count)
         };
         let excluded_text = (self.excluded_entry_count > 0).then(|| {
-            ngettext(
-                "{count} entry skipped by exclusions",
-                "{count} entries skipped by exclusions",
-                u32::try_from(self.excluded_entry_count).unwrap_or(u32::MAX),
-            )
-            .replace("{count}", &self.excluded_entry_count.to_string())
+            translated_messages::widgets::count_entry_skipped_exclusions(self.excluded_entry_count)
         });
         std::iter::once(scanned_text)
             .chain(excluded_text)
@@ -102,10 +90,16 @@ impl ScanResultsView {
 
 pub fn status_title(results_status: ScanResultsStatus) -> String {
     match results_status {
-        ScanResultsStatus::ThreatsDetected => gettext("Threats Detected"),
-        ScanResultsStatus::NoThreatsDetected => gettext("No threats found"),
-        ScanResultsStatus::FinishedWithProblems => gettext("The scan did not finish cleanly"),
-        ScanResultsStatus::ScanCancelled => gettext("Scan cancelled by user"),
+        ScanResultsStatus::ThreatsDetected => {
+            translated_messages::widgets::threats_detected_results()
+        }
+        ScanResultsStatus::NoThreatsDetected => {
+            translated_messages::widgets::no_threats_found_results()
+        }
+        ScanResultsStatus::FinishedWithProblems => {
+            translated_messages::widgets::scan_not_finish_results()
+        }
+        ScanResultsStatus::ScanCancelled => translated_messages::widgets::scan_cancelled_user(),
     }
 }
 
@@ -129,12 +123,7 @@ pub fn status_icon(results_status: ScanResultsStatus) -> &'static str {
 }
 
 fn threats_found_text(threat_count: usize) -> String {
-    ngettext(
-        "{count} threat found",
-        "{count} threats found",
-        u32::try_from(threat_count).unwrap_or(u32::MAX),
-    )
-    .replace("{count}", &threat_count.to_string())
+    translated_messages::widgets::count_threat_found_results(threat_count)
 }
 
 pub fn format_scan_report(results_view: &ScanResultsView) -> String {
@@ -142,22 +131,22 @@ pub fn format_scan_report(results_view: &ScanResultsView) -> String {
         status_title(results_view.results_status),
         format!(
             "{}: {}",
-            gettext("Files scanned"),
+            translated_messages::widgets::files_scanned(),
             results_view.inspected_file_count
         ),
         format!(
             "{}: {}",
-            gettext("Files planned"),
+            translated_messages::widgets::files_planned(),
             results_view.planned_file_count
         ),
         format!(
             "{}: {}",
-            gettext("Directories"),
+            translated_messages::widgets::directories_label(),
             results_view.scanned_directory_count
         ),
         format!(
             "{}: {}",
-            gettext("Threats found"),
+            translated_messages::widgets::threats_found(),
             results_view.detected_threats.len()
         ),
     ];
@@ -199,16 +188,11 @@ pub fn format_scan_report(results_view: &ScanResultsView) -> String {
 
 pub fn fingerprint_failure_text(fingerprint_failure: &std::io::Error) -> String {
     match fingerprint_failure.kind() {
-        std::io::ErrorKind::NotFound => gettext(
-            "The file is no longer there. If it is in quarantine, trust it from the Quarantine \
-             page.",
-        ),
-        std::io::ErrorKind::PermissionDenied => gettext(
-            "The file can't be read, possibly because on-access scanning blocks it. Move it to \
-             quarantine, then trust it from the Quarantine page.",
-        ),
-        _other_kind => gettext("The file could not be read: {error}")
-            .replace("{error}", &fingerprint_failure.to_string()),
+        std::io::ErrorKind::NotFound => translated_messages::widgets::file_no_longer_quarantine(),
+        std::io::ErrorKind::PermissionDenied => {
+            translated_messages::widgets::file_cannot_read_possibly()
+        }
+        _other_kind => translated_messages::widgets::file_not_read_scan(fingerprint_failure),
     }
 }
 

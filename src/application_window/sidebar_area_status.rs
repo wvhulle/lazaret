@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 
-use gettextrs::{gettext, ngettext};
 use jiff::Timestamp;
 
 use crate::{
@@ -62,6 +61,7 @@ use crate::{
     signatures::database_updates_page::database_updates_presentation::{
         database_update_condition, third_party_source_condition, updater_failed,
     },
+    translated_messages,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -165,10 +165,6 @@ fn relative_text(area_context: &AreaSummaryContext, moment: Timestamp) -> String
         .relative_moment_text(moment, area_context.reference_moment)
 }
 
-fn count_as_u32(item_count: usize) -> u32 {
-    u32::try_from(item_count).unwrap_or(u32::MAX)
-}
-
 fn third_party_provider_count(third_party_listing: &ThirdPartySignatureListing) -> usize {
     third_party_listing
         .listed_files()
@@ -190,21 +186,20 @@ fn signature_sources_summary(
     );
     let provider_count = third_party_provider_count(&signature_evidence.third_party_listing);
     let live_state_text = match &signature_evidence.third_party_listing {
-        ThirdPartySignatureListing::FolderUnreadable(_) => gettext("Other sources unknown"),
+        ThirdPartySignatureListing::FolderUnreadable(_) => {
+            translated_messages::window::other_sources_unknown()
+        }
         ThirdPartySignatureListing::FilesListed(_)
             if source_condition != CheckedCondition::ConditionMet =>
         {
-            gettext("A source is out of date")
+            translated_messages::window::source_out_date()
         }
         ThirdPartySignatureListing::FilesListed(_) if provider_count == 0 => {
-            gettext("Official signatures only")
+            translated_messages::window::official_signatures()
         }
-        ThirdPartySignatureListing::FilesListed(_) => ngettext(
-            "Official and {count} other source",
-            "Official and {count} other sources",
-            count_as_u32(provider_count),
-        )
-        .replace("{count}", &provider_count.to_string()),
+        ThirdPartySignatureListing::FilesListed(_) => {
+            translated_messages::window::official_count_other_source(provider_count)
+        }
     };
     condition_summary(source_condition, live_state_text)
 }
@@ -229,9 +224,9 @@ fn database_updates_text(
     area_context: &AreaSummaryContext,
 ) -> String {
     match signature_evidence.database_evidence {
-        DatabaseEvidence::DatabaseMissing => gettext("No virus definitions"),
+        DatabaseEvidence::DatabaseMissing => translated_messages::window::no_virus_definitions(),
         DatabaseEvidence::AgeUndetermined | DatabaseEvidence::InspectionInterrupted => {
-            gettext("Age of the definitions unknown")
+            translated_messages::window::age_definitions_unknown()
         }
         DatabaseEvidence::BuiltAt { .. }
             if signature_evidence
@@ -239,17 +234,21 @@ fn database_updates_text(
                 .iter()
                 .any(updater_failed) =>
         {
-            gettext("Last update failed")
+            translated_messages::window::last_update_failed()
         }
         DatabaseEvidence::BuiltAt { built_at } if built_at > area_context.reference_moment => {
-            gettext("Definitions dated in the future")
+            translated_messages::window::definitions_dated_future()
         }
         DatabaseEvidence::BuiltAt { built_at } => {
             match latest_completed_update(signature_evidence) {
-                Some(finished_at) => gettext("Updated {when}")
-                    .replace("{when}", &relative_text(area_context, finished_at)),
-                None => gettext("Definitions from {when}")
-                    .replace("{when}", &relative_text(area_context, built_at)),
+                Some(finished_at) => translated_messages::window::updated_label(relative_text(
+                    area_context,
+                    finished_at,
+                )),
+                None => translated_messages::window::definitions_label(relative_text(
+                    area_context,
+                    built_at,
+                )),
             }
         }
     }
@@ -262,12 +261,14 @@ fn updater_trust_summary(protection_evidence: &ProtectionEvidence) -> Option<Are
     );
     match trust_condition {
         CheckedCondition::ConditionMet => None,
-        CheckedCondition::ConditionFailed => Some(gettext("freshclam is refused")),
-        CheckedCondition::EvidenceUnknown => Some(gettext("Unknown whether freshclam is trusted")),
+        CheckedCondition::ConditionFailed => Some(translated_messages::window::freshclam_refused()),
+        CheckedCondition::EvidenceUnknown => {
+            Some(translated_messages::window::unknown_whether_freshclam_trusted())
+        }
         CheckedCondition::SetupSuggested
         | CheckedCondition::ReviewSuggested
         | CheckedCondition::PrerequisiteMissing => {
-            Some(gettext("A freshclam copy in your account is ignored"))
+            Some(translated_messages::window::freshclam_copy_account_ignored())
         }
     }
     .map(|live_state_text| condition_summary(trust_condition, live_state_text))
@@ -291,15 +292,17 @@ fn daemon_text(daemon_evidence: &DaemonEvidence) -> String {
     match daemon_evidence {
         DaemonEvidence::ClamdAnswering {
             loaded_signatures: LoadedSignatures::BehindDisk { .. },
-        } => gettext("clamd uses older signatures"),
+        } => translated_messages::window::clamd_uses_older_signatures(),
         DaemonEvidence::ClamdAnswering {
             loaded_signatures:
                 LoadedSignatures::MatchesDisk | LoadedSignatures::ComparisonUnavailable,
-        } => gettext("clamd answering"),
-        DaemonEvidence::UnitActiveNotAnswering { .. } => gettext("clamd not answering"),
-        DaemonEvidence::UnitStateUnknown => gettext("clamd state unknown"),
-        DaemonEvidence::UnitStopped { .. } => gettext("clamd not running"),
-        DaemonEvidence::NeverSetUp => gettext("clamd not set up"),
+        } => translated_messages::window::clamd_answering(),
+        DaemonEvidence::UnitActiveNotAnswering { .. } => {
+            translated_messages::window::clamd_not_answering()
+        }
+        DaemonEvidence::UnitStateUnknown => translated_messages::window::clamd_state_unknown(),
+        DaemonEvidence::UnitStopped { .. } => translated_messages::window::clamd_not_running(),
+        DaemonEvidence::NeverSetUp => translated_messages::window::clamd_not_set_up(),
     }
 }
 
@@ -308,15 +311,15 @@ fn engine_installation_summary(engine_installation: &EngineInstallation) -> Opti
         EngineInstallation::VersionReported { .. } => None,
         EngineInstallation::EngineMissing => Some(summary_of(
             AreaStatus::AreaFailing,
-            gettext("ClamAV not installed"),
+            translated_messages::window::clamav_not_installed(),
         )),
         EngineInstallation::ScannerRefused { .. } => Some(condition_summary(
             engine_condition(engine_installation),
-            gettext("clamscan is refused"),
+            translated_messages::window::clamscan_refused(),
         )),
         EngineInstallation::VersionUnverified(_) => Some(condition_summary(
             engine_condition(engine_installation),
-            gettext("ClamAV version unknown"),
+            translated_messages::window::clamav_version_unknown(),
         )),
     }
 }
@@ -328,14 +331,16 @@ fn scanner_trust_summary(protection_evidence: &ProtectionEvidence) -> Option<Are
     );
     match trust_condition {
         CheckedCondition::ConditionMet => None,
-        CheckedCondition::ConditionFailed => Some(gettext("A scanner program is refused")),
+        CheckedCondition::ConditionFailed => {
+            Some(translated_messages::window::scanner_program_refused())
+        }
         CheckedCondition::EvidenceUnknown => {
-            Some(gettext("Unknown whether the scanners are trusted"))
+            Some(translated_messages::window::unknown_whether_scanners_trusted())
         }
         CheckedCondition::SetupSuggested
         | CheckedCondition::ReviewSuggested
         | CheckedCondition::PrerequisiteMissing => {
-            Some(gettext("A scanner copy in your account is ignored"))
+            Some(translated_messages::window::scanner_copy_account_ignored())
         }
     }
     .map(|live_state_text| condition_summary(trust_condition, live_state_text))
@@ -349,11 +354,15 @@ fn reduction_summary(
         runtime_reduction_condition(&protection_evidence.runtime_reductions, setting_group);
     match reduction_condition {
         CheckedCondition::ConditionMet => None,
-        CheckedCondition::EvidenceUnknown => Some(gettext("Runtime changes unknown")),
+        CheckedCondition::EvidenceUnknown => {
+            Some(translated_messages::window::runtime_changes_unknown())
+        }
         CheckedCondition::SetupSuggested
         | CheckedCondition::ReviewSuggested
         | CheckedCondition::ConditionFailed
-        | CheckedCondition::PrerequisiteMissing => Some(gettext("Settings reduced at runtime")),
+        | CheckedCondition::PrerequisiteMissing => {
+            Some(translated_messages::window::settings_reduced_runtime())
+        }
     }
     .map(|live_state_text| condition_summary(reduction_condition, live_state_text))
 }
@@ -374,7 +383,7 @@ fn scan_engine_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary 
 }
 
 fn waiting_for_daemon_text() -> String {
-    gettext("Waiting for clamd")
+    translated_messages::window::waiting_clamd()
 }
 
 fn shown_coverage_text(coverage_summary: &str, home_directory: &str) -> String {
@@ -404,20 +413,22 @@ fn on_access_text(
     home_directory: &str,
 ) -> String {
     match on_access_evidence.on_access_scanner {
-        OnAccessScanner::UnitStateUnknown => gettext("State unknown"),
-        OnAccessScanner::NeverSetUp => gettext("Not set up"),
+        OnAccessScanner::UnitStateUnknown => translated_messages::window::state_unknown(),
+        OnAccessScanner::NeverSetUp => translated_messages::window::not_set_up(),
         OnAccessScanner::UnitStopped { .. } | OnAccessScanner::MonitorRunning
             if !daemon_answering =>
         {
             waiting_for_daemon_text()
         }
-        OnAccessScanner::UnitStopped { .. } => gettext("clamonacc not running"),
+        OnAccessScanner::UnitStopped { .. } => translated_messages::window::clamonacc_not_running(),
         OnAccessScanner::MonitorRunning => match &on_access_evidence.on_access_config {
-            OnAccessConfig::ConfigUnreadable(_) => gettext("clamd.conf unreadable"),
+            OnAccessConfig::ConfigUnreadable(_) => {
+                translated_messages::window::clamd_conf_unreadable()
+            }
             OnAccessConfig::ConfigRead {
                 watch_scope: WatchScope::NothingWatched,
                 ..
-            } => gettext("Nothing watched"),
+            } => translated_messages::window::nothing_watched(),
             OnAccessConfig::ConfigRead {
                 watch_scope: watch_scope @ WatchScope::WatchedLocations { .. },
                 configured_prevention,
@@ -430,14 +441,20 @@ fn on_access_text(
             ) {
                 OnAccessBlocking::PreventionOff
                 | OnAccessBlocking::PreventionConflictsWithMounts => {
-                    gettext("Checks files, doesn't block")
+                    translated_messages::window::checks_files_not_block()
                 }
-                OnAccessBlocking::KernelCannotBlock => gettext("Checks files, kernel can't block"),
+                OnAccessBlocking::KernelCannotBlock => {
+                    translated_messages::window::checks_files_kernel_cannot()
+                }
                 OnAccessBlocking::KernelSupportUnknown(_) => {
-                    gettext("Checks files, blocking unknown")
+                    translated_messages::window::checks_files_blocking_unknown()
                 }
-                OnAccessBlocking::BlocksDetectedFiles => gettext("Blocking {paths}")
-                    .replace("{paths}", &watched_paths_text(watch_scope, home_directory)),
+                OnAccessBlocking::BlocksDetectedFiles => {
+                    translated_messages::window::blocking_paths(watched_paths_text(
+                        watch_scope,
+                        home_directory,
+                    ))
+                }
             },
         },
     }
@@ -453,20 +470,24 @@ fn on_access_setup_summary(on_access_evidence: &OnAccessEvidence) -> Option<Area
         {
             condition_summary(
                 CheckedCondition::EvidenceUnknown,
-                gettext("Folder watch limit unknown"),
+                translated_messages::window::folder_watch_limit_unknown(),
             )
         } else {
             condition_summary(
                 CheckedCondition::ReviewSuggested,
                 match first_finding {
                     OnAccessSetupFinding::MountWatchConflicts { .. } => {
-                        gettext("Mount watching conflicts")
+                        translated_messages::window::mount_watching_conflicts()
                     }
-                    OnAccessSetupFinding::ClamdUserNotExcluded => gettext("clamd not excluded"),
-                    OnAccessSetupFinding::WholeRootIncluded => gettext("Watches / directly"),
+                    OnAccessSetupFinding::ClamdUserNotExcluded => {
+                        translated_messages::window::clamd_not_excluded()
+                    }
+                    OnAccessSetupFinding::WholeRootIncluded => {
+                        translated_messages::window::watches_directly()
+                    }
                     OnAccessSetupFinding::WatchLimitLow { .. }
                     | OnAccessSetupFinding::WatchLimitUnknown { .. } => {
-                        gettext("Folder watch limit low")
+                        translated_messages::window::folder_watch_limit_low()
                     }
                 },
             )
@@ -506,7 +527,7 @@ fn scheduled_scan_text(
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerInactive,
             ..
-        } => gettext("Timer not active"),
+        } => translated_messages::window::timer_not_active(),
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerActive { next_run },
             scan_service,
@@ -516,18 +537,26 @@ fn scheduled_scan_text(
                 if scheduled_scan_condition(scheduled_scan_evidence, daemon_answering)
                     != CheckedCondition::ConditionMet =>
             {
-                gettext("Last scan failed")
+                translated_messages::window::last_scan_failed()
             }
             ScanServiceEvidence::ServiceConfigured { .. } => match next_run {
-                UnitTimestamp::RecordedAt { recorded_at } => gettext("Next scan {when}")
-                    .replace("{when}", &relative_text(area_context, *recorded_at)),
-                UnitTimestamp::NeverRecorded => gettext("No next scan planned"),
+                UnitTimestamp::RecordedAt { recorded_at } => {
+                    translated_messages::window::next_scan(relative_text(
+                        area_context,
+                        *recorded_at,
+                    ))
+                }
+                UnitTimestamp::NeverRecorded => translated_messages::window::no_next_scan_planned(),
             },
-            ScanServiceEvidence::ServiceMissing => gettext("Scan service missing"),
-            ScanServiceEvidence::ServiceUnreadable => gettext("Scan service unknown"),
+            ScanServiceEvidence::ServiceMissing => {
+                translated_messages::window::scan_service_missing()
+            }
+            ScanServiceEvidence::ServiceUnreadable => {
+                translated_messages::window::scan_service_unknown()
+            }
         },
-        ScheduledScanEvidence::LazaretSchedule => gettext("Scheduled by Lazaret"),
-        ScheduledScanEvidence::NoSchedule => gettext("No scan scheduled"),
+        ScheduledScanEvidence::LazaretSchedule => translated_messages::window::scheduled_lazaret(),
+        ScheduledScanEvidence::NoSchedule => translated_messages::window::no_scan_scheduled(),
     }
 }
 
@@ -570,35 +599,40 @@ fn scheduled_scans_summary(
         [account_finding_summary(
             &protection_evidence.account_setting_findings,
             changes_schedule_unit,
-            gettext("Schedule changed outside Lazaret"),
+            translated_messages::window::schedule_changed_outside_lazaret(),
         )],
     )
 }
 
 fn manual_scan_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary {
     let scanner_summary = match protection_evidence.engine_installation {
-        EngineInstallation::EngineMissing => {
-            summary_of(AreaStatus::AreaFailing, gettext("ClamAV not installed"))
-        }
+        EngineInstallation::EngineMissing => summary_of(
+            AreaStatus::AreaFailing,
+            translated_messages::window::clamav_not_installed(),
+        ),
         EngineInstallation::VersionReported { .. }
         | EngineInstallation::ScannerRefused { .. }
         | EngineInstallation::VersionUnverified(_)
             if daemon_is_answering(&protection_evidence.daemon_evidence) =>
         {
-            summary_of(AreaStatus::AreaHealthy, gettext("Ready to scan"))
+            summary_of(
+                AreaStatus::AreaHealthy,
+                translated_messages::window::ready_scan(),
+            )
         }
         EngineInstallation::VersionReported { .. }
         | EngineInstallation::ScannerRefused { .. }
-        | EngineInstallation::VersionUnverified(_) => {
-            summary_of(AreaStatus::AreaHealthy, gettext("Uses the slower clamscan"))
-        }
+        | EngineInstallation::VersionUnverified(_) => summary_of(
+            AreaStatus::AreaHealthy,
+            translated_messages::window::uses_slower_clamscan(),
+        ),
     };
     worst_summary(
         scanner_summary,
         [account_finding_summary(
             &protection_evidence.account_setting_findings,
             excludes_broadly,
-            gettext("An exclusion may skip malware"),
+            translated_messages::window::exclusion_skip_malware(),
         )],
     )
 }
@@ -607,14 +641,14 @@ fn removable_drives_summary(removable_drives_status: &RemovableDrivesStatus) -> 
     match &removable_drives_status.device_scan_status {
         DeviceScanStatus::DeviceScanRunning { drive_name } => summary_of(
             AreaStatus::AreaHealthy,
-            gettext("Scanning {drive}").replace("{drive}", drive_name),
+            translated_messages::window::scanning_drive(drive_name),
         ),
         DeviceScanStatus::DeviceScanEnded {
             drive_name,
             scan_result: ScanResultsStatus::ThreatsDetected,
         } => summary_of(
             AreaStatus::AreaNeedsReview,
-            gettext("Threats found on {drive}").replace("{drive}", drive_name),
+            translated_messages::window::threats_found_drive(drive_name),
         ),
         DeviceScanStatus::NoDeviceScanYet
         | DeviceScanStatus::DeviceScanEnded {
@@ -642,12 +676,14 @@ fn alerts_summary(
         return None;
     }
     let live_state_text = match alert_readiness.journal_access {
-        JournalAccess::JournalUnreadable => gettext("Journal unreadable"),
-        JournalAccess::FollowingFailed(_) => gettext("Following the journal stopped"),
-        JournalAccess::FollowingJournal if !alert_readiness.notifications_enabled => {
-            gettext("Notifications off")
+        JournalAccess::JournalUnreadable => translated_messages::window::journal_unreadable(),
+        JournalAccess::FollowingFailed(_) => {
+            translated_messages::window::following_journal_stopped()
         }
-        JournalAccess::FollowingJournal => gettext("Alerts stop when Lazaret quits"),
+        JournalAccess::FollowingJournal if !alert_readiness.notifications_enabled => {
+            translated_messages::window::notifications_off()
+        }
+        JournalAccess::FollowingJournal => translated_messages::window::alerts_stop_lazaret_quits(),
     };
     Some(condition_summary(alert_condition, live_state_text))
 }
@@ -657,10 +693,10 @@ fn process_attach_summary(process_attach_scope: ProcessAttachScope) -> Option<Ar
     match process_attach_scope {
         ProcessAttachScope::AttachRestricted => None,
         ProcessAttachScope::AnyProgramMayAttach | ProcessAttachScope::YamaNotLoaded => {
-            Some(gettext("Other programs can attach to Lazaret"))
+            Some(translated_messages::window::other_programs_attach_lazaret())
         }
         ProcessAttachScope::ScopeUnreadable(_) => {
-            Some(gettext("Unknown whether programs can attach"))
+            Some(translated_messages::window::unknown_whether_programs_attach())
         }
     }
     .map(|live_state_text| condition_summary(attach_condition, live_state_text))
@@ -672,16 +708,14 @@ fn detections_summary(
 ) -> AreaSummary {
     let unresolved_detections = area_context.unresolved_detections;
     let decision_summary = if unresolved_detections == 0 {
-        summary_of(AreaStatus::AreaHealthy, gettext("Nothing to decide"))
+        summary_of(
+            AreaStatus::AreaHealthy,
+            translated_messages::window::nothing_decide(),
+        )
     } else {
         summary_of(
             AreaStatus::AreaNeedsReview,
-            ngettext(
-                "{count} needs a decision",
-                "{count} need a decision",
-                count_as_u32(unresolved_detections),
-            )
-            .replace("{count}", &unresolved_detections.to_string()),
+            translated_messages::window::count_needs_decision(unresolved_detections),
         )
     };
     worst_summary(
@@ -695,42 +729,40 @@ fn detections_summary(
 
 fn quarantine_summary(quarantine_entry_count: QuarantineEntryCount) -> AreaSummary {
     match quarantine_entry_count {
-        QuarantineEntryCount::CountLoading => {
-            summary_of(AreaStatus::AreaUnknown, gettext("Loading…"))
-        }
-        QuarantineEntryCount::EntriesCounted { entry_count: 0 } => {
-            summary_of(AreaStatus::AreaHealthy, gettext("Empty"))
-        }
+        QuarantineEntryCount::CountLoading => summary_of(
+            AreaStatus::AreaUnknown,
+            translated_messages::window::loading_label(),
+        ),
+        QuarantineEntryCount::EntriesCounted { entry_count: 0 } => summary_of(
+            AreaStatus::AreaHealthy,
+            translated_messages::window::empty_label(),
+        ),
         QuarantineEntryCount::EntriesCounted { entry_count } => summary_of(
             AreaStatus::AreaHealthy,
-            ngettext("{count} item", "{count} items", count_as_u32(entry_count))
-                .replace("{count}", &entry_count.to_string()),
+            translated_messages::window::count_item(entry_count),
         ),
         QuarantineEntryCount::CountUnavailable => summary_of(
             AreaStatus::AreaFailing,
-            gettext("The quarantine can't be read"),
+            translated_messages::window::quarantine_cannot_read(),
         ),
     }
 }
 
 fn trusted_entries_text(trusted_entries: usize) -> String {
     if trusted_entries == 0 {
-        return gettext("Nothing trusted");
+        return translated_messages::window::nothing_trusted();
     }
-    ngettext(
-        "{count} item trusted",
-        "{count} items trusted",
-        count_as_u32(trusted_entries),
-    )
-    .replace("{count}", &trusted_entries.to_string())
+    translated_messages::window::count_item_trusted(trusted_entries)
 }
 
 fn trusted_detections_summary(trust_list_reading: &TrustListReading) -> AreaSummary {
     let live_state_text = match trust_list_reading {
-        TrustListReading::FolderUnreadable(_) => gettext("Signature folder unreadable"),
+        TrustListReading::FolderUnreadable(_) => {
+            translated_messages::window::signature_folder_unreadable()
+        }
         TrustListReading::FolderMissing => trusted_entries_text(0),
         TrustListReading::ListsRead(trust_list) if !trust_list.foreign_allowlists.is_empty() => {
-            gettext("Another allowlist silences ClamAV")
+            translated_messages::window::another_allowlist_silences_clamav()
         }
         TrustListReading::ListsRead(trust_list) => {
             match (&trust_list.trusted_files, &trust_list.ignored_signatures) {
@@ -740,7 +772,7 @@ fn trusted_detections_summary(trust_list_reading: &TrustListReading) -> AreaSumm
                 ) => trusted_entries_text(trusted_files.len() + ignored_signatures.len()),
                 (LazaretListReading::ListUnreadable(_), _)
                 | (LazaretListReading::ListRead(_), LazaretListReading::ListUnreadable(_)) => {
-                    gettext("Lazaret's allowlist is unreadable")
+                    translated_messages::window::lazaret_allowlist_unreadable()
                 }
             }
         }
@@ -750,42 +782,33 @@ fn trusted_detections_summary(trust_list_reading: &TrustListReading) -> AreaSumm
 
 fn sent_samples_summary(submission_tally: SubmissionTally) -> AreaSummary {
     match submission_tally {
-        SubmissionTally::TallyLoading => summary_of(AreaStatus::AreaUnknown, gettext("Loading…")),
+        SubmissionTally::TallyLoading => summary_of(
+            AreaStatus::AreaUnknown,
+            translated_messages::window::loading_label(),
+        ),
         SubmissionTally::TallyUnavailable => summary_of(
             AreaStatus::AreaFailing,
-            gettext("Sent samples can't be read"),
+            translated_messages::window::sent_samples_cannot_read(),
         ),
         SubmissionTally::TallyCounted {
             submitted_count: 0, ..
-        } => summary_of(AreaStatus::AreaHealthy, gettext("Nothing sent")),
+        } => summary_of(
+            AreaStatus::AreaHealthy,
+            translated_messages::window::nothing_sent(),
+        ),
         SubmissionTally::TallyCounted { refused_count, .. } if refused_count > 0 => summary_of(
             AreaStatus::AreaNeedsReview,
-            ngettext(
-                "{count} refused by its service",
-                "{count} refused by their services",
-                count_as_u32(refused_count),
-            )
-            .replace("{count}", &refused_count.to_string()),
+            translated_messages::window::count_refused_service(refused_count),
         ),
         SubmissionTally::TallyCounted { awaiting_count, .. } if awaiting_count > 0 => summary_of(
             AreaStatus::AreaHealthy,
-            ngettext(
-                "{count} awaiting review",
-                "{count} awaiting review",
-                count_as_u32(awaiting_count),
-            )
-            .replace("{count}", &awaiting_count.to_string()),
+            translated_messages::window::count_awaiting_review(awaiting_count),
         ),
         SubmissionTally::TallyCounted {
             submitted_count, ..
         } => summary_of(
             AreaStatus::AreaHealthy,
-            ngettext(
-                "{count} sent",
-                "{count} sent",
-                count_as_u32(submitted_count),
-            )
-            .replace("{count}", &submitted_count.to_string()),
+            translated_messages::window::count_sent(submitted_count),
         ),
     }
 }
