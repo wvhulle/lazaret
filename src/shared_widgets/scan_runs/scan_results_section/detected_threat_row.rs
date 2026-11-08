@@ -232,13 +232,13 @@ impl FactoryComponent for DetectedThreatRow {
                 },
             },
 
+            #[name = "threat_actions_button"]
             add_suffix = &gtk::MenuButton {
                 set_icon_name: "view-more-symbolic",
                 set_tooltip_text: Some(&translated_messages::widgets::more_actions_tooltip()),
                 update_property: &[gtk::accessible::Property::Label(&translated_messages::widgets::more_actions_tooltip())],
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
-                set_menu_model: Some(&threat_actions_menu(&self.detected_threat)),
             },
         }
     }
@@ -292,6 +292,9 @@ impl FactoryComponent for DetectedThreatRow {
             DetectedThreatRowOutput::PathCopyRequested,
         ));
         row_actions.register_for_widget(&widgets.threat_action_row);
+        widgets
+            .threat_actions_button
+            .set_menu_model(Some(&threat_actions_menu(&self.detected_threat)));
         widgets
     }
 
