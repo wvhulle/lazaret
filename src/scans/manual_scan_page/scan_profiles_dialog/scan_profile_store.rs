@@ -74,6 +74,19 @@ impl BuiltinProfile {
         }
     }
 
+    fn with_current_exclusions(self, stored_draft: ProfileDraft) -> ProfileDraft {
+        let keeps_previous_home_default = self == Self::HomeFolder
+            && stored_draft.excluded_patterns == string_list(&PREVIOUS_HOME_CACHE_EXCLUSIONS);
+        if keeps_previous_home_default {
+            ProfileDraft {
+                excluded_patterns: string_list(&HOME_CACHE_EXCLUSIONS),
+                ..stored_draft
+            }
+        } else {
+            stored_draft
+        }
+    }
+
     fn with_canonical_naming(self, profile_draft: ProfileDraft) -> ProfileDraft {
         ProfileDraft {
             profile_name: self.canonical_name().to_owned(),
@@ -230,9 +243,8 @@ impl StoredScanProfile {
         let profile_origin = ProfileOrigin::from_stored_id(self.id.clone(), &self.name);
         let stored_draft = self.into_draft();
         let profile_draft = match &profile_origin {
-            ProfileOrigin::Builtin(builtin_profile) => {
-                builtin_profile.with_canonical_naming(stored_draft)
-            }
+            ProfileOrigin::Builtin(builtin_profile) => builtin_profile
+                .with_canonical_naming(builtin_profile.with_current_exclusions(stored_draft)),
             ProfileOrigin::Custom { .. } => stored_draft,
         };
         ScanProfile {
@@ -260,7 +272,13 @@ struct StoredProfiles {
     profiles: Vec<StoredScanProfile>,
 }
 
-const HOME_CACHE_EXCLUSIONS: [&str; 13] = [
+const HOME_CACHE_EXCLUSIONS: [&str; 3] = [
+    "~/.cache",
+    "~/.local/share/Trash",
+    "~/.local/share/flatpak/repo",
+];
+
+const PREVIOUS_HOME_CACHE_EXCLUSIONS: [&str; 13] = [
     "~/.cache",
     "~/.local/share/Trash",
     "~/.rustup",
@@ -555,7 +573,7 @@ mod scan_profile_store_tests {
     }
 
     #[test]
-    fn home_folder_scan_skips_package_caches_but_keeps_project_folders() {
+    fn home_folder_scan_skips_caches_but_scans_package_registries() {
         let home_directory = Path::new("/home/user");
         let home_profile = builtin_scan_profile(BuiltinProfile::HomeFolder, "/home/user/Downloads");
         let home_exclusions =
@@ -564,31 +582,90 @@ mod scan_profile_store_tests {
                 home_directory,
             );
         [
-            "/home/user/.rustup/toolchains/nightly",
-            "/home/user/.cargo/registry/src",
             "/home/user/.cache/mozilla",
-            "/home/user/go/pkg/mod/github.com",
+            "/home/user/.local/share/Trash/files",
+            "/home/user/.local/share/flatpak/repo/objects",
         ]
         .into_iter()
-        .for_each(|cache_directory| {
+        .for_each(|skipped_directory| {
             assert!(
-                home_exclusions.excludes_directory(Path::new(cache_directory)),
-                "{cache_directory}"
+                home_exclusions.excludes_directory(Path::new(skipped_directory)),
+                "{skipped_directory}"
             );
         });
         [
             "/home/user/Downloads",
-            "/home/user/.cargo/bin",
+            "/home/user/.cargo/registry/src",
+            "/home/user/.npm/_cacache",
+            "/home/user/go/pkg/mod/github.com",
+            "/home/user/.rustup/toolchains/nightly",
+            "/home/user/.m2/repository",
+            "/home/user/.local/share/containers/storage",
             "/home/user/Code/project",
-            "/home/user/.local/share/applications",
         ]
         .into_iter()
-        .for_each(|kept_directory| {
+        .for_each(|scanned_directory| {
             assert!(
-                !home_exclusions.excludes_directory(Path::new(kept_directory)),
-                "{kept_directory}"
+                !home_exclusions.excludes_directory(Path::new(scanned_directory)),
+                "{scanned_directory}"
             );
         });
+    }
+
+    #[test]
+    fn stored_home_profile_with_previous_defaults_scans_package_registries() {
+        let temporary_root = tempfile::tempdir().expect("temporary root");
+        let profile_store = temporary_store(&temporary_root);
+        let home_origin = ProfileOrigin::Builtin(BuiltinProfile::HomeFolder);
+        let previous_home_draft = ProfileDraft {
+            excluded_patterns: string_list(&PREVIOUS_HOME_CACHE_EXCLUSIONS),
+            ..builtin_scan_profile(BuiltinProfile::HomeFolder, "/home/user/Downloads").profile_draft
+        };
+        profile_store
+            .write_profiles(&[ScanProfile {
+                profile_origin: home_origin.clone(),
+                profile_draft: previous_home_draft,
+            }])
+            .expect("written");
+        assert_eq!(
+            profile_with_origin(
+                &profile_store.load_profiles().expect("loaded"),
+                &home_origin
+            )
+            .profile_draft
+            .excluded_patterns,
+            string_list(&HOME_CACHE_EXCLUSIONS)
+        );
+    }
+
+    #[test]
+    fn stored_home_profile_with_edited_exclusions_is_kept() {
+        let temporary_root = tempfile::tempdir().expect("temporary root");
+        let profile_store = temporary_store(&temporary_root);
+        let home_origin = ProfileOrigin::Builtin(BuiltinProfile::HomeFolder);
+        let edited_patterns = string_list(&PREVIOUS_HOME_CACHE_EXCLUSIONS)
+            .into_iter()
+            .chain(std::iter::once("~/Videos".to_owned()))
+            .collect::<Vec<_>>();
+        profile_store
+            .write_profiles(&[ScanProfile {
+                profile_origin: home_origin.clone(),
+                profile_draft: ProfileDraft {
+                    excluded_patterns: edited_patterns.clone(),
+                    ..builtin_scan_profile(BuiltinProfile::HomeFolder, "/home/user/Downloads")
+                        .profile_draft
+                },
+            }])
+            .expect("written");
+        assert_eq!(
+            profile_with_origin(
+                &profile_store.load_profiles().expect("loaded"),
+                &home_origin
+            )
+            .profile_draft
+            .excluded_patterns,
+            edited_patterns
+        );
     }
 
     #[test]

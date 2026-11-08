@@ -36,7 +36,7 @@ Database Updates shows how old the signatures are, when freshclam and fangfrisch
 
 Drop files or folders on Manual Scan, or add them with the buttons, and press **Start Scan**. You can also pass paths on the command line, `lazaret /path/to/folder`, or use the context-menu action of your file manager (Nautilus, Dolphin and Nemo, turned on under **Preferences**). Lazaret scans with clamd when it is running, which is faster because its signatures are already loaded, and uses the standalone scanner otherwise.
 
-A profile picks targets and exclusions in one go. Manage them with **Manage Profiles**. Exclusions skip folders and patterns in every scan; home scans skip package and toolchain caches by default:
+A profile picks targets and exclusions in one go. Manage them with **Manage Profiles**. Exclusions skip folders and patterns in every scan. Home scans skip `~/.cache`, the trash and the Flatpak repository by default, but still scan package registries such as `~/.npm` and `~/.cargo/registry`, where supply-chain malware lands:
 
 <img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/scan-exclusions.webp" width="800" alt="Recording of opening the exclusions from the Manual Scan page, with folders and patterns that scans skip">
 
