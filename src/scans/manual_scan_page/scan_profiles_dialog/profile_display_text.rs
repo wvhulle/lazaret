@@ -38,28 +38,26 @@ pub fn displayed_profile_description(scan_profile: &ScanProfile) -> String {
 pub fn describe_profile_store_failure(store_failure: &ProfileStoreFailure) -> String {
     match store_failure {
         ProfileStoreFailure::ProfileFileUnavailable(access_failure) => {
-            translated_messages::scans::profile_file_not_accessed(access_failure)
+            translated_messages::scans::profile_file_unavailable(access_failure)
         }
         ProfileStoreFailure::ProfileDataInvalid(parse_failure) => {
-            translated_messages::scans::profile_data_not_valid(parse_failure)
+            translated_messages::scans::profile_data_invalid(parse_failure)
         }
         ProfileStoreFailure::ProfileFileNotReplaced(persist_failure) => {
             translated_messages::scans::profile_file_not_replaced(persist_failure)
         }
         ProfileStoreFailure::ProfileTaskInterrupted(interrupted_task) => {
-            translated_messages::scans::profile_task_interrupted_error(interrupted_task)
+            translated_messages::scans::profile_task_interrupted(interrupted_task)
         }
         ProfileStoreFailure::ProfileNameMissing => {
-            translated_messages::scans::profile_name_required()
+            translated_messages::scans::profile_name_missing()
         }
         ProfileStoreFailure::ProfileNameTooLong => {
-            translated_messages::scans::name_50_characters_less()
+            translated_messages::scans::profile_name_too_long()
         }
-        ProfileStoreFailure::ProfileNameTaken => {
-            translated_messages::scans::another_profile_already_uses()
-        }
+        ProfileStoreFailure::ProfileNameTaken => translated_messages::scans::profile_name_taken(),
         ProfileStoreFailure::ProfileTargetsMissing => {
-            translated_messages::scans::add_least_one_target()
+            translated_messages::scans::profile_targets_missing()
         }
     }
 }

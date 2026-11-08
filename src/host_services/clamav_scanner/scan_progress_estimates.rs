@@ -31,7 +31,7 @@ impl RefreshThrottle {
 }
 
 pub fn file_progress_text(inspected_file_count: u64, planned_file_count: u64) -> String {
-    translated_messages::host::done_total_file(planned_file_count, inspected_file_count)
+    translated_messages::host::file_progress(planned_file_count, inspected_file_count)
 }
 
 pub fn remaining_time_text(

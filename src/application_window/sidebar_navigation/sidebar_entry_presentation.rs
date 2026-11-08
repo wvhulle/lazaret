@@ -147,7 +147,7 @@ pub fn sidebar_row_presentation(
     match entry_summary {
         EntrySummary::SummaryPending => SidebarRowPresentation {
             row_title: application_page.page_title(),
-            row_subtitle: translated_messages::window::checking_subtitle(),
+            row_subtitle: translated_messages::window::summary_pending(),
             prefix_icon: application_page.page_icon(),
             status_image: SidebarStatusImage::NoStatusImage,
         },

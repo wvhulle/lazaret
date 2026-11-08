@@ -9,10 +9,10 @@ pub fn journal_follow_failure_text(follow_failure: &JournalFollowFailure) -> Str
             read_failure_kind.to_string()
         }
         JournalFollowFailure::EntryTimestampInvalid => {
-            translated_messages::widgets::journal_entry_timestamp_outside()
+            translated_messages::widgets::entry_timestamp_invalid()
         }
         JournalFollowFailure::ReaderThreadFailed { spawn_failure_kind } => {
-            translated_messages::widgets::journal_reader_not_start(spawn_failure_kind)
+            translated_messages::widgets::reader_thread_failed(spawn_failure_kind)
         }
     };
     translated_messages::widgets::journal_reading_stopped(&failure_reason)

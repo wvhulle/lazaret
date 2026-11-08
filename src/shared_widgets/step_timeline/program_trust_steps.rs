@@ -145,7 +145,7 @@ pub fn program_trust_step<StepAction: StepActionButton>(
             program_trust_title(program_group),
             program_trust_details(program_group),
             program_trust_condition(program_trust, program_group).node_state(),
-            translated_messages::widgets::unknown_checking_clamav_programs(),
+            translated_messages::widgets::check_interrupted(),
         )),
     }
 }

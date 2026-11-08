@@ -11,18 +11,13 @@ pub fn describe_migration_failure(migration_failure: &DatabaseMigrationFailure) 
         DatabaseMigrationFailure::DatabaseFromNewerRelease {
             found_version,
             known_version,
-        } => {
-            translated_messages::widgets::database_made_newer_lazaret(found_version, known_version)
-        }
+        } => translated_messages::widgets::database_newer_release(found_version, known_version),
         DatabaseMigrationFailure::MigrationStepFailed {
             migration_name,
             database_failure,
-        } => translated_messages::widgets::updating_database_layout_failed(
-            migration_name,
-            database_failure,
-        ),
+        } => translated_messages::widgets::migration_step_failed(migration_name, database_failure),
         DatabaseMigrationFailure::VersionCheckFailed(database_failure) => {
-            translated_messages::widgets::database_layout_not_checked(database_failure)
+            translated_messages::widgets::version_check_failed(database_failure)
         }
     }
 }

@@ -8,34 +8,34 @@ use crate::{
 pub fn describe_start_failure(start_failure: &ScanStartFailure) -> String {
     match start_failure {
         ScanStartFailure::ScannerProgramMissing => {
-            translated_messages::widgets::clamav_scanner_not_installed()
+            translated_messages::widgets::scanner_program_missing()
         }
         ScanStartFailure::ScannerProgramReplaceable {
             candidate_path,
             replaceable_path,
-        } => translated_messages::widgets::lazaret_refused_run_program(
+        } => translated_messages::widgets::scanner_program_replaceable(
             sanitize_scanner_line(&candidate_path.to_string_lossy()),
             sanitize_scanner_line(&replaceable_path.to_string_lossy()),
         ),
         ScanStartFailure::ScannerSpawnFailed(spawn_failure) => {
-            translated_messages::widgets::scanner_not_started_error(spawn_failure)
+            translated_messages::widgets::scanner_spawn_failed(spawn_failure)
         }
         ScanStartFailure::ScannerWorkDirectoryUnavailable(work_directory_failure) => {
-            translated_messages::widgets::unable_create_private_scanner(work_directory_failure)
+            translated_messages::widgets::scanner_work_directory_unavailable(work_directory_failure)
         }
         ScanStartFailure::ScannerOutputUncaptured => {
-            translated_messages::widgets::scanner_output_not_captured()
+            translated_messages::widgets::scanner_output_uncaptured()
         }
         ScanStartFailure::DetectionSettingsUnreadable(settings_failure) => {
-            translated_messages::widgets::scan_not_start_clamd(settings_failure)
+            translated_messages::widgets::detection_settings_unreadable(settings_failure)
         }
         ScanStartFailure::ProgramLookupFailed(lookup_failure) => {
-            translated_messages::widgets::scan_not_start_scanner(lookup_failure)
+            translated_messages::widgets::program_lookup_failed(lookup_failure)
         }
         ScanStartFailure::ScanInputUnavailable {
             input_path,
             input_failure,
-        } => translated_messages::widgets::unable_safely_open_scan(
+        } => translated_messages::widgets::scan_input_unavailable(
             sanitize_scanner_line(&input_path.to_string_lossy()),
             input_failure,
         ),

@@ -159,7 +159,7 @@ impl ScanResultsSection {
 
     fn quarantine_all_label(&self) -> String {
         let remaining_threats = self.remaining_threat_count();
-        translated_messages::widgets::quarantine_count_threat(remaining_threats)
+        translated_messages::widgets::quarantine_all(remaining_threats)
     }
 
     fn confirm_quarantine(

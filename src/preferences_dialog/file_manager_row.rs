@@ -135,13 +135,13 @@ fn describe_integration_failure(integration_state: &IntegrationState) -> String 
         | IntegrationState::ChangingIntegration { .. } => String::new(),
         IntegrationState::ChangeFailed { change_failure, .. } => match change_failure {
             IntegrationChangeFailure::LauncherNotFound(launcher_failure) => {
-                translated_messages::preferences::lazaret_not_find_own(launcher_failure)
+                translated_messages::preferences::launcher_not_found(launcher_failure)
             }
             IntegrationChangeFailure::ActionUnwritable(write_failure) => {
-                translated_messages::preferences::file_manager_not_added(write_failure)
+                translated_messages::preferences::action_unwritable(write_failure)
             }
             IntegrationChangeFailure::ActionUnremovable(remove_failure) => {
-                translated_messages::preferences::file_manager_not_removed(remove_failure)
+                translated_messages::preferences::action_unremovable(remove_failure)
             }
         },
     }

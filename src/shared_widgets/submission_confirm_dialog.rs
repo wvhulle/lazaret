@@ -90,7 +90,7 @@ fn assembled_body(
 }
 
 fn clamav_audience_text() -> String {
-    translated_messages::widgets::cisco_talos_team_behind()
+    translated_messages::widgets::clamav_audience()
 }
 
 pub fn confirmation_text(submission_proposal: &SubmissionProposal) -> ConfirmationText {

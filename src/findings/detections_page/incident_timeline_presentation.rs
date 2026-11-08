@@ -42,14 +42,18 @@ pub enum IncidentStepAction {
 impl StepActionButton for IncidentStepAction {
     fn button_label(&self) -> String {
         match self {
-            Self::QuarantineIncident => translated_messages::findings::quarantine_label(),
-            Self::AskIncidentDeletion => translated_messages::findings::delete_incident(),
-            Self::DeleteIncidentFile => translated_messages::findings::delete_permanently(),
-            Self::CancelIncidentDeletion => translated_messages::findings::cancel_incident(),
-            Self::DismissIncident => translated_messages::findings::keep_label(),
-            Self::LookUpIncidentSignature => translated_messages::findings::look_up(),
-            Self::OpenOnlineServices => translated_messages::findings::add_key(),
-            Self::SubmitIncidentSample => translated_messages::findings::submit_incident(),
+            Self::QuarantineIncident => translated_messages::findings::quarantine_incident(),
+            Self::AskIncidentDeletion => translated_messages::findings::ask_incident_deletion(),
+            Self::DeleteIncidentFile => translated_messages::findings::delete_incident_file(),
+            Self::CancelIncidentDeletion => {
+                translated_messages::findings::cancel_incident_deletion()
+            }
+            Self::DismissIncident => translated_messages::findings::dismiss_incident(),
+            Self::LookUpIncidentSignature => {
+                translated_messages::findings::look_up_incident_signature()
+            }
+            Self::OpenOnlineServices => translated_messages::findings::open_online_services(),
+            Self::SubmitIncidentSample => translated_messages::findings::submit_incident_sample(),
         }
     }
 
@@ -152,8 +156,12 @@ pub fn detection_state_text(displayed_detection: &DisplayedDetection) -> String 
                 access: FileAccess::NotOpened,
                 owner: FileOwner::CurrentUser,
             } => translated_messages::findings::needs_decision(),
-            DetectedFileState::NoLongerThere => translated_messages::findings::file_gone_label(),
-            DetectedFileState::StateUnknown => translated_messages::findings::file_not_checked(),
+            DetectedFileState::NoLongerThere => {
+                translated_messages::findings::no_longer_there_detection()
+            }
+            DetectedFileState::StateUnknown => {
+                translated_messages::findings::state_unknown_detection()
+            }
         },
     }
 }
@@ -192,11 +200,9 @@ fn plain_step(
 
 fn source_text(stored_detection: &StoredDetection) -> String {
     match stored_detection.detection_sources {
-        DetectionSources::OnAccessAndSchedule => {
-            translated_messages::findings::access_scanning_scheduled_scan()
-        }
-        DetectionSources::OnAccessOnly => translated_messages::findings::access_scanning(),
-        DetectionSources::ScheduleOnly => translated_messages::findings::scheduled_scan(),
+        DetectionSources::OnAccessAndSchedule => translated_messages::findings::access_schedule(),
+        DetectionSources::OnAccessOnly => translated_messages::findings::access_only(),
+        DetectionSources::ScheduleOnly => translated_messages::findings::schedule_only(),
     }
 }
 
@@ -261,7 +267,7 @@ fn blocked_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
         ),
         DetectedFileState::NoLongerThere => (
             SettledNodeState::Completed,
-            translated_messages::findings::file_no_longer(),
+            translated_messages::findings::no_longer_there_blocked(),
         ),
         DetectedFileState::Present {
             access: FileAccess::Readable,
@@ -279,7 +285,7 @@ fn blocked_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
         ),
         DetectedFileState::StateUnknown => (
             SettledNodeState::NeedsReview,
-            translated_messages::findings::not_check_whether_file(),
+            translated_messages::findings::state_unknown_blocked(),
         ),
     };
     plain_step(
@@ -308,16 +314,14 @@ fn false_positive_snippet(
 fn describe_bazaar_lookup_failure(bazaar_failure: &MalwareBazaarFailure) -> String {
     match bazaar_failure {
         MalwareBazaarFailure::RequestFailed(request_failure) => {
-            translated_messages::findings::malwarebazaar_not_reached_error(request_failure)
+            translated_messages::findings::request_failed(request_failure)
         }
         MalwareBazaarFailure::AnswerUnreadable => {
-            translated_messages::findings::malwarebazaar_sent_not_read()
+            translated_messages::findings::answer_unreadable()
         }
-        MalwareBazaarFailure::KeyRefused => {
-            translated_messages::findings::malwarebazaar_refused_api_key()
-        }
+        MalwareBazaarFailure::KeyRefused => translated_messages::findings::key_refused(),
         MalwareBazaarFailure::QueryRefused { query_status } => {
-            translated_messages::findings::malwarebazaar_answered_status(query_status)
+            translated_messages::findings::query_refused(query_status)
         }
     }
 }
@@ -326,7 +330,9 @@ fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
     match lookup_state {
         SignatureLookupState::NotLookedUp => None,
         SignatureLookupState::LookingUp => Some(translated_messages::findings::looking_up()),
-        SignatureLookupState::KeyMissing => Some(translated_messages::findings::add_abuse_ch_key()),
+        SignatureLookupState::KeyMissing => {
+            Some(translated_messages::findings::key_missing_lookup())
+        }
         SignatureLookupState::KeyUnreadable(key_failure) => {
             Some(sanitize_scanner_line(&describe_key_failure(key_failure)))
         }
@@ -375,8 +381,7 @@ fn lookup_choices(lookup_state: &SignatureLookupState) -> Vec<StepChoiceRow<Inci
         SignatureLookupState::KeyMissing => vec![
             signature_lookup,
             StepChoiceRow {
-                choice_description:
-                    translated_messages::findings::malwarebazaar_needs_free_description(),
+                choice_description: translated_messages::findings::key_missing_choices(),
                 chosen_action: IncidentStepAction::OpenOnlineServices,
             },
         ],
@@ -450,7 +455,7 @@ fn review_step(
             owner: FileOwner::OtherUser,
             ..
         } => translated_messages::findings::file_other_owner_decision(),
-        DetectedFileState::StateUnknown => translated_messages::findings::lazaret_not_check_file(),
+        DetectedFileState::StateUnknown => translated_messages::findings::state_unknown_review(),
         DetectedFileState::Present {
             owner: FileOwner::CurrentUser,
             ..
@@ -497,10 +502,12 @@ fn resolved_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
         );
     }
     let status_text = match &stored_detection.detection_state {
-        DetectionState::Resolved { resolved_at, .. } => translated_messages::findings::state_time(
-            detection_state_text(displayed_detection),
-            exact_local_time_text(*resolved_at),
-        ),
+        DetectionState::Resolved { resolved_at, .. } => {
+            translated_messages::findings::resolved_state_step(
+                detection_state_text(displayed_detection),
+                exact_local_time_text(*resolved_at),
+            )
+        }
         DetectionState::Open => detection_state_text(displayed_detection),
     };
     let quarantined_copy_kept = matches!(

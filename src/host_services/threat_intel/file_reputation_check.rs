@@ -84,7 +84,7 @@ fn listing_source_text(listing_source: &ListingSource) -> String {
 
 pub fn describe_known_file(known_file_lookup: &KnownFileLookup) -> SourceAnswer {
     let verdict_text = match known_file_lookup {
-        KnownFileLookup::HashUnknown => translated_messages::host::not_known_files_database(),
+        KnownFileLookup::HashUnknown => translated_messages::host::hash_unknown(),
         KnownFileLookup::KnownMalicious {
             file_name: KnownName::NamedFile(file_name),
             flagged_by,
@@ -121,17 +121,17 @@ pub fn malware_family_text(malware_family: &MalwareFamily) -> String {
 pub fn first_seen_text(first_seen: &SampleFirstSeen) -> String {
     match first_seen {
         SampleFirstSeen::SeenAt(seen_at) => sanitize_scanner_line(seen_at),
-        SampleFirstSeen::FirstSeenUnknown => translated_messages::host::unknown_date(),
+        SampleFirstSeen::FirstSeenUnknown => translated_messages::host::first_seen_unknown(),
     }
 }
 
 pub fn describe_known_samples(sample_lookup: &KnownSampleLookup) -> SourceAnswer {
     let verdict_text = match sample_lookup {
-        KnownSampleLookup::NoKnownSamples => translated_messages::host::not_known_malware_sample(),
+        KnownSampleLookup::NoKnownSamples => translated_messages::host::no_known_samples(),
         KnownSampleLookup::SamplesFound { known_samples } => known_samples.first().map_or_else(
             translated_messages::host::known_malware_sample,
             |first_sample| {
-                translated_messages::host::known_malware_family_first(
+                translated_messages::host::samples_found(
                     malware_family_text(&first_sample.malware_family),
                     first_seen_text(&first_sample.first_seen),
                 )
@@ -144,7 +144,7 @@ pub fn describe_known_samples(sample_lookup: &KnownSampleLookup) -> SourceAnswer
 pub fn describe_virustotal_report(report_lookup: &FileReportLookup) -> SourceAnswer {
     match report_lookup {
         FileReportLookup::FileUnknownToVirusTotal => SourceAnswer::Answered {
-            verdict_text: translated_messages::host::unknown_virustotal_verdict(),
+            verdict_text: translated_messages::host::file_unknown_virustotal(),
         },
         FileReportLookup::ReportAvailable(file_report) => SourceAnswer::AnsweredWithReport {
             verdict_text: translated_messages::host::count_total_engine_verdict(
@@ -158,11 +158,9 @@ pub fn describe_virustotal_report(report_lookup: &FileReportLookup) -> SourceAns
 
 pub fn describe_virustotal_failure(virustotal_failure: &VirusTotalFailure) -> String {
     match virustotal_failure {
-        VirusTotalFailure::ApiKeyRejected => {
-            translated_messages::host::virustotal_rejected_api_key()
-        }
+        VirusTotalFailure::ApiKeyRejected => translated_messages::host::api_key_rejected(),
         VirusTotalFailure::RequestLimitReached => {
-            translated_messages::host::virustotal_request_limit_reached()
+            translated_messages::host::request_limit_reached()
         }
         VirusTotalFailure::UnexpectedStatus { status_code } => {
             translated_messages::host::virustotal_answered_status(status_code)
@@ -179,13 +177,13 @@ pub fn describe_virustotal_failure(virustotal_failure: &VirusTotalFailure) -> St
 fn describe_circl_failure(circl_failure: &CirclLookupFailure) -> String {
     match circl_failure {
         CirclLookupFailure::RequestFailed(request_failure) => {
-            translated_messages::host::circl_hashlookup_not_reached(request_failure)
+            translated_messages::host::request_failed_circl(request_failure)
         }
         CirclLookupFailure::AnswerUnreadable => {
-            translated_messages::host::circl_hashlookup_sent_answer()
+            translated_messages::host::answer_unreadable_circl()
         }
         CirclLookupFailure::UnexpectedStatus { status_code } => {
-            translated_messages::host::circl_hashlookup_answered_status(status_code)
+            translated_messages::host::unexpected_status_circl(status_code)
         }
     }
 }
@@ -193,18 +191,14 @@ fn describe_circl_failure(circl_failure: &CirclLookupFailure) -> String {
 pub fn describe_bazaar_failure(bazaar_failure: &MalwareBazaarFailure) -> String {
     match bazaar_failure {
         MalwareBazaarFailure::RequestFailed(request_failure) => {
-            translated_messages::host::malwarebazaar_not_reached_error(request_failure)
+            translated_messages::host::request_failed_bazaar(request_failure)
         }
         MalwareBazaarFailure::AnswerUnreadable => {
-            translated_messages::host::malwarebazaar_sent_not_read()
+            translated_messages::host::answer_unreadable_bazaar()
         }
-        MalwareBazaarFailure::KeyRefused => {
-            translated_messages::host::malwarebazaar_refused_api_key()
-        }
+        MalwareBazaarFailure::KeyRefused => translated_messages::host::key_refused(),
         MalwareBazaarFailure::QueryRefused { query_status } => {
-            translated_messages::host::malwarebazaar_answered_status(sanitize_scanner_line(
-                query_status,
-            ))
+            translated_messages::host::query_refused(sanitize_scanner_line(query_status))
         }
     }
 }

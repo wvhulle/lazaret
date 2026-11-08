@@ -53,8 +53,10 @@ pub enum DatabaseUpdateAction {
 impl StepActionButton for DatabaseUpdateAction {
     fn button_label(&self) -> String {
         match self {
-            Self::UpdateSignatures => translated_messages::signatures::update_now(),
-            Self::CancelSignatureUpdate => translated_messages::signatures::cancel_label(),
+            Self::UpdateSignatures => translated_messages::signatures::update_signatures(),
+            Self::CancelSignatureUpdate => {
+                translated_messages::signatures::cancel_signature_update()
+            }
         }
     }
 
@@ -205,7 +207,7 @@ fn updater_row(
         match updater_evidence.last_completed_run {
             UpdaterRunHistory::JournalUnreadable(read_failure) => unknown_run_text(read_failure),
             UpdaterRunHistory::NoCompletedUpdate => {
-                translated_messages::signatures::no_completed_update_recorded()
+                translated_messages::signatures::no_completed_update()
             }
             UpdaterRunHistory::CompletedUpdate { .. } => String::new(),
         }
@@ -241,7 +243,7 @@ fn third_party_file_row(
                 )
             }
             SignatureLineCount::FileUnreadable { failure_kind } => {
-                translated_messages::signatures::unknown_number_signatures_file(
+                translated_messages::signatures::file_unreadable(
                     failure_kind,
                     &file_size_text,
                     &signature_file.file_name,
@@ -347,7 +349,7 @@ fn signature_step_title() -> String {
 }
 
 fn signature_mechanism_details() -> String {
-    translated_messages::signatures::describe_known_malware_new()
+    translated_messages::signatures::signature_mechanism()
 }
 
 fn signature_status_rows(
@@ -438,7 +440,7 @@ pub fn signature_update_step(
             CancelSlot::NotCancellable,
         ),
         SignatureUpdateProgress::UpdateCancelling => running_signature_step(
-            translated_messages::signatures::cancelling_update(),
+            translated_messages::signatures::update_cancelling(),
             CancelSlot::NotCancellable,
         ),
         SignatureUpdateProgress::ReadyToUpdate => settled_signature_step(

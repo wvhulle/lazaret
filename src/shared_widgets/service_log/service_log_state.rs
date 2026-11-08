@@ -49,7 +49,7 @@ impl ShownRowLevel {
 
     pub fn level_label_text(&self) -> String {
         match self {
-            Self::ThreatDetected => translated_messages::widgets::detection_label(),
+            Self::ThreatDetected => translated_messages::widgets::threat_detected(),
             Self::Severity(LogSeverityLevel::Emergency) => {
                 translated_messages::widgets::emergency_label()
             }
@@ -278,7 +278,7 @@ impl ServiceLogView {
 
     pub fn source_text(&self) -> String {
         match self {
-            Self::LogReading => translated_messages::widgets::checking_label(),
+            Self::LogReading => translated_messages::widgets::log_reading(),
             Self::LogRead(ServiceLogContents::FromLogFile { log_path, .. }) => {
                 sanitize_scanner_line(&log_path.to_string_lossy())
             }

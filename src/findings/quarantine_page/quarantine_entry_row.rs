@@ -113,7 +113,7 @@ impl QuarantineEntryRow {
         match &self.entry_record.payload_hash {
             RecordedPayloadHash::KnownSha256 { sha256_hex } => sha256_hex.clone(),
             RecordedPayloadHash::IntegrityUnknown => {
-                translated_messages::findings::unknown_quarantine_record_no()
+                translated_messages::findings::integrity_unknown_hash()
             }
         }
     }

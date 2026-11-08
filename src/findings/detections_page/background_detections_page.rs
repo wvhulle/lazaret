@@ -187,22 +187,22 @@ impl ResolvingIncidentAction {
 fn describe_incident_action_failure(action_failure: &IncidentActionFailure) -> String {
     match action_failure {
         IncidentActionFailure::FileOwnedByOtherUser => {
-            translated_messages::findings::file_other_owner()
+            translated_messages::findings::file_owned_other_user()
         }
         IncidentActionFailure::FileNotCheckable => {
-            translated_messages::findings::file_not_checked_cannot()
+            translated_messages::findings::file_not_checkable()
         }
         IncidentActionFailure::RemovalFailed(removal_failure) => {
-            translated_messages::findings::file_not_deleted_error(removal_failure)
+            translated_messages::findings::removal_failed(removal_failure)
         }
         IncidentActionFailure::FileCheckInterrupted(_) => {
-            translated_messages::findings::checking_file_stopped_unexpectedly()
+            translated_messages::findings::file_check_interrupted()
         }
         IncidentActionFailure::QuarantineFailed(move_failure) => {
             describe_quarantine_failure(move_failure)
         }
         IncidentActionFailure::HistoryNotUpdated(history_failure) => {
-            translated_messages::findings::decision_not_saved_error(describe_history_failure(
+            translated_messages::findings::history_not_updated(describe_history_failure(
                 history_failure,
             ))
         }
@@ -407,7 +407,7 @@ impl BackgroundDetectionsPage {
     fn list_description(&self) -> String {
         match &self.journal_access {
             JournalAccess::JournalUnreadable => {
-                translated_messages::findings::lazaret_cannot_read_system()
+                translated_messages::findings::journal_unreadable_list()
             }
             JournalAccess::FollowingFailed(follow_failure) => {
                 journal_follow_failure_text(follow_failure)

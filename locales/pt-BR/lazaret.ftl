@@ -1,6 +1,6 @@
 -brand-name = Lazaret
 
-window-scheduled-scans = Verificações agendadas
+window-scheduled-scans-page = Verificações agendadas
 window-quarantine-label = Quarentena
 window-translator-credits = translator-credits
 window-preferences-label = Preferências
@@ -13,12 +13,12 @@ window-count-item =
         [one] { $count } item
        *[other] { $count } itens
     }
-window-checking-subtitle = Verificando…
+window-summary-pending = Verificando…
 window-menu-tooltip = Menu
 window-quick-scan = Verificação rápida
 window-quit-tray-item = Sair
-window-minimize-tray = Minimizar para bandeja
-window-always-ask = Sempre perguntar
+window-hide-tray = Minimizar para bandeja
+window-ask-each-time = Sempre perguntar
 window-close-lazaret = Fechar o { -brand-name }?
 window-cancel-close-button = Cancelar
 window-quit-close-button = Sair
@@ -38,7 +38,7 @@ scans-backend-title = Mecanismo de verificação
 scans-show-live-scan-title = Mostrar progresso da verificação em tempo real
 scans-display-files-scanned-subtitle = Exiba os arquivos que estão sendo verificados em tempo real.
 scans-no-profile-manual = Nenhum perfil (manual)
-scans-checking-manual = Verificando…
+scans-detecting-backend = Verificando…
 scans-scan-title = Verificação
 scans-cancelled-user = Verificação cancelada pelo usuário
 scans-threats-found-scan = Ameaças encontradas
@@ -55,8 +55,8 @@ scans-home-folder = Pasta inicial
 scans-fast-scan-downloads-folder = Verificação rápida da pasta Downloads para detectar ameaças rapidamente
 scans-comprehensive-system-wide-scan = Verificação abrangente de todo o sistema, incluindo todos os diretórios acessíveis
 scans-user-home-directory-personal = Verificação do diretório pessoal do usuário e de seus arquivos pessoais
-scans-profile-name-required = O nome do perfil é obrigatório
-scans-name-50-characters-less = O nome deve ter 50 caracteres ou menos
+scans-profile-name-missing = O nome do perfil é obrigatório
+scans-profile-name-too-long = O nome deve ter 50 caracteres ou menos
 scans-edit-profile-title = Editar perfil
 scans-save-label = Salvar
 scans-name-title = Nome
@@ -66,7 +66,7 @@ scans-add-path-title = Adicionar caminho
 scans-exclusions-title = Exclusões
 scans-add-pattern-title = Adicionar padrão
 scans-cancel-profile = Cancelar
-scans-default-profiles-restored = Perfis padrão restaurados
+scans-defaults-restored = Perfis padrão restaurados
 scans-profile-deleted = Perfil excluído
 scans-profile-imported = Perfil importado
 scans-manage-profiles-title = Gerenciar perfis
@@ -96,11 +96,11 @@ scans-enable-device-auto-title = Ativar verificação automática de dispositivo
 scans-max-device-size-title = Tamanho máximo do dispositivo (GB)
 scans-skip-battery-device-title = Pular na bateria
 scans-cancel-removable-label = Cancelar
-scans-scanning-label = Verificando…
+scans-drive-scanning = Verificando…
 scans-checking-scan-tooltip = Verificando
 scans-status-scan-title = Status
 scans-command-copied-clipboard-scan = Comando copiado para a área de transferência
-scans-checking-label = Verificando…
+scans-reading-user-timer = Verificando…
 scans-hourly-label = A cada hora
 scans-daily-label = Diariamente
 scans-weekly-label = Semanalmente
@@ -129,12 +129,12 @@ scans-unknown-label = Desconhecido
 
 findings-checking-background-tooltip = Verificando
 findings-command-copied-clipboard-toast = Comando copiado para a área de transferência
-findings-quarantine-label = Quarentena
-findings-cancel-incident = Cancelar
+findings-quarantine-incident = Quarentena
+findings-cancel-incident-deletion = Cancelar
 findings-cancel-quarantine = Cancelar
 findings-delete-entries = Excluir
 findings-restore-button = Restaurar
-findings-count-item =
+findings-entry-count =
     { $count ->
         [one] { $count } item
        *[other] { $count } itens
@@ -155,37 +155,37 @@ findings-status-title = Status
 findings-command-copied-clipboard = Comando copiado para a área de transferência
 findings-remove-tooltip = Remover
 
-signatures-failed-load-historical-logs = Falha ao carregar os registros históricos: { $error }
+signatures-history-load-failed = Falha ao carregar os registros históricos: { $error }
 signatures-checking-database-tooltip = Verificando
 signatures-status-title = Status
 signatures-command-copied-clipboard-database = Comando copiado para a área de transferência
-signatures-cancel-label = Cancelar
+signatures-cancel-signature-update = Cancelar
 signatures-update-service = Serviço de atualização
-signatures-active-label = Ativo
-signatures-installed-stopped = Instalado, mas parado
-signatures-no-freshclam-service-detected = Nenhum serviço freshclam detectado; as atualizações são executadas manualmente
+signatures-daemon-running = Ativo
+signatures-service-stopped = Instalado, mas parado
+signatures-service-not-found = Nenhum serviço freshclam detectado; as atualizações são executadas manualmente
 signatures-count-day-old =
     { $count ->
         [one] { $count } dia de idade
        *[other] { $count } dias de idade
     }
-signatures-no-readable-virus-database = Nenhum banco de dados de vírus legível foi encontrado
+signatures-definitions-missing = Nenhum banco de dados de vírus legível foi encontrado
 signatures-updated-databases = Atualizado: { $databases }
 signatures-already-current-databases = Já atual: { $databases }
-signatures-database-update-completed = Atualização do banco de dados concluída
-signatures-database-already-up-date = Banco de dados já está atualizado
-signatures-service-accepted-signal-performs = O serviço aceitou o sinal; ele executa a atualização de forma assíncrona. Verifique os logs para confirmar a conclusão.
-signatures-database-update-cancelled = Atualização do banco de dados cancelada
-signatures-install-freshclam-before-requesting = Instale o freshclam antes de solicitar atualizações do banco de dados.
+signatures-definitions-updated = Atualização do banco de dados concluída
+signatures-already-current = Banco de dados já está atualizado
+signatures-update-requested-daemon = O serviço aceitou o sinal; ele executa a atualização de forma assíncrona. Verifique os logs para confirmar a conclusão.
+signatures-update-cancelled = Atualização do banco de dados cancelada
+signatures-scanner-program-missing = Instale o freshclam antes de solicitar atualizações do banco de dados.
 signatures-checking-signature-tooltip = Verificando
 signatures-command-copied-clipboard-signature = Comando copiado para a área de transferência
 signatures-not-open-documentation-title = Não foi possível abrir a documentação: { $error }
-signatures-pass-label = Aprovado
-signatures-warning-label = Aviso
-signatures-fail-label = Falhou
-signatures-unknown-label = Desconhecido
-signatures-skipped-label = Ignorado
-signatures-checking-label = Verificando
+signatures-check-passed = Aprovado
+signatures-needs-review = Aviso
+signatures-check-failed = Falhou
+signatures-status-unknown = Desconhecido
+signatures-check-skipped = Ignorado
+signatures-check-progress = Verificando
 signatures-copy-tooltip = Copiar
 signatures-learn-more-title = Saiba mais
 signatures-open-browser-tooltip = Abrir no navegador
@@ -203,16 +203,16 @@ preferences-delete-key-label = Excluir chave
 preferences-get-free-api-title = Obter uma chave de API gratuita
 
 widgets-clean-label = Limpo
-widgets-infected-label = Infectado
+widgets-scan-infected = Infectado
 widgets-error-status = Erro
 widgets-cancelled-label = Cancelado
 widgets-skipped-label = Ignorado
 widgets-success-label = Sucesso
 widgets-up-date = Atualizado
-widgets-scan-cancelled-user-activity = Verificação cancelada pelo usuário
+widgets-scan-cancelled-activity = Verificação cancelada pelo usuário
 widgets-scheduled-scan-skipped-battery = Verificação agendada ignorada (com bateria)
-widgets-database-update-failed = Falha na atualização do banco de dados
-widgets-database-update-cancelled = Atualização do banco de dados cancelada
+widgets-update-failed = Falha na atualização do banco de dados
+widgets-update-cancelled = Atualização do banco de dados cancelada
 widgets-scan-log = REGISTRO DE VERIFICAÇÃO
 widgets-update-log = REGISTRO DE ATUALIZAÇÃO
 widgets-timestamp-label = Carimbo de data e hora
@@ -225,26 +225,26 @@ widgets-copy-activity-tooltip = Copiar
 widgets-log-details-copied-toast = Detalhes do registro copiados para a área de transferência
 widgets-export-title = Exportar
 widgets-cancel-engine = Cancelar
-widgets-configuration-file-not-found = Arquivo de configuração não encontrado
+widgets-config-missing = Arquivo de configuração não encontrado
 widgets-copy-engine-tooltip = Copiar
-widgets-file-hash-mismatch-corrupted = Hash do arquivo não corresponde — o arquivo pode estar corrompido
-widgets-quarantine-entry-not-found = Entrada de quarentena não encontrada: { $id }
-widgets-failed-record-restored = Falha ao registrar a entrada de quarentena no banco de dados. O arquivo foi restaurado para o local original.
-widgets-failed-record-rollback = Falha ao registrar a entrada de quarentena no banco de dados. A reversão também falhou: { $error }. O arquivo pode ficar órfão em: { $path }
-widgets-scan-target-not-exist = O alvo da verificação não existe ou contém um byte NUL inválido
-widgets-scan-target-not-regular = O alvo da verificação não é um arquivo regular nem um diretório
+widgets-file-hash-mismatch = Hash do arquivo não corresponde — o arquivo pode estar corrompido
+widgets-entry-not-found = Entrada de quarentena não encontrada: { $id }
+widgets-recording-failed-file-restored = Falha ao registrar a entrada de quarentena no banco de dados. O arquivo foi restaurado para o local original.
+widgets-recording-failed-rollback = Falha ao registrar a entrada de quarentena no banco de dados. A reversão também falhou: { $error }. O arquivo pode ficar órfão em: { $path }
+widgets-target-missing = O alvo da verificação não existe ou contém um byte NUL inválido
+widgets-target-not-scannable = O alvo da verificação não é um arquivo regular nem um diretório
 widgets-no-files-scanned = Nenhum arquivo pôde ser verificado
 widgets-count-not-accessed-title =
     { $count ->
         [one] Não foi possível acessar { $count } arquivo
        *[other] Não foi possível acessar { $count } arquivos
     }
-widgets-count-file-not-read =
+widgets-files-unreadable =
     { $count ->
         [one] Não foi possível ler { $count } arquivo
        *[other] Não foi possível ler { $count } arquivos
     }
-widgets-count-non-fatal-warning =
+widgets-nonfatal-warnings =
     { $count ->
         [one] { $count } aviso não fatal durante a verificação; alguns arquivos podem ter sido verificados apenas parcialmente
        *[other] { $count } avisos não fatais durante a verificação; alguns arquivos podem ter sido verificados apenas parcialmente
@@ -256,9 +256,9 @@ widgets-count-file-scanned-outcome =
     }
 widgets-copy-path = Copiar caminho
 widgets-critical-severity = Crítico
-widgets-high-label = Alto
-widgets-medium-label = Médio
-widgets-low-label = Baixo
+widgets-high-severity = Alto
+widgets-medium-severity = Médio
+widgets-low-severity = Baixo
 widgets-quarantine-detected-label = Quarentena
 widgets-scan-details-title = Detalhes da verificação
 widgets-removes-each-original-file = Isso remove cada arquivo original do local atual.
@@ -277,19 +277,19 @@ widgets-count-file-scanned-results =
         [one] { $count } arquivo verificado
        *[other] { $count } arquivos verificados
     }
-widgets-threats-detected-results = Ameaças detectadas
-widgets-scan-cancelled-user = Verificação cancelada pelo usuário
+widgets-threats-detected-status = Ameaças detectadas
+widgets-scan-cancelled-status = Verificação cancelada pelo usuário
 widgets-files-scanned = Arquivos verificados
 widgets-directories-label = Diretórios
 widgets-threats-found = Ameaças encontradas
-widgets-threats-detected-run = Ameaças detectadas
+widgets-threats-detected-finished = Ameaças detectadas
 widgets-copy-service-tooltip = Copiar
 widgets-export-text-tooltip = Exportar texto
 widgets-critical-level = Crítico
 widgets-error-level = Erro
 widgets-warning-label = Aviso
-widgets-checking-label = Verificando…
-widgets-unknown-label = Desconhecido
+widgets-log-reading = Verificando…
+widgets-change-time-unknown-override = Desconhecido
 widgets-copy-timeline-tooltip = Copiar
 widgets-cancel-submission = Cancelar
 widgets-refresh-tooltip = Atualizar
@@ -297,4 +297,4 @@ widgets-cancel-trust = Cancelar
 
 host-keyring-unavailable = Chaveiro indisponível
 
-headless-threats-detected = Ameaças detectadas
+headless-scan-infected = Ameaças detectadas

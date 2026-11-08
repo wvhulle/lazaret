@@ -224,7 +224,7 @@ async fn run_scheduled_scan_async(scan_options: ScheduledScanOptions) -> ExitCod
     match scan_status {
         ScanActivityStatus::ScanInfected { .. } => {
             send_session_notification(
-                &translated_messages::headless::threats_detected(),
+                &translated_messages::headless::scan_infected(),
                 &finished_scan_notification_body(&scan_outcome, quarantined_count),
             );
             ExitCode::from(THREATS_FOUND_EXIT_CODE)

@@ -165,18 +165,14 @@ pub async fn request_trust_change(trust_choice: TrustChoice) -> TrustOutcome {
 
 pub fn trust_outcome_text(trust_outcome: &TrustOutcome) -> String {
     match trust_outcome {
-        TrustOutcome::TrustApplied => translated_messages::host::clamav_loaded_change(),
-        TrustOutcome::AppliedReloadPending => translated_messages::host::saved_clamd_not_answer(),
+        TrustOutcome::TrustApplied => translated_messages::host::trust_applied(),
+        TrustOutcome::AppliedReloadPending => translated_messages::host::applied_reload_pending(),
         TrustOutcome::AuthorizationRefused => {
-            translated_messages::host::nothing_changed_without_password()
+            translated_messages::host::authorization_refused_outcome()
         }
-        TrustOutcome::AdminServiceMissing => {
-            translated_messages::host::installation_no_clamav_admin()
-        }
+        TrustOutcome::AdminServiceMissing => translated_messages::host::admin_service_missing(),
         TrustOutcome::TrustFailed(change_failure) => {
-            translated_messages::host::nothing_changed_error(trust_change_failure_text(
-                change_failure,
-            ))
+            translated_messages::host::trust_failed(trust_change_failure_text(change_failure))
         }
     }
 }

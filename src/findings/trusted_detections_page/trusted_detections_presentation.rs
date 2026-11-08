@@ -124,7 +124,7 @@ fn trust_list_verdict(trust_list_reading: &TrustListReading) -> Option<TrustList
         TrustListReading::FolderMissing => None,
         TrustListReading::FolderUnreadable(read_failure) => Some(TrustListVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: translated_messages::findings::signature_folder_unreadable_status(),
+            status_text: translated_messages::findings::folder_unreadable(),
             evidence_rows: vec![evidence_row(
                 translated_messages::findings::signature_folder(),
                 trust_list_failure_text(read_failure),
@@ -162,7 +162,7 @@ pub fn trust_list_step<StepAction: StepActionButton>(
 }
 
 fn trust_list_mechanism_text() -> String {
-    translated_messages::findings::files_detection_names_clamav()
+    translated_messages::findings::trust_list_mechanism()
 }
 
 fn nothing_trusted_step() -> TrustedDetectionsStep {

@@ -77,12 +77,12 @@ pub async fn load_trusted_detections() -> TrustedDetectionsSnapshot {
 
 pub fn trust_list_failure_text(read_failure: &TrustListReadFailure) -> String {
     match read_failure {
-        TrustListReadFailure::AccessDenied => translated_messages::findings::permission_denied(),
+        TrustListReadFailure::AccessDenied => translated_messages::findings::access_denied(),
         TrustListReadFailure::OtherReadFailure { failure_kind } => {
-            translated_messages::findings::reading_failed_reason(failure_kind)
+            translated_messages::findings::other_read_failure(failure_kind)
         }
         TrustListReadFailure::ReadingTaskAborted => {
-            translated_messages::findings::reading_stopped_before_finished()
+            translated_messages::findings::reading_task_aborted()
         }
     }
 }
@@ -91,18 +91,18 @@ fn added_text(audit_history: &AuditHistoryReading, adding_action: &AuditedAction
     let audit_entries = match audit_history {
         AuditHistoryReading::EntriesRead(audit_entries) => audit_entries,
         AuditHistoryReading::JournalUnreadable(read_failure) => {
-            return translated_messages::findings::unknown_added_reason(unit_journal_failure_text(
-                *read_failure,
-            ));
+            return translated_messages::findings::journal_unreadable_added(
+                unit_journal_failure_text(*read_failure),
+            );
         }
     };
     match latest_applied_entry(audit_entries, adding_action) {
         Some(audit_entry) => match audit_entry.requester {
-            Requester::KnownUser { user_id } => translated_messages::findings::added_time_user_uid(
+            Requester::KnownUser { user_id } => translated_messages::findings::known_user(
                 exact_local_time_text(audit_entry.recorded_at),
                 user_id,
             ),
-            Requester::UnknownUser => translated_messages::findings::added_time_unknown_user(
+            Requester::UnknownUser => translated_messages::findings::unknown_user(
                 exact_local_time_text(audit_entry.recorded_at),
             ),
         },
@@ -248,7 +248,7 @@ fn lazaret_list_rows<ListEntry>(
             rows_or_empty_notice(list_entries.iter().map(entry_row).collect(), empty_text)
         }
         LazaretListReading::ListUnreadable(read_failure) => vec![unreadable_row(
-            translated_messages::findings::lazaret_cannot_read_list(),
+            translated_messages::findings::list_unreadable(),
             read_failure,
         )],
     }

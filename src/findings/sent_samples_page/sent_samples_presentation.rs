@@ -55,15 +55,17 @@ pub fn kind_text(submission_kind: SubmissionKind) -> String {
 pub fn target_choice_label(submission_target: SubmissionTarget) -> String {
     match submission_target {
         SubmissionTarget::ClamavFalsePositive => {
-            translated_messages::findings::report_false_positive_clamav()
+            translated_messages::findings::clamav_false_positive()
         }
         SubmissionTarget::ClamavMissedMalware => {
-            translated_messages::findings::report_missed_malware_clamav()
+            translated_messages::findings::clamav_missed_malware()
         }
         SubmissionTarget::MalwareBazaarSample => {
-            translated_messages::findings::upload_malwarebazaar()
+            translated_messages::findings::malwarebazaar_sample_choice()
         }
-        SubmissionTarget::VirusTotalSample => translated_messages::findings::upload_virustotal(),
+        SubmissionTarget::VirusTotalSample => {
+            translated_messages::findings::virustotal_sample_choice()
+        }
     }
 }
 
@@ -85,7 +87,7 @@ fn settled_version_text(
 }
 
 fn awaiting_clamav_text() -> String {
-    translated_messages::findings::awaiting_clamav_review_reviews()
+    translated_messages::findings::awaiting_clamav()
 }
 
 pub fn status_text(submission_state: &SubmissionState) -> String {
@@ -206,7 +208,7 @@ pub fn candidate_row_view(
                 format!("{detection_text} · {}", short_hash(sha256_hex))
             }
             RecordedPayloadHash::IntegrityUnknown => {
-                translated_messages::findings::detection_no_usable_hash(&detection_text)
+                translated_messages::findings::integrity_unknown_candidate(&detection_text)
             }
         },
         send_availability: send_availability(&offered_target_activities(
@@ -218,7 +220,7 @@ pub fn candidate_row_view(
 
 pub fn service_filter_label(service_filter: ServiceFilter) -> String {
     match service_filter {
-        ServiceFilter::AllServices => translated_messages::findings::all_services_option(),
+        ServiceFilter::AllServices => translated_messages::findings::all_services(),
         ServiceFilter::OnlyService(submission_service) => {
             service_name(submission_service).to_owned()
         }
@@ -260,7 +262,7 @@ pub fn filter_summary_text(submission_filters: &SubmissionFilters) -> String {
 
 pub fn empty_submissions_text(submission_listing: &SubmissionListing) -> String {
     match submission_listing {
-        SubmissionListing::ListingLoading => translated_messages::findings::loading_submissions(),
+        SubmissionListing::ListingLoading => translated_messages::findings::listing_loading(),
         SubmissionListing::ListingLoaded(listed_submissions) if listed_submissions.is_empty() => {
             translated_messages::findings::nothing_submitted()
         }
@@ -273,9 +275,7 @@ pub fn empty_submissions_text(submission_listing: &SubmissionListing) -> String 
 
 pub fn empty_candidates_text(candidate_listing: &CandidateListing) -> String {
     match candidate_listing {
-        CandidateListing::CandidatesLoading => {
-            translated_messages::findings::loading_quarantine_sent()
-        }
+        CandidateListing::CandidatesLoading => translated_messages::findings::candidates_loading(),
         CandidateListing::CandidatesLoaded(_) => {
             translated_messages::findings::quarantine_empty_sent()
         }
@@ -288,9 +288,7 @@ pub fn empty_candidates_text(candidate_listing: &CandidateListing) -> String {
 fn refresh_failure_text(refresh_failure: &RemoteRefreshFailure) -> String {
     match refresh_failure {
         RemoteRefreshFailure::KeyMissing { submission_service } => {
-            translated_messages::findings::service_needs_key_check(service_name(
-                *submission_service,
-            ))
+            translated_messages::findings::key_missing_failure(service_name(*submission_service))
         }
         RemoteRefreshFailure::KeyUnreadable(key_failure) => describe_key_failure(key_failure),
         RemoteRefreshFailure::BazaarLookupFailed(bazaar_failure) => {

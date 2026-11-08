@@ -35,12 +35,10 @@ pub enum ScanOptionsSectionInput {
 fn backend_choice_label(backend_preference: ScannerBackendPreference) -> String {
     match backend_preference {
         ScannerBackendPreference::PreferClamdWhenAvailable => {
-            translated_messages::scans::automatic_label()
+            translated_messages::scans::prefer_clamd_when_available()
         }
-        ScannerBackendPreference::AlwaysClamd => translated_messages::scans::clamd_daemon(),
-        ScannerBackendPreference::AlwaysClamscan => {
-            translated_messages::scans::clamscan_standalone()
-        }
+        ScannerBackendPreference::AlwaysClamd => translated_messages::scans::always_clamd(),
+        ScannerBackendPreference::AlwaysClamscan => translated_messages::scans::always_clamscan(),
     }
 }
 

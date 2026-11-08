@@ -67,10 +67,12 @@ impl AuditedOutcome {
 
     pub fn described(&self) -> String {
         match self {
-            Self::ActionApplied => translated_messages::host::applied_label(),
-            Self::ActionRolledBack => translated_messages::host::rolled_back(),
-            Self::AuthorizationRefused => translated_messages::host::refused_without_password(),
-            Self::ActionFailed => translated_messages::host::failed_label(),
+            Self::ActionApplied => translated_messages::host::action_applied(),
+            Self::ActionRolledBack => translated_messages::host::action_rolled_back(),
+            Self::AuthorizationRefused => {
+                translated_messages::host::authorization_refused_described()
+            }
+            Self::ActionFailed => translated_messages::host::action_failed(),
             Self::OutcomeNotRecorded => translated_messages::host::outcome_not_recorded(),
             Self::UnrecognizedOutcome { outcome_field } => {
                 translated_messages::host::unrecognized_outcome(sanitize_scanner_line(

@@ -106,7 +106,7 @@ fn vault_failure_description(startup_failure: &VaultStartupFailure) -> String {
             translated_messages::window::file_operation_failed_error(lock_failure)
         }
         VaultStartupFailure::LockTaskInterrupted(interrupted_task) => {
-            translated_messages::window::background_quarantine_step_stopped(interrupted_task)
+            translated_messages::window::lock_task_interrupted(interrupted_task)
         }
         VaultStartupFailure::VaultOpenFailed(vault_failure) => {
             describe_quarantine_failure(vault_failure)

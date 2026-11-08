@@ -49,38 +49,32 @@ fn skip_reason_text(skip_reason: DriveSkipReason) -> String {
         DriveSkipReason::SkippedLargerThanLimit {
             drive_size,
             size_limit,
-        } => translated_messages::scans::not_scanned_size_larger(
+        } => translated_messages::scans::skipped_larger_than_limit(
             drive_size_text(drive_size),
             drive_size_text(size_limit),
         ),
-        DriveSkipReason::SkippedOnBattery => {
-            translated_messages::scans::not_scanned_computer_running()
-        }
-        DriveSkipReason::SkippedAutoScanOff => {
-            translated_messages::scans::not_scanned_device_auto()
-        }
+        DriveSkipReason::SkippedOnBattery => translated_messages::scans::skipped_battery(),
+        DriveSkipReason::SkippedAutoScanOff => translated_messages::scans::skipped_auto_scan_off(),
         DriveSkipReason::SkippedWhileScanning => {
-            translated_messages::scans::not_scanned_another_scan()
+            translated_messages::scans::skipped_while_scanning()
         }
-        DriveSkipReason::SizeUnreadable => translated_messages::scans::not_scanned_size_drive(),
+        DriveSkipReason::SizeUnreadable => translated_messages::scans::size_unreadable(),
     }
 }
 
 pub fn drive_decision_text(drive_decision: DriveScanDecision) -> String {
     match drive_decision {
-        DriveScanDecision::DriveSettling => translated_messages::scans::checking_drive(),
-        DriveScanDecision::DriveScanning => translated_messages::scans::scanning_label(),
+        DriveScanDecision::DriveSettling => translated_messages::scans::drive_settling(),
+        DriveScanDecision::DriveScanning => translated_messages::scans::drive_scanning(),
         DriveScanDecision::ScannedDrive { scan_result } => match scan_result {
-            ScanResultsStatus::ThreatsDetected => {
-                translated_messages::scans::scanned_threats_found()
-            }
+            ScanResultsStatus::ThreatsDetected => translated_messages::scans::threats_detected(),
             ScanResultsStatus::NoThreatsDetected => {
-                translated_messages::scans::scanned_no_threats_found()
+                translated_messages::scans::no_threats_detected()
             }
             ScanResultsStatus::FinishedWithProblems => {
-                translated_messages::scans::scanned_scan_not_finish()
+                translated_messages::scans::finished_problems()
             }
-            ScanResultsStatus::ScanCancelled => translated_messages::scans::cancelled_label(),
+            ScanResultsStatus::ScanCancelled => translated_messages::scans::scan_cancelled(),
         },
         DriveScanDecision::DriveSkipped(skip_reason) => skip_reason_text(skip_reason),
     }
@@ -108,7 +102,7 @@ pub const fn drive_decision_icon(drive_decision: DriveScanDecision) -> &'static 
 pub fn device_scan_title(device_scan_status: &DeviceScanStatus) -> String {
     match device_scan_status {
         DeviceScanStatus::DeviceScanRunning { drive_name } => {
-            translated_messages::scans::scanning_drive(drive_name)
+            translated_messages::scans::device_scan_running(drive_name)
         }
         DeviceScanStatus::NoDeviceScanYet | DeviceScanStatus::DeviceScanEnded { .. } => {
             translated_messages::scans::drive_scan()

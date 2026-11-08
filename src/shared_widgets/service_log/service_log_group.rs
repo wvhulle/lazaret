@@ -262,7 +262,10 @@ impl Component for ServiceLogGroup {
                 self.refill_log_table();
             }
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::TextSaved) => {
-                Self::request_toast(&sender, translated_messages::widgets::exported_label());
+                Self::request_toast(
+                    &sender,
+                    translated_messages::widgets::text_export_finished(),
+                );
             }
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::ExportCancelled) => {}
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::ExportFailed(

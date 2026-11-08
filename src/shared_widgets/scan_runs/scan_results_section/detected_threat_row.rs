@@ -153,9 +153,9 @@ pub enum DetectedThreatRowOutput {
 fn severity_badge_text(threat_severity: ThreatSeverity) -> String {
     match threat_severity {
         ThreatSeverity::Critical => translated_messages::widgets::critical_severity(),
-        ThreatSeverity::High => translated_messages::widgets::high_label(),
-        ThreatSeverity::Medium => translated_messages::widgets::medium_label(),
-        ThreatSeverity::Low => translated_messages::widgets::low_label(),
+        ThreatSeverity::High => translated_messages::widgets::high_severity(),
+        ThreatSeverity::Medium => translated_messages::widgets::medium_severity(),
+        ThreatSeverity::Low => translated_messages::widgets::low_severity(),
     }
 }
 

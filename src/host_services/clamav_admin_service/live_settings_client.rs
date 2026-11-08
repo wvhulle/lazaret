@@ -299,25 +299,23 @@ pub fn change_effect(
 fn reduction_headline(protection_reduction: ProtectionReduction) -> Option<String> {
     match protection_reduction {
         ProtectionReduction::BlockingTurnedOff => {
-            Some(translated_messages::host::detected_files_no_longer())
+            Some(translated_messages::host::blocking_turned_off())
         }
-        ProtectionReduction::CheckTurnedOff => {
-            Some(translated_messages::host::clamav_stop_checking_kind())
-        }
+        ProtectionReduction::CheckTurnedOff => Some(translated_messages::host::check_turned_off()),
         ProtectionReduction::WatchedFolderRemoved => {
-            Some(translated_messages::host::files_removed_folder_no())
+            Some(translated_messages::host::watched_folder_removed())
         }
         ProtectionReduction::SkippedLocationAdded => {
-            Some(translated_messages::host::clamav_skip_new_entry())
+            Some(translated_messages::host::skipped_location_added())
         }
         ProtectionReduction::ScanLimitLowered => {
-            Some(translated_messages::host::files_archives_above_new())
+            Some(translated_messages::host::scan_limit_lowered())
         }
         ProtectionReduction::CurrentValuesUnknown => {
-            Some(translated_messages::host::current_value_not_read())
+            Some(translated_messages::host::current_values_unknown())
         }
         ProtectionReduction::DetectionTrusted => {
-            Some(translated_messages::host::clamav_no_longer_report())
+            Some(translated_messages::host::detection_trusted())
         }
         ProtectionReduction::NoReduction => None,
     }

@@ -365,7 +365,7 @@ pub fn is_blocked_by_on_access(file_path: &std::path::Path) -> bool {
 pub fn displayed_threat_name(threat_identity: &ThreatIdentity) -> String {
     match threat_identity {
         ThreatIdentity::Signature { signature_name } => sanitize_scanner_line(signature_name),
-        ThreatIdentity::BlockedByOnAccess => translated_messages::host::blocked_access_scanning(),
+        ThreatIdentity::BlockedByOnAccess => translated_messages::host::blocked_access(),
     }
 }
 

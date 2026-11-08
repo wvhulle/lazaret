@@ -58,7 +58,7 @@ impl ApplicationPage {
             Self::DatabaseUpdates => translated_messages::window::database_updates(),
             Self::ScanEngine => translated_messages::window::scan_engine(),
             Self::OnAccessScanning => translated_messages::window::access_scanning(),
-            Self::ScheduledScans => translated_messages::window::scheduled_scans(),
+            Self::ScheduledScans => translated_messages::window::scheduled_scans_page(),
             Self::ManualScan => translated_messages::window::manual_scan(),
             Self::RemovableDrives => translated_messages::window::removable_drives(),
             Self::Detections => translated_messages::window::detections_label(),

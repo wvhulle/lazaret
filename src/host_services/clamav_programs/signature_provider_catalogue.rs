@@ -35,8 +35,8 @@ pub enum CredentialLabel {
 impl CredentialLabel {
     pub fn described(self) -> String {
         match self {
-            Self::PurchaseReceipt => translated_messages::host::purchase_receipt_number(),
-            Self::CustomerIdentifier => translated_messages::host::customer_id(),
+            Self::PurchaseReceipt => translated_messages::host::purchase_receipt(),
+            Self::CustomerIdentifier => translated_messages::host::customer_identifier(),
         }
     }
 }
@@ -191,7 +191,7 @@ pub fn signature_file_source_name(file_source: SignatureFileSource) -> String {
         SignatureFileSource::ThirdPartyFile(third_party_provider) => {
             third_party_provider.provider_name().to_owned()
         }
-        SignatureFileSource::UnrecognizedSource => translated_messages::host::other_source(),
+        SignatureFileSource::UnrecognizedSource => translated_messages::host::unrecognized_source(),
     }
 }
 

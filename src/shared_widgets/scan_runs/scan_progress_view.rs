@@ -38,10 +38,10 @@ impl ScanProgressView {
 
     pub fn progress_text(&self) -> String {
         match self {
-            Self::PreparingScan => translated_messages::widgets::preparing_label(),
+            Self::PreparingScan => translated_messages::widgets::preparing_scan(),
             Self::FindingFiles {
                 found_file_count, ..
-            } => translated_messages::widgets::finding_files_count_found(*found_file_count),
+            } => translated_messages::widgets::finding_files(*found_file_count),
             Self::ScanningFiles {
                 inspected_file_count,
                 planned_file_count,

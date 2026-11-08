@@ -47,9 +47,9 @@ fn probe_failure_text(probe_failure: &ProbeFailure) -> String {
             sanitize_scanner_line(program_stderr)
         }
         ProbeFailure::ProgramStartFailed { start_failure_kind } => {
-            translated_messages::scans::clamscan_not_started_error(start_failure_kind)
+            translated_messages::scans::program_start_failed(start_failure_kind)
         }
-        ProbeFailure::ProbeTimedOut => translated_messages::scans::clamscan_not_answer_time(),
+        ProbeFailure::ProbeTimedOut => translated_messages::scans::probe_timed_out(),
     }
 }
 
@@ -66,12 +66,10 @@ fn engine_status_text(engine_installation: &EngineInstallation) -> String {
     match engine_installation {
         EngineInstallation::VersionReported { version_banner } => version_banner.clone(),
         EngineInstallation::ScannerRefused { refused_path } => {
-            translated_messages::scans::refused_path_account_replace(refused_path)
+            translated_messages::scans::scanner_refused(refused_path)
         }
         EngineInstallation::VersionUnverified(probe_failure) => probe_failure_text(probe_failure),
-        EngineInstallation::EngineMissing => {
-            translated_messages::scans::clamav_not_found_computer()
-        }
+        EngineInstallation::EngineMissing => translated_messages::scans::engine_missing(),
     }
 }
 
@@ -136,13 +134,13 @@ fn daemon_status_text(daemon_evidence: &DaemonEvidence) -> String {
         } => translated_messages::scans::clamd_still_uses_signatures(loaded_version, disk_version),
         DaemonEvidence::ClamdAnswering { .. } => translated_messages::scans::clamd_answering(),
         DaemonEvidence::UnitActiveNotAnswering { service_unit } => {
-            translated_messages::scans::unit_running_not_answer(service_unit)
+            translated_messages::scans::unit_active_not_answering(service_unit)
         }
-        DaemonEvidence::UnitStateUnknown => translated_messages::scans::clamd_not_answer_systemd(),
+        DaemonEvidence::UnitStateUnknown => translated_messages::scans::unit_state_unknown_daemon(),
         DaemonEvidence::UnitStopped { service_unit } => {
-            translated_messages::scans::unit_not_running(service_unit)
+            translated_messages::scans::unit_stopped_daemon(service_unit)
         }
-        DaemonEvidence::NeverSetUp => translated_messages::scans::clamd_not_set_up(),
+        DaemonEvidence::NeverSetUp => translated_messages::scans::never_set_up_daemon(),
     }
 }
 
@@ -231,20 +229,20 @@ pub const fn socket_condition(
 fn socket_status_text(socket_ownership: &ClamdSocketOwnership) -> String {
     match socket_ownership {
         ClamdSocketOwnership::SocketProtected { socket_path } => {
-            translated_messages::scans::system_replace_path(shown_socket_path(socket_path))
+            translated_messages::scans::socket_protected(shown_socket_path(socket_path))
         }
         ClamdSocketOwnership::SocketReplaceable {
             socket_path,
             replaceable_path,
-        } => translated_messages::scans::account_replace_replaceable_program(
+        } => translated_messages::scans::socket_replaceable(
             shown_socket_path(replaceable_path),
             shown_socket_path(socket_path),
         ),
         ClamdSocketOwnership::SocketMissing { socket_path } => {
-            translated_messages::scans::no_clamd_socket_path(shown_socket_path(socket_path))
+            translated_messages::scans::socket_missing(shown_socket_path(socket_path))
         }
         ClamdSocketOwnership::SocketNotCheckable => {
-            translated_messages::scans::flatpak_sandbox_cannot_see()
+            translated_messages::scans::socket_not_checkable()
         }
     }
 }
@@ -254,7 +252,7 @@ fn socket_step_title() -> String {
 }
 
 fn socket_mechanism_details() -> String {
-    translated_messages::scans::reach_clamd_through_socket()
+    translated_messages::scans::socket_mechanism()
 }
 
 pub fn socket_step(clamd_socket_view: &ClamdSocketView, daemon_answering: bool) -> ScanEngineStep {
@@ -262,7 +260,7 @@ pub fn socket_step(clamd_socket_view: &ClamdSocketView, daemon_answering: bool) 
         ClamdSocketView::SocketInspecting => TimelineStep::running(
             socket_step_title(),
             socket_mechanism_details(),
-            translated_messages::scans::checking_replace_clamd_socket(),
+            translated_messages::scans::socket_inspecting(),
             RunningStep {
                 evidence_rows: Vec::new(),
                 cancel_slot: CancelSlot::NotCancellable,

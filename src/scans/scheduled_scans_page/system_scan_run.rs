@@ -169,13 +169,11 @@ pub fn scan_found_threats(
 
 fn systemd_failure_text(bus_failure: &SystemdBusFailure) -> String {
     match bus_failure {
-        SystemdBusFailure::BusCallFailed(bus_error) => {
-            translated_messages::scans::systemd_not_answer_error(sanitize_scanner_line(
-                &bus_error.to_string(),
-            ))
-        }
+        SystemdBusFailure::BusCallFailed(bus_error) => translated_messages::scans::bus_call_failed(
+            sanitize_scanner_line(&bus_error.to_string()),
+        ),
         SystemdBusFailure::UnrecognizedLoadState => {
-            translated_messages::scans::systemd_reported_unit_state()
+            translated_messages::scans::unrecognized_load_state()
         }
     }
 }
@@ -188,12 +186,12 @@ pub fn unit_run_toast_text(
         return translated_messages::scans::found_malware();
     }
     match start_outcome {
-        UnitStartOutcome::UnitFinished => translated_messages::scans::finished_label(),
+        UnitStartOutcome::UnitFinished => translated_messages::scans::unit_finished(),
         UnitStartOutcome::JobEnded { job_result } => {
             translated_messages::scans::not_finish_cleanly_result(sanitize_scanner_line(job_result))
         }
         UnitStartOutcome::AuthorizationRefused => {
-            translated_messages::scans::starting_scan_needs_administrator()
+            translated_messages::scans::authorization_refused()
         }
         UnitStartOutcome::BusFailure(bus_failure) => {
             translated_messages::scans::not_started_error(systemd_failure_text(bus_failure))

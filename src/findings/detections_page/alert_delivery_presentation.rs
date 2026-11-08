@@ -84,7 +84,7 @@ fn alerts_status_text(
 ) -> String {
     match &alert_readiness.journal_access {
         JournalAccess::JournalUnreadable => {
-            translated_messages::findings::system_journal_cannot_read()
+            translated_messages::findings::journal_unreadable_alerts()
         }
         JournalAccess::FollowingFailed(follow_failure) => {
             journal_follow_failure_text(follow_failure)
@@ -137,18 +137,20 @@ fn background_service_text(background_service_state: UnitState) -> String {
         UnitState::UnitLoaded(UnitActivity::UnitInactive) => {
             translated_messages::findings::not_running()
         }
-        UnitState::UnitNotFound => translated_messages::findings::not_set_up(),
-        UnitState::SystemdUnavailable => {
-            translated_messages::findings::unknown_systemd_cannot_reached()
-        }
+        UnitState::UnitNotFound => translated_messages::findings::unit_not_found(),
+        UnitState::SystemdUnavailable => translated_messages::findings::systemd_unavailable(),
     }
 }
 
 fn journal_access_text(journal_access: &JournalAccess) -> String {
     match journal_access {
-        JournalAccess::FollowingJournal => translated_messages::findings::followed_label(),
-        JournalAccess::JournalUnreadable => translated_messages::findings::cannot_read(),
-        JournalAccess::FollowingFailed(_) => translated_messages::findings::following_stopped(),
+        JournalAccess::FollowingJournal => {
+            translated_messages::findings::following_journal_access()
+        }
+        JournalAccess::JournalUnreadable => {
+            translated_messages::findings::journal_unreadable_access()
+        }
+        JournalAccess::FollowingFailed(_) => translated_messages::findings::following_failed(),
     }
 }
 
@@ -220,15 +222,11 @@ fn process_attach_failure_text(read_failure: ProcessAttachReadFailure) -> String
 
 fn process_attach_status_text(process_attach_scope: ProcessAttachScope) -> String {
     match process_attach_scope {
-        ProcessAttachScope::AttachRestricted => {
-            translated_messages::findings::programs_cannot_attach_other()
-        }
+        ProcessAttachScope::AttachRestricted => translated_messages::findings::attach_restricted(),
         ProcessAttachScope::AnyProgramMayAttach => {
-            translated_messages::findings::program_run_attach_lazaret()
+            translated_messages::findings::any_program_may_attach()
         }
-        ProcessAttachScope::YamaNotLoaded => {
-            translated_messages::findings::kernel_not_restrict_attaching()
-        }
+        ProcessAttachScope::YamaNotLoaded => translated_messages::findings::yama_not_loaded(),
         ProcessAttachScope::ScopeUnreadable(read_failure) => {
             process_attach_failure_text(read_failure)
         }

@@ -9,7 +9,7 @@ use crate::{
 pub fn unit_journal_failure_text(read_failure: UnitJournalReadFailure) -> String {
     match read_failure {
         UnitJournalReadFailure::JournalReadFailed { failure_kind } => {
-            translated_messages::widgets::system_journal_not_read(failure_kind)
+            translated_messages::widgets::journal_read_failed(failure_kind)
         }
         UnitJournalReadFailure::ReadingTaskInterrupted => {
             translated_messages::widgets::journal_reading_incomplete()
@@ -20,7 +20,7 @@ pub fn unit_journal_failure_text(read_failure: UnitJournalReadFailure) -> String
 pub fn database_folder_failure_text(read_failure: DatabaseFolderReadFailure) -> String {
     match read_failure {
         DatabaseFolderReadFailure::FolderUnreadable { failure_kind } => {
-            translated_messages::widgets::signature_folder_not_read(failure_kind)
+            translated_messages::widgets::folder_unreadable(failure_kind)
         }
         DatabaseFolderReadFailure::ReadingTaskInterrupted => {
             translated_messages::widgets::reading_signature_folder_stopped()

@@ -47,7 +47,7 @@ pub enum SystemChangesGroupCommand {
 pub fn system_changes_failure_text(system_changes_view: &SystemChangesView) -> String {
     match system_changes_view {
         SystemChangesView::SystemChangesFailed(read_failure) => {
-            translated_messages::widgets::system_journal_cannot_read(read_failure)
+            translated_messages::widgets::system_changes_failed(read_failure)
         }
         SystemChangesView::SystemChangesLoading | SystemChangesView::SystemChangesLoaded => {
             String::new()

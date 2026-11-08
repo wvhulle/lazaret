@@ -11,93 +11,91 @@ use crate::{
 pub fn describe_quarantine_failure(move_failure: &QuarantineMoveFailure) -> String {
     match move_failure {
         QuarantineMoveFailure::FileHashMismatch => {
-            translated_messages::widgets::file_hash_mismatch_corrupted()
+            translated_messages::widgets::file_hash_mismatch()
         }
         QuarantineMoveFailure::RestoreRefusedIntegrityUnknown => {
-            translated_messages::widgets::quarantine_record_verified()
+            translated_messages::widgets::restore_refused_integrity_unknown()
         }
         QuarantineMoveFailure::UploadRefusedIntegrityUnknown => {
-            translated_messages::widgets::quarantine_record_lazaret()
+            translated_messages::widgets::upload_refused_integrity_unknown()
         }
         QuarantineMoveFailure::PayloadTooLargeToSend { maximum_size } => {
-            translated_messages::widgets::file_larger_size_quarantine(byte_size_text(*maximum_size))
+            translated_messages::widgets::payload_too_large_send(byte_size_text(*maximum_size))
         }
         QuarantineMoveFailure::BlockedFileOnOtherFilesystem => {
-            translated_messages::widgets::access_scanning_blocks_file()
+            translated_messages::widgets::blocked_file_other_filesystem()
         }
         QuarantineMoveFailure::EntryNotFound { entry_id } => {
-            translated_messages::widgets::quarantine_entry_not_found(entry_id)
+            translated_messages::widgets::entry_not_found(entry_id)
         }
         QuarantineMoveFailure::RecordingFailedFileRestored { .. } => {
-            translated_messages::widgets::failed_record_restored()
+            translated_messages::widgets::recording_failed_file_restored()
         }
         QuarantineMoveFailure::RecordingFailedRollbackFailed {
             rollback_failure,
             payload_path,
             ..
-        } => translated_messages::widgets::failed_record_rollback(
+        } => translated_messages::widgets::recording_failed_rollback(
             rollback_failure,
             sanitize_scanner_line(&payload_path.to_string_lossy()),
         ),
         QuarantineMoveFailure::EntryRecordNotRemoved => {
-            translated_messages::widgets::file_moved_quarantine_record()
+            translated_messages::widgets::entry_record_not_removed()
         }
         QuarantineMoveFailure::SystemCallFailed(system_call_failure) => {
-            translated_messages::widgets::system_call_failed_error(system_call_failure)
+            translated_messages::widgets::system_call_failed(system_call_failure)
         }
         QuarantineMoveFailure::FileOperationFailed(file_failure) => {
-            translated_messages::widgets::file_operation_failed_error(file_failure)
+            translated_messages::widgets::file_operation_failed(file_failure)
         }
         QuarantineMoveFailure::DatabaseOperationFailed(database_failure) => {
-            translated_messages::widgets::quarantine_database_operation_failed(database_failure)
+            translated_messages::widgets::database_operation_failed(database_failure)
         }
         QuarantineMoveFailure::BlockingStepInterrupted(interrupted_step) => {
-            translated_messages::widgets::background_quarantine_step_stopped(interrupted_step)
+            translated_messages::widgets::blocking_step_interrupted(interrupted_step)
         }
-        QuarantineMoveFailure::PathContainsNul => {
-            translated_messages::widgets::path_contains_nul_byte()
-        }
+        QuarantineMoveFailure::PathContainsNul => translated_messages::widgets::path_contains_nul(),
         QuarantineMoveFailure::PathHasNoParent => {
-            translated_messages::widgets::path_no_parent_folder()
+            translated_messages::widgets::path_has_no_parent()
         }
         QuarantineMoveFailure::PathHasNoFileName => {
-            translated_messages::widgets::path_no_file_name()
+            translated_messages::widgets::path_has_no_file()
         }
         QuarantineMoveFailure::DatabasePathNotUtf8 => {
-            translated_messages::widgets::quarantine_database_not_valid()
+            translated_messages::widgets::database_path_not_utf8()
         }
         QuarantineMoveFailure::DatabaseNotRegularFile => {
-            translated_messages::widgets::quarantine_database_not_regular()
+            translated_messages::widgets::database_not_regular_file()
         }
         QuarantineMoveFailure::SourceBlockedByOnAccess => {
-            translated_messages::widgets::access_scanning_blocks_reading()
+            translated_messages::widgets::source_blocked_access()
         }
         QuarantineMoveFailure::MovedPayloadStillBlocked => {
-            translated_messages::widgets::blocked_file_still_unreadable()
+            translated_messages::widgets::moved_payload_still_blocked()
         }
         QuarantineMoveFailure::SourceNotRegularFile => {
-            translated_messages::widgets::file_not_regular()
+            translated_messages::widgets::source_not_regular_file()
         }
         QuarantineMoveFailure::PayloadNotRegularFile => {
-            translated_messages::widgets::quarantined_file_not_regular()
+            translated_messages::widgets::payload_not_regular_file()
         }
         QuarantineMoveFailure::NotEnoughFreeSpace => {
             translated_messages::widgets::not_enough_free_space()
         }
         QuarantineMoveFailure::FileReplacedDuringOperation => {
-            translated_messages::widgets::file_replaced_not_removed()
+            translated_messages::widgets::file_replaced_during_operation()
         }
         QuarantineMoveFailure::PathOutsideQuarantine => {
-            translated_messages::widgets::path_not_inside_quarantine()
+            translated_messages::widgets::path_outside_quarantine()
         }
         QuarantineMoveFailure::InvalidRestorePath => {
-            translated_messages::widgets::restore_path_not_valid()
+            translated_messages::widgets::invalid_restore_path()
         }
         QuarantineMoveFailure::ProtectedRestoreDestination => {
-            translated_messages::widgets::restoring_protected_system_folder()
+            translated_messages::widgets::protected_restore_destination()
         }
         QuarantineMoveFailure::StoredPathUnreadable { .. } => {
-            translated_messages::widgets::path_stored_quarantine_database()
+            translated_messages::widgets::stored_path_unreadable()
         }
         QuarantineMoveFailure::VaultSchemaUnusable(migration_failure) => {
             describe_migration_failure(migration_failure)

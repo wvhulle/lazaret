@@ -1087,14 +1087,14 @@ impl Component for PageNavigation {
                 ),
             },
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::TextSaved) => {
-                self.show_plain_toast(translated_messages::window::history_exported_toast());
+                self.show_plain_toast(translated_messages::window::history_export_finished());
             }
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::ExportCancelled) => {}
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::ExportFailed(
                 export_failure,
             )) => self.show_plain_toast(describe_export_failure(&export_failure)),
             PageNavigationCommand::HistoryCleared(Ok(())) => {
-                self.show_plain_toast(translated_messages::window::history_cleared_toast());
+                self.show_plain_toast(translated_messages::window::history_cleared());
                 self.reload_every_history();
             }
             PageNavigationCommand::HistoryCleared(Err(clear_failure)) => {

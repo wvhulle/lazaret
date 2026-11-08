@@ -57,7 +57,9 @@ fn override_change_time_row(change_time: OverridesChangeTime) -> StepEvidenceRow
         translated_messages::widgets::changed_label(),
         match change_time {
             OverridesChangeTime::ChangedAt { changed_at } => exact_local_time_text(changed_at),
-            OverridesChangeTime::ChangeTimeUnknown => translated_messages::widgets::unknown_label(),
+            OverridesChangeTime::ChangeTimeUnknown => {
+                translated_messages::widgets::change_time_unknown_override()
+            }
         },
     )
 }

@@ -127,11 +127,9 @@ pub fn change_snippet(
 pub fn managed_config_description(config_file_owner: ConfigFileOwner, config_path: &str) -> String {
     match config_file_owner {
         ConfigFileOwner::NixOsConfiguration => {
-            translated_messages::host::path_generated_nixos_configuration(config_path)
+            translated_messages::host::nixos_configuration(config_path)
         }
-        ConfigFileOwner::SystemPackage => {
-            translated_messages::host::path_belongs_system_lazaret(config_path)
-        }
+        ConfigFileOwner::SystemPackage => translated_messages::host::system_package(config_path),
     }
 }
 

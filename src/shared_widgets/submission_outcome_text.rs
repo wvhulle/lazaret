@@ -32,26 +32,24 @@ pub fn sample_read_failure_text(read_failure: &SampleReadFailure) -> String {
             describe_quarantine_failure(quarantine_failure)
         }
         SampleReadFailure::FileUnreadable(read_failure) => {
-            translated_messages::widgets::file_not_read_submission(read_failure)
+            translated_messages::widgets::file_unreadable(read_failure)
         }
-        SampleReadFailure::FileNotRegular => translated_messages::widgets::regular_files_sent(),
+        SampleReadFailure::FileNotRegular => translated_messages::widgets::file_not_regular(),
         SampleReadFailure::FileTooLarge { maximum_size } => {
-            translated_messages::widgets::file_larger_size_submission(byte_size_text(*maximum_size))
+            translated_messages::widgets::file_too_large(byte_size_text(*maximum_size))
         }
         SampleReadFailure::ReadingInterrupted(_interrupted_task) => {
-            translated_messages::widgets::reading_file_stopped_unexpectedly()
+            translated_messages::widgets::reading_interrupted()
         }
     }
 }
 
 pub fn history_failure_text(history_failure: &ActivityHistoryFailure) -> String {
-    translated_messages::widgets::submission_history_not_read(describe_history_failure(
-        history_failure,
-    ))
+    translated_messages::widgets::history_failure(describe_history_failure(history_failure))
 }
 
 pub fn earlier_submission_text(earlier_submission: &SubmissionRecord) -> String {
-    translated_messages::widgets::file_already_sent_time(exact_local_time_text(
+    translated_messages::widgets::earlier_submission(exact_local_time_text(
         earlier_submission.submitted_at,
     ))
 }
@@ -59,7 +57,7 @@ pub fn earlier_submission_text(earlier_submission: &SubmissionRecord) -> String 
 pub fn clamav_report_attempt_text(report_attempt: &ClamavReportAttempt) -> String {
     match report_attempt {
         ClamavReportAttempt::ReportRecorded(_recorded_submission) => {
-            translated_messages::widgets::report_sent_clamav_review()
+            translated_messages::widgets::report_recorded()
         }
         ClamavReportAttempt::AlreadyReported(earlier_submission) => {
             earlier_submission_text(earlier_submission)
@@ -78,7 +76,7 @@ pub fn clamav_report_attempt_text(report_attempt: &ClamavReportAttempt) -> Strin
             ))
         }
         ClamavReportAttempt::ReportSentWithoutRecord(history_failure) => {
-            translated_messages::widgets::report_sent_not_added(describe_history_failure(
+            translated_messages::widgets::report_sent_without_record(describe_history_failure(
                 history_failure,
             ))
         }
@@ -116,10 +114,10 @@ pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> Strin
             upload_not_sent(&sample_read_failure_text(read_failure))
         }
         BazaarUploadAttempt::NotDetectedByClamav => {
-            upload_not_sent(&translated_messages::widgets::malwarebazaar_takes_files_clamav())
+            upload_not_sent(&translated_messages::widgets::not_detected_clamav())
         }
         BazaarUploadAttempt::UnwantedProgramOnly => {
-            upload_not_sent(&translated_messages::widgets::malwarebazaar_not_take_potentially())
+            upload_not_sent(&translated_messages::widgets::unwanted_program_only())
         }
         BazaarUploadAttempt::BazaarUnavailable(bazaar_failure) => {
             upload_not_sent(&describe_bazaar_failure(bazaar_failure))
@@ -128,7 +126,7 @@ pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> Strin
             upload_not_sent(&history_failure_text(history_failure))
         }
         BazaarUploadAttempt::SentWithoutRecord(history_failure) => {
-            translated_messages::widgets::uploaded_not_added_sent(describe_history_failure(
+            translated_messages::widgets::sent_without_record(describe_history_failure(
                 history_failure,
             ))
         }
@@ -153,7 +151,7 @@ pub fn virustotal_upload_attempt_text(upload_attempt: &VirusTotalUploadAttempt) 
             earlier_submission_text(earlier_submission)
         }
         VirusTotalUploadAttempt::ReportAlreadyAvailable(file_report) => {
-            translated_messages::widgets::virustotal_already_knows_file(
+            translated_messages::widgets::report_already_available(
                 file_report.total_engine_count,
                 file_report.detecting_engine_count,
             )
@@ -174,7 +172,7 @@ pub fn virustotal_upload_attempt_text(upload_attempt: &VirusTotalUploadAttempt) 
             upload_not_sent(&history_failure_text(history_failure))
         }
         VirusTotalUploadAttempt::SentWithoutRecord(history_failure) => {
-            translated_messages::widgets::uploaded_not_added_sent(describe_history_failure(
+            translated_messages::widgets::sent_without_record(describe_history_failure(
                 history_failure,
             ))
         }

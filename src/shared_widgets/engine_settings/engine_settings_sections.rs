@@ -341,10 +341,10 @@ pub enum EngineSettingsSectionsCommand {
 pub fn describe_engine_settings_notice(settings_notice: &EngineSettingsNotice) -> String {
     match settings_notice {
         EngineSettingsNotice::ChangeSnippetCopied => {
-            translated_messages::widgets::copied_add_configuration_apply()
+            translated_messages::widgets::change_snippet_copied()
         }
         EngineSettingsNotice::StaleConfirmationDropped => {
-            translated_messages::widgets::change_not_made_settings()
+            translated_messages::widgets::stale_confirmation_dropped()
         }
         EngineSettingsNotice::LiveChangeReported(change_outcome) => {
             describe_live_change_outcome(change_outcome)
@@ -361,10 +361,8 @@ pub fn engine_settings_notice_toast(settings_notice: &EngineSettingsNotice) -> a
 
 fn describe_live_change_outcome(change_outcome: &LiveChangeOutcome) -> String {
     match change_outcome {
-        LiveChangeOutcome::SettingsApplied => {
-            translated_messages::widgets::applied_not_system_configuration()
-        }
-        LiveChangeOutcome::PreviousRestored => translated_messages::widgets::clamav_not_come_back(),
+        LiveChangeOutcome::SettingsApplied => translated_messages::widgets::settings_applied(),
+        LiveChangeOutcome::PreviousRestored => translated_messages::widgets::previous_restored(),
         LiveChangeOutcome::NothingChanged(change_failure) => {
             live_change_failure_text(change_failure)
         }
@@ -377,10 +375,10 @@ fn live_change_failure_text(change_failure: &LiveChangeFailure) -> String {
     };
     match change_failure {
         LiveChangeFailure::AuthorizationRefused => {
-            translated_messages::widgets::nothing_changed_without_password()
+            translated_messages::widgets::authorization_refused()
         }
         LiveChangeFailure::AdminServiceMissing => {
-            translated_messages::widgets::installation_no_clamav_admin()
+            translated_messages::widgets::admin_service_missing()
         }
         LiveChangeFailure::UnknownAdminServiceAnswer {
             admin_service_answer,
@@ -396,7 +394,7 @@ fn live_change_failure_text(change_failure: &LiveChangeFailure) -> String {
 }
 
 fn live_tunable_config_description(config_path: &str) -> String {
-    translated_messages::widgets::path_combines_system_configuration(config_path)
+    translated_messages::widgets::live_tunable_config(config_path)
 }
 
 struct ProposedLiveChange {
@@ -697,15 +695,13 @@ impl EngineSettingsSections {
                     ),
                     AdminServiceNotice::AdminServiceUnreachable => format!(
                         "{managed_description}\n\n{}",
-                        translated_messages::widgets::settings_cannot_changed_here()
+                        translated_messages::widgets::admin_service_unreachable()
                     ),
                     AdminServiceNotice::NothingToExplain => managed_description,
                 }
             }
-            ConfigLoad::LoadingConfig => translated_messages::widgets::reading_configuration(),
-            ConfigLoad::ConfigMissing => {
-                translated_messages::widgets::configuration_file_not_found()
-            }
+            ConfigLoad::LoadingConfig => translated_messages::widgets::loading_config(),
+            ConfigLoad::ConfigMissing => translated_messages::widgets::config_missing(),
         }
     }
 

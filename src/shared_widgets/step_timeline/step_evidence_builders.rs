@@ -48,7 +48,7 @@ pub struct MomentContext {
 }
 
 pub fn daemon_awaited_text() -> String {
-    translated_messages::widgets::needs_daemon_see_scan()
+    translated_messages::widgets::daemon_awaited()
 }
 
 pub const fn evidence_row(evidence_name: String, evidence_value: String) -> StepEvidenceRow {
@@ -106,5 +106,5 @@ pub fn remedy_commands(
 }
 
 pub fn unknown_run_text(read_failure: UnitJournalReadFailure) -> String {
-    translated_messages::widgets::unknown_reason(unit_journal_failure_text(read_failure))
+    translated_messages::widgets::unknown_run(unit_journal_failure_text(read_failure))
 }

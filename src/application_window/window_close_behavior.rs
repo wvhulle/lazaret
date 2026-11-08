@@ -39,8 +39,8 @@ impl CloseAction {
     pub fn choice_label(self) -> String {
         match self {
             Self::QuitCompletely => translated_messages::window::quit_completely(),
-            Self::HideToTray => translated_messages::window::minimize_tray(),
-            Self::AskEachTime => translated_messages::window::always_ask(),
+            Self::HideToTray => translated_messages::window::hide_tray(),
+            Self::AskEachTime => translated_messages::window::ask_each_time(),
         }
     }
 

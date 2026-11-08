@@ -156,12 +156,14 @@ pub fn finished_results_status(finished_scan: &FinishedScan) -> ScanResultsStatu
 
 pub fn notify_finished_scan(finished_scan: &FinishedScan) {
     let notification_title = match finished_results_status(finished_scan) {
-        ScanResultsStatus::ThreatsDetected => translated_messages::widgets::threats_detected_run(),
+        ScanResultsStatus::ThreatsDetected => {
+            translated_messages::widgets::threats_detected_finished()
+        }
         ScanResultsStatus::NoThreatsDetected => {
-            translated_messages::widgets::no_threats_found_run()
+            translated_messages::widgets::no_threats_detected_finished()
         }
         ScanResultsStatus::FinishedWithProblems => {
-            translated_messages::widgets::scan_not_finish_run()
+            translated_messages::widgets::finished_problems_notify()
         }
         ScanResultsStatus::ScanCancelled => return,
     };

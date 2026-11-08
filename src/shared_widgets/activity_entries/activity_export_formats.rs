@@ -22,7 +22,7 @@ pub fn activity_status_text(activity_record: &ActivityRecord) -> String {
         ActivityRecord::ScanActivity { scan_status, .. } => match scan_status {
             ScanActivityStatus::ScanClean => translated_messages::widgets::clean_label(),
             ScanActivityStatus::ScanInfected { .. } => {
-                translated_messages::widgets::infected_label()
+                translated_messages::widgets::scan_infected()
             }
             ScanActivityStatus::ScanFailed => translated_messages::widgets::error_status(),
             ScanActivityStatus::ScanCancelled => translated_messages::widgets::cancelled_label(),
@@ -46,11 +46,9 @@ pub fn activity_status_text(activity_record: &ActivityRecord) -> String {
 fn found_threats_text(found_threats: FoundThreatCount) -> String {
     match found_threats {
         FoundThreatCount::CountedThreats { threat_count } => {
-            translated_messages::widgets::found_count_threat(threat_count.get())
+            translated_messages::widgets::counted_threats(threat_count.get())
         }
-        FoundThreatCount::UncountedThreats => {
-            translated_messages::widgets::scanner_reported_threat_activity()
-        }
+        FoundThreatCount::UncountedThreats => translated_messages::widgets::uncounted_threats(),
     }
 }
 
@@ -63,11 +61,9 @@ pub fn activity_summary_text(activity_entry: &ActivityEntryRecord) -> String {
             ScanActivityStatus::ScanClean => {
                 translated_messages::widgets::no_threats_found_activity()
             }
-            ScanActivityStatus::ScanFailed => {
-                translated_messages::widgets::scan_not_finish_activity()
-            }
+            ScanActivityStatus::ScanFailed => translated_messages::widgets::scan_failed(),
             ScanActivityStatus::ScanCancelled => {
-                translated_messages::widgets::scan_cancelled_user_activity()
+                translated_messages::widgets::scan_cancelled_activity()
             }
         },
         ActivityRecord::SkippedScan { .. } => {
@@ -86,11 +82,9 @@ pub fn activity_summary_text(activity_entry: &ActivityEntryRecord) -> String {
             UpdateActivityStatus::UpdateResultUnknown => {
                 translated_messages::widgets::update_service_no_result()
             }
-            UpdateActivityStatus::UpdateFailed => {
-                translated_messages::widgets::database_update_failed()
-            }
+            UpdateActivityStatus::UpdateFailed => translated_messages::widgets::update_failed(),
             UpdateActivityStatus::UpdateCancelled => {
-                translated_messages::widgets::database_update_cancelled()
+                translated_messages::widgets::update_cancelled()
             }
         },
     }

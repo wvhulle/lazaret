@@ -139,9 +139,7 @@ fn present_change_confirmation(
 
 fn completed_change_text(completed_change: CompletedProfileChange) -> String {
     match completed_change {
-        CompletedProfileChange::DefaultsRestored => {
-            translated_messages::scans::default_profiles_restored()
-        }
+        CompletedProfileChange::DefaultsRestored => translated_messages::scans::defaults_restored(),
         CompletedProfileChange::ProfileDeleted => translated_messages::scans::profile_deleted(),
         CompletedProfileChange::ProfileImported => translated_messages::scans::profile_imported(),
     }

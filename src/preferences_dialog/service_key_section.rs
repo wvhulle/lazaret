@@ -32,10 +32,10 @@ fn service_description(threat_intel_service: ThreatIntelService) -> String {
 fn service_key_hint(threat_intel_service: ThreatIntelService) -> String {
     match threat_intel_service {
         ThreatIntelService::VirusTotalService => {
-            translated_messages::preferences::free_tier_4_requests()
+            translated_messages::preferences::virustotal_service_hint()
         }
         ThreatIntelService::AbuseChService => {
-            translated_messages::preferences::free_abuse_ch_authentication()
+            translated_messages::preferences::abuse_ch_service_hint()
         }
     }
 }

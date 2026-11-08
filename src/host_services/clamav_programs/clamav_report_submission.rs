@@ -184,12 +184,10 @@ async fn run_submitter(
 
 pub fn clamsubmit_failure_text(clamsubmit_failure: &ClamsubmitFailure) -> String {
     match clamsubmit_failure {
-        ClamsubmitFailure::ContactIncomplete => translated_messages::host::enter_name_valid_email(),
-        ClamsubmitFailure::SubmitterMissing => {
-            translated_messages::host::reporting_needs_clamsubmit_comes()
-        }
+        ClamsubmitFailure::ContactIncomplete => translated_messages::host::contact_incomplete(),
+        ClamsubmitFailure::SubmitterMissing => translated_messages::host::submitter_missing(),
         ClamsubmitFailure::SubmitterReplaceable => {
-            translated_messages::host::lazaret_refused_run_clamsubmit()
+            translated_messages::host::submitter_replaceable()
         }
         ClamsubmitFailure::ContentPipeFailed(pipe_failure) => {
             translated_messages::host::report_not_sent_error(pipe_failure)
@@ -198,7 +196,7 @@ pub fn clamsubmit_failure_text(clamsubmit_failure: &ClamsubmitFailure) -> String
             translated_messages::host::report_not_sent_error(run_failure)
         }
         ClamsubmitFailure::UploadTimedOut(_elapsed) => {
-            translated_messages::host::report_not_sent_upload()
+            translated_messages::host::upload_timed_out()
         }
         ClamsubmitFailure::ReportedBySubmitter { submitter_output } => {
             translated_messages::host::report_not_sent_error(sanitize_scanner_line(

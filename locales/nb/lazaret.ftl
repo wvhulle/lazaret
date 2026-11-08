@@ -1,6 +1,6 @@
 -brand-name = Lazaret
 
-window-scheduled-scans = Planlagte skanninger
+window-scheduled-scans-page = Planlagte skanninger
 window-quarantine-label = Sett i karantene
 window-translator-credits = John Erling Blad https://github.com/jeblad
 window-preferences-label = Brukervalg
@@ -13,12 +13,12 @@ window-count-item =
         [one] { $count } element
        *[other] { $count } elementer
     }
-window-checking-subtitle = Sjekker …
+window-summary-pending = Sjekker …
 window-menu-tooltip = Meny
 window-quick-scan = Rask skanning
 window-quit-tray-item = Avslutt
-window-minimize-tray = Minimer til varslingsområdet
-window-always-ask = Spør alltid
+window-hide-tray = Minimer til varslingsområdet
+window-ask-each-time = Spør alltid
 window-close-lazaret = Vil du lukke { -brand-name }?
 window-cancel-close-button = Avbryt
 window-quit-close-button = Avslutt
@@ -38,7 +38,7 @@ scans-backend-title = Skannemotor
 scans-show-live-scan-title = Vis skannefremdrift fortløpende
 scans-display-files-scanned-subtitle = Vis filer som skannes i sanntid.
 scans-no-profile-manual = Ingen profil (manuelt)
-scans-checking-manual = Sjekker …
+scans-detecting-backend = Sjekker …
 scans-scan-title = Skanning
 scans-cancelled-user = Skanning avbrutt av brukeren
 scans-threats-found-scan = Trusler funnet
@@ -55,8 +55,8 @@ scans-home-folder = Hjemmappe
 scans-fast-scan-downloads-folder = Rask skanning av nedlastingsmappen for rask trusseldeteksjon
 scans-comprehensive-system-wide-scan = Omfattende systemomfattende skanning av alle tilgjengelige mapper
 scans-user-home-directory-personal = Skanning av brukerens hjemmemappe og personlige filer
-scans-profile-name-required = Profilen må ha et navn
-scans-name-50-characters-less = Navnet må være på 50 tegn eller mindre
+scans-profile-name-missing = Profilen må ha et navn
+scans-profile-name-too-long = Navnet må være på 50 tegn eller mindre
 scans-edit-profile-title = Rediger profil
 scans-save-label = Lagre
 scans-name-title = Navn
@@ -66,7 +66,7 @@ scans-add-path-title = Legg til bane
 scans-exclusions-title = Unntak
 scans-add-pattern-title = Legg til mønster
 scans-cancel-profile = Avbryt
-scans-default-profiles-restored = Standardprofiler gjenopprettet
+scans-defaults-restored = Standardprofiler gjenopprettet
 scans-profile-deleted = Profilen er slettet
 scans-profile-imported = Profilen er importert
 scans-manage-profiles-title = Administrer profiler
@@ -96,11 +96,11 @@ scans-enable-device-auto-title = Slå på automatisk skanning av enheter
 scans-max-device-size-title = Maks enhetsstørrelse (GB)
 scans-skip-battery-device-title = Hopp over på batteri
 scans-cancel-removable-label = Avbryt
-scans-scanning-label = Skanner …
+scans-drive-scanning = Skanner …
 scans-checking-scan-tooltip = Kontrollerer
 scans-status-scan-title = Status
 scans-command-copied-clipboard-scan = Kommandoen er kopiert til utklippstavlen
-scans-checking-label = Sjekker …
+scans-reading-user-timer = Sjekker …
 scans-hourly-label = Hver time
 scans-daily-label = Daglig
 scans-weekly-label = Ukentlig
@@ -129,12 +129,12 @@ scans-unknown-label = Ukjent
 
 findings-checking-background-tooltip = Kontrollerer
 findings-command-copied-clipboard-toast = Kommandoen er kopiert til utklippstavlen
-findings-quarantine-label = Sett i karantene
-findings-cancel-incident = Avbryt
+findings-quarantine-incident = Sett i karantene
+findings-cancel-incident-deletion = Avbryt
 findings-cancel-quarantine = Avbryt
 findings-delete-entries = Slett
 findings-restore-button = Gjenopprett
-findings-count-item =
+findings-entry-count =
     { $count ->
         [one] { $count } element
        *[other] { $count } elementer
@@ -155,37 +155,37 @@ findings-status-title = Status
 findings-command-copied-clipboard = Kommandoen er kopiert til utklippstavlen
 findings-remove-tooltip = Fjern
 
-signatures-failed-load-historical-logs = Kunne ikke laste inn historiske logger: { $error }
+signatures-history-load-failed = Kunne ikke laste inn historiske logger: { $error }
 signatures-checking-database-tooltip = Kontrollerer
 signatures-status-title = Status
 signatures-command-copied-clipboard-database = Kommandoen er kopiert til utklippstavlen
-signatures-cancel-label = Avbryt
+signatures-cancel-signature-update = Avbryt
 signatures-update-service = Oppdateringstjeneste
-signatures-active-label = Aktiv
-signatures-installed-stopped = Installert men stoppet
-signatures-no-freshclam-service-detected = Ingen freshclam-tjeneste oppdaget; oppdateringer kjøres manuelt
+signatures-daemon-running = Aktiv
+signatures-service-stopped = Installert men stoppet
+signatures-service-not-found = Ingen freshclam-tjeneste oppdaget; oppdateringer kjøres manuelt
 signatures-count-day-old =
     { $count ->
         [one] { $count } dag gammel
        *[other] { $count } dager gammel
     }
-signatures-no-readable-virus-database = Ingen lesbar virusdatabase ble funnet
+signatures-definitions-missing = Ingen lesbar virusdatabase ble funnet
 signatures-updated-databases = Oppdatert: { $databases }
 signatures-already-current-databases = Allerede oppdatert: { $databases }
-signatures-database-update-completed = Databaseoppdatering fullført
-signatures-database-already-up-date = Databasen er allerede oppdatert
-signatures-service-accepted-signal-performs = Tjenesten aksepterte signalet; den utfører oppdateringen asynkront. Sjekk loggene for fullføring.
-signatures-database-update-cancelled = Oppdatering av databasen avbrutt
-signatures-install-freshclam-before-requesting = Installer freshclam før du ber om databaseoppdateringer.
+signatures-definitions-updated = Databaseoppdatering fullført
+signatures-already-current = Databasen er allerede oppdatert
+signatures-update-requested-daemon = Tjenesten aksepterte signalet; den utfører oppdateringen asynkront. Sjekk loggene for fullføring.
+signatures-update-cancelled = Oppdatering av databasen avbrutt
+signatures-scanner-program-missing = Installer freshclam før du ber om databaseoppdateringer.
 signatures-checking-signature-tooltip = Kontrollerer
 signatures-command-copied-clipboard-signature = Kommandoen er kopiert til utklippstavlen
 signatures-not-open-documentation-title = Kunne ikke åpne dokumentasjonen: { $error }
-signatures-pass-label = Bestått
-signatures-warning-label = Advarsel
-signatures-fail-label = Mislykket
-signatures-unknown-label = Ukjent
-signatures-skipped-label = Hoppet over
-signatures-checking-label = Kontrollerer
+signatures-check-passed = Bestått
+signatures-needs-review = Advarsel
+signatures-check-failed = Mislykket
+signatures-status-unknown = Ukjent
+signatures-check-skipped = Hoppet over
+signatures-check-progress = Kontrollerer
 signatures-copy-tooltip = Kopier
 signatures-learn-more-title = Lær mer
 signatures-open-browser-tooltip = Åpne i nettleseren
@@ -203,16 +203,16 @@ preferences-delete-key-label = Slett nøkkel
 preferences-get-free-api-title = Skaff en gratis API-nøkkel
 
 widgets-clean-label = Ren
-widgets-infected-label = Infisert
+widgets-scan-infected = Infisert
 widgets-error-status = Feil
 widgets-cancelled-label = Kansellert
 widgets-skipped-label = Hoppet over
 widgets-success-label = Suksess
 widgets-up-date = Oppdatert
-widgets-scan-cancelled-user-activity = Skanning avbrutt av brukeren
+widgets-scan-cancelled-activity = Skanning avbrutt av brukeren
 widgets-scheduled-scan-skipped-battery = Planlagt skanning ble hoppet over (går på batteri)
-widgets-database-update-failed = Databaseoppdatering mislyktes
-widgets-database-update-cancelled = Oppdatering av databasen avbrutt
+widgets-update-failed = Databaseoppdatering mislyktes
+widgets-update-cancelled = Oppdatering av databasen avbrutt
 widgets-scan-log = SKANNELOGG
 widgets-update-log = OPPDATERINGSLOGG
 widgets-timestamp-label = Tidsstempel
@@ -225,26 +225,26 @@ widgets-copy-activity-tooltip = Kopier
 widgets-log-details-copied-toast = Loggdetaljene er kopiert til utklippstavlen
 widgets-export-title = Eksporter
 widgets-cancel-engine = Avbryt
-widgets-configuration-file-not-found = Finner ikke konfigurasjonsfilen
+widgets-config-missing = Finner ikke konfigurasjonsfilen
 widgets-copy-engine-tooltip = Kopier
-widgets-file-hash-mismatch-corrupted = Filhash samsvarer ikke — filen kan være ødelagt
-widgets-quarantine-entry-not-found = Fant ikke karanteneoppføringen: { $id }
-widgets-failed-record-restored = Kunne ikke registrere karanteneoppføringen i databasen. Filen er gjenopprettet til den opprinnelige plasseringen.
-widgets-failed-record-rollback = Kunne ikke registrere karanteneoppføringen i databasen. Tilbakestillingen mislyktes også: { $error }. Filen kan ligge igjen uten oppføring på: { $path }
-widgets-scan-target-not-exist = Skannemål eksisterer ikke eller inneholder en ugyldig NUL-byte
-widgets-scan-target-not-regular = Skannemål er ikke en vanlig fil eller mappe
+widgets-file-hash-mismatch = Filhash samsvarer ikke — filen kan være ødelagt
+widgets-entry-not-found = Fant ikke karanteneoppføringen: { $id }
+widgets-recording-failed-file-restored = Kunne ikke registrere karanteneoppføringen i databasen. Filen er gjenopprettet til den opprinnelige plasseringen.
+widgets-recording-failed-rollback = Kunne ikke registrere karanteneoppføringen i databasen. Tilbakestillingen mislyktes også: { $error }. Filen kan ligge igjen uten oppføring på: { $path }
+widgets-target-missing = Skannemål eksisterer ikke eller inneholder en ugyldig NUL-byte
+widgets-target-not-scannable = Skannemål er ikke en vanlig fil eller mappe
 widgets-no-files-scanned = Ingen filer kunne skannes
 widgets-count-not-accessed-title =
     { $count ->
         [one] { $count } fil var utilgjengelig
        *[other] { $count } filer var utilgjengelige
     }
-widgets-count-file-not-read =
+widgets-files-unreadable =
     { $count ->
         [one] { $count } fil kunne ikke leses
        *[other] { $count } filer kunne ikke leses
     }
-widgets-count-non-fatal-warning =
+widgets-nonfatal-warnings =
     { $count ->
         [one] { $count } ikke-dødelig advarsel under skanning; noen filer kan bare ha blitt skannet delvis
        *[other] { $count } ikke-dødelige advarsler under skanning; noen filer kan bare ha blitt skannet delvis
@@ -256,9 +256,9 @@ widgets-count-file-scanned-outcome =
     }
 widgets-copy-path = Kopier sti
 widgets-critical-severity = Kritisk
-widgets-high-label = Høy
-widgets-medium-label = Medium
-widgets-low-label = Lav
+widgets-high-severity = Høy
+widgets-medium-severity = Medium
+widgets-low-severity = Lav
 widgets-quarantine-detected-label = Sett i karantene
 widgets-scan-details-title = Skannedetaljer
 widgets-removes-each-original-file = Dette fjerner hver originalfil fra sin nåværende plassering.
@@ -277,19 +277,19 @@ widgets-count-file-scanned-results =
         [one] { $count } fil skannet
        *[other] { $count } filer skannet
     }
-widgets-threats-detected-results = Trusler oppdaget
-widgets-scan-cancelled-user = Skanning avbrutt av brukeren
+widgets-threats-detected-status = Trusler oppdaget
+widgets-scan-cancelled-status = Skanning avbrutt av brukeren
 widgets-files-scanned = Filer skannet
 widgets-directories-label = Mapper
 widgets-threats-found = Trusler funnet
-widgets-threats-detected-run = Trusler oppdaget
+widgets-threats-detected-finished = Trusler oppdaget
 widgets-copy-service-tooltip = Kopier
 widgets-export-text-tooltip = Eksporter tekst
 widgets-critical-level = Kritisk
 widgets-error-level = Feil
 widgets-warning-label = Advarsel
-widgets-checking-label = Sjekker …
-widgets-unknown-label = Ukjent
+widgets-log-reading = Sjekker …
+widgets-change-time-unknown-override = Ukjent
 widgets-copy-timeline-tooltip = Kopier
 widgets-cancel-submission = Avbryt
 widgets-refresh-tooltip = Oppdater
@@ -297,4 +297,4 @@ widgets-cancel-trust = Avbryt
 
 host-keyring-unavailable = Nøkkelringen er utilgjengelig
 
-headless-threats-detected = Trusler oppdaget
+headless-scan-infected = Trusler oppdaget

@@ -23,22 +23,22 @@ use crate::{
 
 fn describe_target_failure(target_failure: &ScanTargetFailure) -> String {
     match target_failure {
-        ScanTargetFailure::TargetMissing => translated_messages::widgets::scan_target_not_exist(),
+        ScanTargetFailure::TargetMissing => translated_messages::widgets::target_missing(),
         ScanTargetFailure::TargetNotScannable => {
-            translated_messages::widgets::scan_target_not_regular()
+            translated_messages::widgets::target_not_scannable()
         }
         ScanTargetFailure::TargetDirectoryUnreadable {
             target_path,
             directory_failure,
-        } => translated_messages::widgets::unable_enumerate_scan_target(
+        } => translated_messages::widgets::target_directory_unreadable(
             sanitize_scanner_line(&target_path.to_string_lossy()),
             directory_failure,
         ),
         ScanTargetFailure::FileListUnwritable(list_failure) => {
-            translated_messages::widgets::unable_write_private_clamd(list_failure)
+            translated_messages::widgets::file_list_unwritable(list_failure)
         }
         ScanTargetFailure::EnumerationInterrupted => {
-            translated_messages::widgets::listing_scan_target_stopped()
+            translated_messages::widgets::enumeration_interrupted()
         }
     }
 }
@@ -68,16 +68,16 @@ fn describe_scan_problem(scan_problem: &ScanProblem) -> String {
 }
 
 fn unscanned_files_title(unscanned_count: usize) -> String {
-    translated_messages::widgets::count_file_not_scanned(unscanned_count)
+    translated_messages::widgets::unscanned_files(unscanned_count)
 }
 
 fn describe_unscanned_cause(unscanned_cause: UnscannedFileCause) -> String {
     match unscanned_cause {
         UnscannedFileCause::ClamdConnectionLost => {
-            translated_messages::widgets::connection_clamd_lost_during()
+            translated_messages::widgets::clamd_connection_lost()
         }
         UnscannedFileCause::ScannerStoppedReporting => {
-            translated_messages::widgets::scanner_not_report_result()
+            translated_messages::widgets::scanner_stopped_reporting()
         }
     }
 }
@@ -102,10 +102,10 @@ fn describe_scan_notice(scan_notice: &ScanNotice) -> String {
             translated_messages::widgets::count_not_accessed_title(*file_count)
         }
         ScanNotice::FilesUnreadable { file_count } => {
-            translated_messages::widgets::count_file_not_read(*file_count)
+            translated_messages::widgets::files_unreadable(*file_count)
         }
         ScanNotice::NonfatalWarnings { warning_count } => {
-            translated_messages::widgets::count_non_fatal_warning(*warning_count)
+            translated_messages::widgets::nonfatal_warnings(*warning_count)
         }
     }
 }
@@ -192,7 +192,7 @@ fn notice_lines_where(
 ) -> Vec<String> {
     let unattributed_notice = match scan_outcome.threat_findings {
         ThreatFindings::UnattributedThreatsOnly => {
-            Some(translated_messages::widgets::scanner_reported_threat_scan())
+            Some(translated_messages::widgets::unattributed_threats_only())
         }
         ThreatFindings::NoThreatsFound | ThreatFindings::AttributedThreats(_) => None,
     };

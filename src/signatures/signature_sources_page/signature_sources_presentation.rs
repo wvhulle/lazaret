@@ -29,7 +29,7 @@ impl SourceChecks {
 }
 
 fn abuse_ch_key_purpose_text() -> String {
-    translated_messages::signatures::urlhaus_signatures_through_fangfrisch()
+    translated_messages::signatures::abuse_ch_key_purpose()
 }
 
 pub fn abuse_ch_key_subtitle(gathered_evidence: &GatheredEvidence) -> String {

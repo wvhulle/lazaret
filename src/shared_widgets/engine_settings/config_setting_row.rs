@@ -55,9 +55,7 @@ pub enum SettingLockReason {
 
 pub fn setting_lock_tooltip(lock_reason: SettingLockReason) -> String {
     match lock_reason {
-        SettingLockReason::UnlockRequired => {
-            translated_messages::widgets::unlock_change_setting_locked()
-        }
+        SettingLockReason::UnlockRequired => translated_messages::widgets::unlock_required(),
         SettingLockReason::NotAllowedAtRuntime => {
             translated_messages::widgets::administrator_not_copy()
         }
@@ -72,9 +70,9 @@ enum DraftComparison {
 
 pub fn size_unit_label(size_unit: SizeUnit) -> String {
     match size_unit {
-        SizeUnit::PlainBytes => translated_messages::widgets::bytes_label(),
-        SizeUnit::Kibibytes => translated_messages::widgets::kib_label(),
-        SizeUnit::Mebibytes => translated_messages::widgets::mib_label(),
+        SizeUnit::PlainBytes => translated_messages::widgets::plain_bytes(),
+        SizeUnit::Kibibytes => translated_messages::widgets::kibibytes_unit(),
+        SizeUnit::Mebibytes => translated_messages::widgets::mebibytes_unit(),
     }
 }
 
@@ -85,21 +83,15 @@ pub fn size_unit_labels() -> gtk::StringList {
 
 pub fn describe_parse_failure(parse_failure: SettingParseFailure) -> String {
     match parse_failure {
-        SettingParseFailure::UnknownOption => {
-            translated_messages::widgets::lazaret_not_know_option()
-        }
-        SettingParseFailure::NotYesOrNo => translated_messages::widgets::needs_review_value_yes(),
-        SettingParseFailure::NotAWholeNumber => {
-            translated_messages::widgets::needs_review_value_whole()
-        }
+        SettingParseFailure::UnknownOption => translated_messages::widgets::unknown_option(),
+        SettingParseFailure::NotYesOrNo => translated_messages::widgets::not_yes_no(),
+        SettingParseFailure::NotAWholeNumber => translated_messages::widgets::not_whole_number(),
         SettingParseFailure::CountOutOfRange { minimum, maximum } => {
-            translated_messages::widgets::needs_review_value_between(minimum, maximum)
+            translated_messages::widgets::count_out_range(minimum, maximum)
         }
-        SettingParseFailure::NotASize => translated_messages::widgets::needs_review_value_size(),
-        SettingParseFailure::PathNotAbsolute => {
-            translated_messages::widgets::needs_review_value_full()
-        }
-        SettingParseFailure::EmptyText => translated_messages::widgets::needs_review_value_empty(),
+        SettingParseFailure::NotASize => translated_messages::widgets::not_size(),
+        SettingParseFailure::PathNotAbsolute => translated_messages::widgets::path_not_absolute(),
+        SettingParseFailure::EmptyText => translated_messages::widgets::empty_text(),
     }
 }
 

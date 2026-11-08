@@ -131,9 +131,9 @@ impl DatabaseUpdatesPage {
     fn history_failure_text(&self) -> String {
         match &self.update_history {
             UpdateHistoryView::HistoryLoadFailed(load_failure) => {
-                translated_messages::signatures::failed_load_historical_logs(
-                    describe_history_failure(load_failure),
-                )
+                translated_messages::signatures::history_load_failed(describe_history_failure(
+                    load_failure,
+                ))
             }
             UpdateHistoryView::HistoryLoading | UpdateHistoryView::HistoryLoaded(_) => {
                 String::new()

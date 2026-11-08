@@ -349,19 +349,19 @@ pub enum UpdateStreamEnding {
 fn service_description(service_state: FreshclamServiceState) -> String {
     match service_state {
         FreshclamServiceState::DaemonRunning { .. } => {
-            translated_messages::signatures::active_label()
+            translated_messages::signatures::daemon_running()
         }
         FreshclamServiceState::TimerScheduled { .. } => {
-            translated_messages::signatures::scheduled_systemd_timer()
+            translated_messages::signatures::timer_scheduled()
         }
         FreshclamServiceState::ServiceStopped { .. } => {
-            translated_messages::signatures::installed_stopped()
+            translated_messages::signatures::service_stopped()
         }
         FreshclamServiceState::ServiceNotFound => {
-            translated_messages::signatures::no_freshclam_service_detected()
+            translated_messages::signatures::service_not_found()
         }
         FreshclamServiceState::SystemdUnreachable => {
-            translated_messages::signatures::systemd_not_asked_freshclam()
+            translated_messages::signatures::systemd_unreachable_service()
         }
     }
 }
@@ -373,10 +373,10 @@ fn directory_description(directory_status: &DatabaseDirectoryStatus) -> String {
             ..
         } => translated_messages::signatures::count_day_old(*newest_definition_age_days),
         DatabaseDirectoryStatus::DefinitionsMissing { .. } => {
-            translated_messages::signatures::no_readable_virus_database()
+            translated_messages::signatures::definitions_missing()
         }
         DatabaseDirectoryStatus::DirectoryUnreadable { read_failure, .. } => {
-            translated_messages::signatures::unknown_reason_update(database_folder_failure_text(
+            translated_messages::signatures::directory_unreadable(database_folder_failure_text(
                 *read_failure,
             ))
         }
@@ -398,32 +398,28 @@ fn directory_path_text(directory_status: &DatabaseDirectoryStatus) -> String {
 fn describe_abnormal_freshclam_exit(abnormal_exit: AbnormalScannerExit) -> String {
     match abnormal_exit {
         AbnormalScannerExit::ScannerError { exit_code } => {
-            translated_messages::signatures::freshclam_failed_exit_code(exit_code)
+            translated_messages::signatures::scanner_error(exit_code)
         }
         AbnormalScannerExit::KilledBySignal { signal_number } => {
-            translated_messages::signatures::freshclam_stopped_signal(signal_number)
+            translated_messages::signatures::killed_signal(signal_number)
         }
         AbnormalScannerExit::UnrecognizedWaitStatus { .. } => {
-            translated_messages::signatures::freshclam_ended_way_lazaret()
+            translated_messages::signatures::unrecognized_wait_status()
         }
-        AbnormalScannerExit::WaitFailed { .. } => {
-            translated_messages::signatures::lazaret_lost_track_freshclam()
-        }
+        AbnormalScannerExit::WaitFailed { .. } => translated_messages::signatures::wait_failed(),
     }
 }
 
 fn describe_failure_reason(failure_reason: &UpdateFailureReason) -> String {
     match failure_reason {
         UpdateFailureReason::AuthorizationRefused => {
-            translated_messages::signatures::authorization_failed()
+            translated_messages::signatures::authorization_refused()
         }
         UpdateFailureReason::SystemdUnreachable(_bus_failure) => {
             translated_messages::signatures::systemd_not_reached()
         }
         UpdateFailureReason::ServiceJobEnded { job_result } => {
-            translated_messages::signatures::update_service_not_finish(sanitize_scanner_line(
-                job_result,
-            ))
+            translated_messages::signatures::service_job_ended(sanitize_scanner_line(job_result))
         }
         UpdateFailureReason::FreshclamEndedAbnormally(abnormal_exit) => {
             describe_abnormal_freshclam_exit(*abnormal_exit)
@@ -433,25 +429,23 @@ fn describe_failure_reason(failure_reason: &UpdateFailureReason) -> String {
         }
         UpdateFailureReason::BlockedByCdn => translated_messages::signatures::update_blocked_cdn(),
         UpdateFailureReason::MirrorUnavailable => {
-            translated_messages::signatures::clamav_mirror_currently_unavailable()
+            translated_messages::signatures::mirror_unavailable()
         }
         UpdateFailureReason::CertificateRejected => {
-            translated_messages::signatures::ssl_tls_certificate_error()
+            translated_messages::signatures::certificate_rejected()
         }
         UpdateFailureReason::ConnectionTimedOut => {
             translated_messages::signatures::connection_timed_out()
         }
-        UpdateFailureReason::DatabaseLocked => {
-            translated_messages::signatures::database_locked_another_freshclam()
-        }
+        UpdateFailureReason::DatabaseLocked => translated_messages::signatures::database_locked(),
         UpdateFailureReason::PermissionDenied => {
-            translated_messages::signatures::permission_denied_need_elevated()
+            translated_messages::signatures::permission_denied()
         }
         UpdateFailureReason::ConnectionFailed => {
-            translated_messages::signatures::connection_error()
+            translated_messages::signatures::connection_failed()
         }
         UpdateFailureReason::NameResolutionFailed => {
-            translated_messages::signatures::dns_resolution_failed()
+            translated_messages::signatures::name_resolution_failed()
         }
         UpdateFailureReason::ReportedByUpdater { diagnostic_text } => {
             sanitize_scanner_text(diagnostic_text)
@@ -480,12 +474,12 @@ fn describe_report_summary(report_summary: &FreshclamReportSummary) -> Vec<Strin
             .map(
                 |rate_limited_database| match &rate_limited_database.rate_limit_cooldown {
                     RateLimitCooldown::CooldownUnknown => {
-                        translated_messages::signatures::rate_limited_database(
+                        translated_messages::signatures::cooldown_unknown(
                             &rate_limited_database.database_name,
                         )
                     }
                     RateLimitCooldown::CooldownUntil { cooldown_text } => {
-                        translated_messages::signatures::rate_limited_database_until(
+                        translated_messages::signatures::cooldown_until(
                             &rate_limited_database.database_name,
                             sanitize_scanner_line(cooldown_text),
                         )
@@ -503,15 +497,15 @@ fn describe_report_summary(report_summary: &FreshclamReportSummary) -> Vec<Strin
 fn describe_update_outcome(update_outcome: &DatabaseUpdateOutcome) -> String {
     let (headline, report_summary) = match update_outcome {
         DatabaseUpdateOutcome::DefinitionsUpdated(report_summary) => (
-            translated_messages::signatures::database_update_completed(),
+            translated_messages::signatures::definitions_updated(),
             report_summary,
         ),
         DatabaseUpdateOutcome::AlreadyCurrent(report_summary) => (
-            translated_messages::signatures::database_already_up_date(),
+            translated_messages::signatures::already_current(),
             report_summary,
         ),
         DatabaseUpdateOutcome::ServiceRanWithoutVerdict(report_summary) => (
-            translated_messages::signatures::update_service_ran_log(),
+            translated_messages::signatures::service_ran_without_verdict(),
             report_summary,
         ),
         DatabaseUpdateOutcome::UpdateFailed {
@@ -519,10 +513,10 @@ fn describe_update_outcome(update_outcome: &DatabaseUpdateOutcome) -> String {
             report_summary,
         } => (describe_failure_reason(failure_reason), report_summary),
         DatabaseUpdateOutcome::UpdateRequestedFromDaemon => {
-            return translated_messages::signatures::service_accepted_signal_performs();
+            return translated_messages::signatures::update_requested_daemon();
         }
         DatabaseUpdateOutcome::UpdateCancelled => {
-            return translated_messages::signatures::database_update_cancelled();
+            return translated_messages::signatures::update_cancelled();
         }
         DatabaseUpdateOutcome::UpdaterNeverStarted(start_failure) => {
             return describe_start_failure(start_failure);
@@ -564,7 +558,7 @@ const fn definitions_changed(update_outcome: &DatabaseUpdateOutcome) -> bool {
 fn describe_start_failure(start_failure: &ScanStartFailure) -> String {
     match start_failure {
         ScanStartFailure::ScannerProgramMissing => {
-            translated_messages::signatures::install_freshclam_before_requesting()
+            translated_messages::signatures::scanner_program_missing()
         }
         ScanStartFailure::ScannerProgramReplaceable { .. }
         | ScanStartFailure::ScannerSpawnFailed(_)

@@ -191,7 +191,7 @@ pub fn byte_size_text(byte_size: ByteSize) -> String {
 
 pub fn exact_byte_size_text(byte_size: ByteSize) -> String {
     let byte_count = byte_size.as_u64();
-    translated_messages::host::size_count_byte(byte_count, byte_size_text(byte_size))
+    translated_messages::host::exact_byte_size(byte_count, byte_size_text(byte_size))
 }
 
 #[cfg(test)]

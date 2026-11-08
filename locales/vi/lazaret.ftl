@@ -1,6 +1,6 @@
 -brand-name = Lazaret
 
-window-scheduled-scans = Quét theo lịch
+window-scheduled-scans-page = Quét theo lịch
 window-quarantine-label = Khu cách ly
 window-translator-credits = dinhkarate
 window-preferences-label = Tùy chọn
@@ -12,12 +12,12 @@ window-count-item =
     { $count ->
        *[other] { $count } mục
     }
-window-checking-subtitle = Đang kiểm tra…
+window-summary-pending = Đang kiểm tra…
 window-menu-tooltip = Menu
 window-quick-scan = Quét nhanh
 window-quit-tray-item = Thoát
-window-minimize-tray = Thu nhỏ xuống khay hệ thống
-window-always-ask = Luôn hỏi
+window-hide-tray = Thu nhỏ xuống khay hệ thống
+window-ask-each-time = Luôn hỏi
 window-close-lazaret = Đóng { -brand-name }?
 window-cancel-close-button = Hủy
 window-quit-close-button = Thoát
@@ -37,7 +37,7 @@ scans-backend-title = Cơ chế quét
 scans-show-live-scan-title = Hiện tiến trình quét trực tiếp
 scans-display-files-scanned-subtitle = Hiển thị các tệp đang được quét theo thời gian thực.
 scans-no-profile-manual = Không dùng hồ sơ (thủ công)
-scans-checking-manual = Đang kiểm tra…
+scans-detecting-backend = Đang kiểm tra…
 scans-scan-title = Quét
 scans-cancelled-user = Người dùng đã hủy quá trình quét
 scans-threats-found-scan = Mối đe dọa tìm thấy
@@ -54,8 +54,8 @@ scans-home-folder = Thư mục chính
 scans-fast-scan-downloads-folder = Quét nhanh thư mục Tải về để nhanh chóng phát hiện mối đe dọa
 scans-comprehensive-system-wide-scan = Quét toàn diện toàn hệ thống, bao gồm mọi thư mục có thể truy cập
 scans-user-home-directory-personal = Quét thư mục cá nhân và các tệp riêng của người dùng
-scans-profile-name-required = Cần nhập tên hồ sơ quét
-scans-name-50-characters-less = Tên không được dài quá 50 ký tự
+scans-profile-name-missing = Cần nhập tên hồ sơ quét
+scans-profile-name-too-long = Tên không được dài quá 50 ký tự
 scans-edit-profile-title = Sửa hồ sơ quét
 scans-save-label = Lưu
 scans-name-title = Tên
@@ -65,7 +65,7 @@ scans-add-path-title = Thêm đường dẫn
 scans-exclusions-title = Ngoại lệ
 scans-add-pattern-title = Thêm mẫu
 scans-cancel-profile = Hủy
-scans-default-profiles-restored = Đã khôi phục các hồ sơ quét mặc định
+scans-defaults-restored = Đã khôi phục các hồ sơ quét mặc định
 scans-profile-deleted = Đã xóa hồ sơ quét
 scans-profile-imported = Đã nhập hồ sơ quét
 scans-manage-profiles-title = Quản lý hồ sơ quét
@@ -94,11 +94,11 @@ scans-enable-device-auto-title = Bật tự động quét thiết bị
 scans-max-device-size-title = Dung lượng thiết bị tối đa (GB)
 scans-skip-battery-device-title = Bỏ qua khi dùng pin
 scans-cancel-removable-label = Hủy
-scans-scanning-label = Đang quét…
+scans-drive-scanning = Đang quét…
 scans-checking-scan-tooltip = Đang kiểm tra
 scans-status-scan-title = Trạng thái
 scans-command-copied-clipboard-scan = Đã sao chép lệnh vào bộ nhớ tạm
-scans-checking-label = Đang kiểm tra…
+scans-reading-user-timer = Đang kiểm tra…
 scans-hourly-label = Hằng giờ
 scans-daily-label = Hằng ngày
 scans-weekly-label = Hằng tuần
@@ -127,12 +127,12 @@ scans-unknown-label = Không xác định
 
 findings-checking-background-tooltip = Đang kiểm tra
 findings-command-copied-clipboard-toast = Đã sao chép lệnh vào bộ nhớ tạm
-findings-quarantine-label = Khu cách ly
-findings-cancel-incident = Hủy
+findings-quarantine-incident = Khu cách ly
+findings-cancel-incident-deletion = Hủy
 findings-cancel-quarantine = Hủy
 findings-delete-entries = Xóa
 findings-restore-button = Khôi phục
-findings-count-item =
+findings-entry-count =
     { $count ->
        *[other] { $count } mục
     }
@@ -152,36 +152,36 @@ findings-status-title = Trạng thái
 findings-command-copied-clipboard = Đã sao chép lệnh vào bộ nhớ tạm
 findings-remove-tooltip = Gỡ bỏ
 
-signatures-failed-load-historical-logs = Không thể tải nhật ký cũ: { $error }
+signatures-history-load-failed = Không thể tải nhật ký cũ: { $error }
 signatures-checking-database-tooltip = Đang kiểm tra
 signatures-status-title = Trạng thái
 signatures-command-copied-clipboard-database = Đã sao chép lệnh vào bộ nhớ tạm
-signatures-cancel-label = Hủy
+signatures-cancel-signature-update = Hủy
 signatures-update-service = Dịch vụ cập nhật
-signatures-active-label = Đang hoạt động
-signatures-installed-stopped = Đã cài đặt nhưng đang dừng
-signatures-no-freshclam-service-detected = Không phát hiện dịch vụ freshclam; cập nhật được chạy thủ công
+signatures-daemon-running = Đang hoạt động
+signatures-service-stopped = Đã cài đặt nhưng đang dừng
+signatures-service-not-found = Không phát hiện dịch vụ freshclam; cập nhật được chạy thủ công
 signatures-count-day-old =
     { $count ->
        *[other] { $count } ngày tuổi
     }
-signatures-no-readable-virus-database = Không tìm thấy cơ sở dữ liệu virus nào đọc được
+signatures-definitions-missing = Không tìm thấy cơ sở dữ liệu virus nào đọc được
 signatures-updated-databases = Đã cập nhật: { $databases }
 signatures-already-current-databases = Đã là bản mới nhất: { $databases }
-signatures-database-update-completed = Đã cập nhật cơ sở dữ liệu xong
-signatures-database-already-up-date = Cơ sở dữ liệu đã là bản mới nhất
-signatures-service-accepted-signal-performs = Dịch vụ đã nhận tín hiệu và sẽ cập nhật ở chế độ nền. Hãy xem nhật ký của dịch vụ để biết khi nào hoàn tất.
-signatures-database-update-cancelled = Đã hủy cập nhật cơ sở dữ liệu
-signatures-install-freshclam-before-requesting = Hãy cài đặt freshclam trước khi yêu cầu cập nhật cơ sở dữ liệu.
+signatures-definitions-updated = Đã cập nhật cơ sở dữ liệu xong
+signatures-already-current = Cơ sở dữ liệu đã là bản mới nhất
+signatures-update-requested-daemon = Dịch vụ đã nhận tín hiệu và sẽ cập nhật ở chế độ nền. Hãy xem nhật ký của dịch vụ để biết khi nào hoàn tất.
+signatures-update-cancelled = Đã hủy cập nhật cơ sở dữ liệu
+signatures-scanner-program-missing = Hãy cài đặt freshclam trước khi yêu cầu cập nhật cơ sở dữ liệu.
 signatures-checking-signature-tooltip = Đang kiểm tra
 signatures-command-copied-clipboard-signature = Đã sao chép lệnh vào bộ nhớ tạm
 signatures-not-open-documentation-title = Không thể mở tài liệu: { $error }
-signatures-pass-label = Đạt
-signatures-warning-label = Cảnh báo
-signatures-fail-label = Không đạt
-signatures-unknown-label = Không xác định
-signatures-skipped-label = Đã bỏ qua
-signatures-checking-label = Đang kiểm tra
+signatures-check-passed = Đạt
+signatures-needs-review = Cảnh báo
+signatures-check-failed = Không đạt
+signatures-status-unknown = Không xác định
+signatures-check-skipped = Đã bỏ qua
+signatures-check-progress = Đang kiểm tra
 signatures-copy-tooltip = Sao chép
 signatures-learn-more-title = Tìm hiểu thêm
 signatures-open-browser-tooltip = Mở trong trình duyệt
@@ -199,16 +199,16 @@ preferences-delete-key-label = Xóa khóa
 preferences-get-free-api-title = Nhận khóa API miễn phí
 
 widgets-clean-label = Sạch
-widgets-infected-label = Bị nhiễm
+widgets-scan-infected = Bị nhiễm
 widgets-error-status = Lỗi
 widgets-cancelled-label = Đã hủy
 widgets-skipped-label = Đã bỏ qua
 widgets-success-label = Thành công
 widgets-up-date = Đã là bản mới nhất
-widgets-scan-cancelled-user-activity = Người dùng đã hủy quá trình quét
+widgets-scan-cancelled-activity = Người dùng đã hủy quá trình quét
 widgets-scheduled-scan-skipped-battery = Đã bỏ qua quét theo lịch (đang dùng pin)
-widgets-database-update-failed = Cập nhật cơ sở dữ liệu thất bại
-widgets-database-update-cancelled = Đã hủy cập nhật cơ sở dữ liệu
+widgets-update-failed = Cập nhật cơ sở dữ liệu thất bại
+widgets-update-cancelled = Đã hủy cập nhật cơ sở dữ liệu
 widgets-scan-log = NHẬT KÝ QUÉT
 widgets-update-log = NHẬT KÝ CẬP NHẬT
 widgets-timestamp-label = Thời điểm
@@ -221,24 +221,24 @@ widgets-copy-activity-tooltip = Sao chép
 widgets-log-details-copied-toast = Đã sao chép chi tiết nhật ký vào bộ nhớ tạm
 widgets-export-title = Xuất
 widgets-cancel-engine = Hủy
-widgets-configuration-file-not-found = Không tìm thấy tệp cấu hình
+widgets-config-missing = Không tìm thấy tệp cấu hình
 widgets-copy-engine-tooltip = Sao chép
-widgets-file-hash-mismatch-corrupted = Mã băm của tệp không khớp — tệp có thể đã bị hỏng
-widgets-quarantine-entry-not-found = Không tìm thấy mục trong khu cách ly: { $id }
-widgets-failed-record-restored = Không thể ghi mục cách ly vào cơ sở dữ liệu. Tệp đã được khôi phục về vị trí ban đầu.
-widgets-failed-record-rollback = Không thể ghi mục cách ly vào cơ sở dữ liệu. Hoàn tác cũng thất bại: { $error }. Tệp có thể bị bỏ lại tại: { $path }
-widgets-scan-target-not-exist = Mục tiêu quét không tồn tại hoặc chứa byte NUL không hợp lệ
-widgets-scan-target-not-regular = Mục tiêu quét không phải là tệp hoặc thư mục thông thường
+widgets-file-hash-mismatch = Mã băm của tệp không khớp — tệp có thể đã bị hỏng
+widgets-entry-not-found = Không tìm thấy mục trong khu cách ly: { $id }
+widgets-recording-failed-file-restored = Không thể ghi mục cách ly vào cơ sở dữ liệu. Tệp đã được khôi phục về vị trí ban đầu.
+widgets-recording-failed-rollback = Không thể ghi mục cách ly vào cơ sở dữ liệu. Hoàn tác cũng thất bại: { $error }. Tệp có thể bị bỏ lại tại: { $path }
+widgets-target-missing = Mục tiêu quét không tồn tại hoặc chứa byte NUL không hợp lệ
+widgets-target-not-scannable = Mục tiêu quét không phải là tệp hoặc thư mục thông thường
 widgets-no-files-scanned = Không thể quét tệp nào
 widgets-count-not-accessed-title =
     { $count ->
        *[other] Không thể truy cập { $count } tệp
     }
-widgets-count-file-not-read =
+widgets-files-unreadable =
     { $count ->
        *[other] Không thể đọc { $count } tệp
     }
-widgets-count-non-fatal-warning =
+widgets-nonfatal-warnings =
     { $count ->
        *[other] { $count } cảnh báo không nghiêm trọng trong quá trình quét; một số tệp có thể chỉ được quét một phần
     }
@@ -248,9 +248,9 @@ widgets-count-file-scanned-outcome =
     }
 widgets-copy-path = Sao chép đường dẫn
 widgets-critical-severity = Nghiêm trọng
-widgets-high-label = Cao
-widgets-medium-label = Trung bình
-widgets-low-label = Thấp
+widgets-high-severity = Cao
+widgets-medium-severity = Trung bình
+widgets-low-severity = Thấp
 widgets-quarantine-detected-label = Khu cách ly
 widgets-scan-details-title = Chi tiết lượt quét
 widgets-removes-each-original-file = Thao tác này sẽ gỡ từng tệp gốc khỏi vị trí hiện tại.
@@ -267,19 +267,19 @@ widgets-count-file-scanned-results =
     { $count ->
        *[other] Đã quét { $count } tệp
     }
-widgets-threats-detected-results = Phát hiện mối đe dọa
-widgets-scan-cancelled-user = Người dùng đã hủy quá trình quét
+widgets-threats-detected-status = Phát hiện mối đe dọa
+widgets-scan-cancelled-status = Người dùng đã hủy quá trình quét
 widgets-files-scanned = Tệp đã quét
 widgets-directories-label = Thư mục
 widgets-threats-found = Mối đe dọa tìm thấy
-widgets-threats-detected-run = Phát hiện mối đe dọa
+widgets-threats-detected-finished = Phát hiện mối đe dọa
 widgets-copy-service-tooltip = Sao chép
 widgets-export-text-tooltip = Xuất văn bản
 widgets-critical-level = Nghiêm trọng
 widgets-error-level = Lỗi
 widgets-warning-label = Cảnh báo
-widgets-checking-label = Đang kiểm tra…
-widgets-unknown-label = Không xác định
+widgets-log-reading = Đang kiểm tra…
+widgets-change-time-unknown-override = Không xác định
 widgets-copy-timeline-tooltip = Sao chép
 widgets-cancel-submission = Hủy
 widgets-refresh-tooltip = Làm mới
@@ -287,4 +287,4 @@ widgets-cancel-trust = Hủy
 
 host-keyring-unavailable = Kho khóa không khả dụng
 
-headless-threats-detected = Phát hiện mối đe dọa
+headless-scan-infected = Phát hiện mối đe dọa

@@ -71,16 +71,14 @@ pub enum ScanScheduleSectionCommand {
 
 fn describe_timer_state(timer_state: &ScheduleTimerState) -> String {
     match timer_state {
-        ScheduleTimerState::TimerInactive => translated_messages::scans::not_scheduled_scan(),
+        ScheduleTimerState::TimerInactive => translated_messages::scans::timer_inactive(),
         ScheduleTimerState::TimerActive {
             next_run: UnitTimestamp::RecordedAt { recorded_at },
         } => translated_messages::scans::next_run_time(exact_local_time_text(*recorded_at)),
         ScheduleTimerState::TimerActive {
             next_run: UnitTimestamp::NeverRecorded,
         } => translated_messages::scans::scheduled_time_next_run(),
-        ScheduleTimerState::SystemdUnavailable => {
-            translated_messages::scans::scheduled_scans_need_systemd()
-        }
+        ScheduleTimerState::SystemdUnavailable => translated_messages::scans::systemd_unavailable(),
     }
 }
 
@@ -97,7 +95,7 @@ fn describe_system_schedule(next_run: UnitTimestamp) -> String {
 
 fn describe_user_timer(user_timer_view: &UserTimerView) -> String {
     match user_timer_view {
-        UserTimerView::ReadingUserTimer => translated_messages::scans::checking_label(),
+        UserTimerView::ReadingUserTimer => translated_messages::scans::reading_user_timer(),
         UserTimerView::UserTimerRead(timer_state) => describe_timer_state(timer_state),
     }
 }
@@ -108,12 +106,12 @@ fn describe_schedule_group(
 ) -> String {
     match system_schedule_owner {
         SystemScheduleOwner::InspectingSystemTimer => {
-            translated_messages::scans::checking_whether_system_already()
+            translated_messages::scans::inspecting_system_timer()
         }
         SystemScheduleOwner::NoSystemTimer => describe_user_timer(user_timer_view),
         SystemScheduleOwner::SystemTimerExists { next_run } => describe_system_schedule(*next_run),
         SystemScheduleOwner::SystemTimerUnknown(inspection_failure) => {
-            translated_messages::scans::lazaret_not_check_whether(inspection_failure)
+            translated_messages::scans::system_timer_unknown(inspection_failure)
         }
     }
 }
@@ -122,7 +120,7 @@ fn describe_page_notice(page_notice: &ScheduleSectionNotice) -> String {
     match page_notice {
         ScheduleSectionNotice::NoNoticeShown => String::new(),
         ScheduleSectionNotice::ScanTimeUnreadable => {
-            translated_messages::scans::enter_scan_time_hh()
+            translated_messages::scans::scan_time_unreadable()
         }
         ScheduleSectionNotice::ScheduleNotApplied(apply_failure) => {
             describe_apply_failure(apply_failure)
@@ -137,7 +135,7 @@ const fn shows_page_notice(page_notice: &ScheduleSectionNotice) -> bool {
 fn describe_apply_failure(apply_failure: &ScheduleApplyFailure) -> String {
     match apply_failure {
         ScheduleApplyFailure::UnitFilesUnwritable(unit_failure) => {
-            translated_messages::scans::error_creating_systemd_files(unit_failure)
+            translated_messages::scans::unit_files_unwritable(unit_failure)
         }
         ScheduleApplyFailure::UserManagerFailed(manager_failure) => {
             translated_messages::scans::timer_not_applied_error(manager_failure)

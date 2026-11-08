@@ -307,9 +307,9 @@ impl ScanPage {
 
     fn scanner_backend_text(&self) -> String {
         match &self.scanner_backend_view {
-            ScannerBackendView::DetectingBackend => translated_messages::scans::checking_manual(),
+            ScannerBackendView::DetectingBackend => translated_messages::scans::detecting_backend(),
             ScannerBackendView::BackendUndetermined(lookup_failure) => {
-                translated_messages::scans::backend_unknown_scanner_programs(lookup_failure)
+                translated_messages::scans::backend_undetermined(lookup_failure)
             }
             ScannerBackendView::BackendDetected(ScannerBackend::ClamdDaemon) => {
                 translated_messages::scans::backend_clamd_daemon()

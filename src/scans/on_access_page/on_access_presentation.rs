@@ -58,10 +58,10 @@ fn on_access_setting_row<StepAction: StepActionButton>(
 fn clamd_config_failure_text(config_failure: ClamdConfigReadFailure) -> String {
     match config_failure {
         ClamdConfigReadFailure::NoReadableConfig => {
-            translated_messages::scans::no_readable_clamd_conf()
+            translated_messages::scans::no_readable_config()
         }
         ClamdConfigReadFailure::ReadingTaskAborted => {
-            translated_messages::scans::reading_clamd_conf_stopped()
+            translated_messages::scans::reading_task_aborted_clamd()
         }
     }
 }
@@ -70,14 +70,14 @@ fn watched_location_text(watched_location: &WatchedLocation) -> String {
     match watched_location {
         WatchedLocation::WatchedFolder { folder_path } => folder_path.clone(),
         WatchedLocation::WatchedMount { mount_path } => {
-            translated_messages::scans::path_whole_mount(mount_path)
+            translated_messages::scans::watched_mount(mount_path)
         }
     }
 }
 
 fn watch_scope_text(watch_scope: &WatchScope) -> String {
     match watch_scope {
-        WatchScope::NothingWatched => translated_messages::scans::none_configured(),
+        WatchScope::NothingWatched => translated_messages::scans::nothing_watched(),
         WatchScope::WatchedLocations { .. } => watch_scope
             .watched_locations()
             .into_iter()
@@ -89,7 +89,7 @@ fn watch_scope_text(watch_scope: &WatchScope) -> String {
 
 fn size_limit_text(size_limit: &OnAccessSizeLimit) -> String {
     match size_limit {
-        OnAccessSizeLimit::DefaultLimit => translated_messages::scans::clamav_default(),
+        OnAccessSizeLimit::DefaultLimit => translated_messages::scans::default_limit(),
         OnAccessSizeLimit::ConfiguredLimit { size_limit } => byte_size_text(*size_limit),
         OnAccessSizeLimit::UnreadableLimit { limit_text } => limit_text.clone(),
     }
@@ -129,19 +129,19 @@ struct OnAccessVerdict {
 fn kernel_config_failure_text(read_failure: KernelConfigReadFailure) -> String {
     match read_failure {
         KernelConfigReadFailure::NoKernelConfigFound => {
-            translated_messages::scans::neither_proc_config_gz()
+            translated_messages::scans::no_kernel_config_found()
         }
         KernelConfigReadFailure::KernelConfigUnreadable { .. } => {
-            translated_messages::scans::kernel_configuration_not_read()
+            translated_messages::scans::kernel_config_unreadable()
         }
         KernelConfigReadFailure::CompressedConfigCorrupt => {
-            translated_messages::scans::proc_config_not_decompressed()
+            translated_messages::scans::compressed_config_corrupt()
         }
         KernelConfigReadFailure::KernelReleaseUnreadable { .. } => {
-            translated_messages::scans::running_kernel_not_read()
+            translated_messages::scans::kernel_release_unreadable()
         }
         KernelConfigReadFailure::ReadingTaskAborted => {
-            translated_messages::scans::reading_kernel_configuration_stopped()
+            translated_messages::scans::reading_task_aborted_config()
         }
     }
 }
@@ -150,27 +150,27 @@ fn watched_blocking_verdict(on_access_blocking: OnAccessBlocking) -> OnAccessVer
     match on_access_blocking {
         OnAccessBlocking::BlocksDetectedFiles => OnAccessVerdict {
             checked_condition: CheckedCondition::ConditionMet,
-            status_text: translated_messages::scans::detected_files_blocked_status(),
+            status_text: translated_messages::scans::blocks_detected_files(),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::PreventionOff => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::files_checked_detected_status(),
+            status_text: translated_messages::scans::prevention_off(),
             suggested_remedies: vec![SuggestedRemedy::OnAccessPreventionEnable],
         },
         OnAccessBlocking::PreventionConflictsWithMounts => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::files_onaccessprevention_status(),
+            status_text: translated_messages::scans::prevention_conflicts_mounts(),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::KernelCannotBlock => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::files_checked_kernel_status(),
+            status_text: translated_messages::scans::kernel_cannot_block(),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::KernelSupportUnknown(read_failure) => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: translated_messages::scans::files_checked_whether_status(
+            status_text: translated_messages::scans::kernel_support_unknown(
                 kernel_config_failure_text(read_failure),
             ),
             suggested_remedies: Vec::new(),
@@ -185,7 +185,7 @@ fn running_monitor_verdict(
     match on_access_config {
         OnAccessConfig::ConfigUnreadable(_) => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: translated_messages::scans::running_clamd_conf_status(),
+            status_text: translated_messages::scans::config_unreadable_monitor(),
             suggested_remedies: Vec::new(),
         },
         OnAccessConfig::ConfigRead {
@@ -229,12 +229,12 @@ fn on_access_verdict(
     match on_access_evidence.on_access_scanner {
         OnAccessScanner::UnitStateUnknown => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: translated_messages::scans::unknown_whether_access_status(),
+            status_text: translated_messages::scans::unit_state_unknown_access(),
             suggested_remedies: Vec::new(),
         },
         OnAccessScanner::NeverSetUp => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::access_not_set_status(),
+            status_text: translated_messages::scans::never_set_up_access(),
             suggested_remedies: vec![SuggestedRemedy::OnAccessScanningEnable],
         },
         OnAccessScanner::UnitStopped { .. } if !daemon_answering => OnAccessVerdict {
@@ -244,7 +244,7 @@ fn on_access_verdict(
         },
         OnAccessScanner::UnitStopped { service_unit } => OnAccessVerdict {
             checked_condition: CheckedCondition::ConditionFailed,
-            status_text: translated_messages::scans::unit_not_running_status(service_unit),
+            status_text: translated_messages::scans::unit_stopped_access(service_unit),
             suggested_remedies: vec![SuggestedRemedy::OnAccessScanningEnable],
         },
         OnAccessScanner::MonitorRunning if !daemon_answering => OnAccessVerdict {

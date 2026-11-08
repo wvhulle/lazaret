@@ -17,17 +17,14 @@ impl SystemChangeRow {
         let recorded_time_text = exact_local_time_text(self.audit_entry.recorded_at);
         let outcome_text = self.audit_entry.audited_outcome.described();
         match self.audit_entry.requester {
-            Requester::KnownUser { user_id } => {
-                translated_messages::widgets::time_outcome_requested_user(
-                    &recorded_time_text,
-                    &outcome_text,
-                    user_id,
-                )
-            }
-            Requester::UnknownUser => translated_messages::widgets::time_outcome_requested_unknown(
+            Requester::KnownUser { user_id } => translated_messages::widgets::known_user(
                 &recorded_time_text,
                 &outcome_text,
+                user_id,
             ),
+            Requester::UnknownUser => {
+                translated_messages::widgets::unknown_user(&recorded_time_text, &outcome_text)
+            }
         }
     }
 }

@@ -78,7 +78,7 @@ impl DetectionSwitchRow {
         match self.switch_state.switch_availability {
             SettingAvailability::ChangeableNow => String::new(),
             SettingAvailability::LockedUntilUnlocked => {
-                translated_messages::widgets::unlock_change_setting()
+                translated_messages::widgets::locked_until_unlocked()
             }
             SettingAvailability::NotAllowedAtRuntime => {
                 translated_messages::widgets::administrator_not_allow_detection()

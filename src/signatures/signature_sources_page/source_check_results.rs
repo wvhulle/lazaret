@@ -22,12 +22,12 @@ const STATUS_SEVERITY_ORDER: [AuditStatus; 6] = [
 impl AuditStatus {
     pub fn status_label(self) -> String {
         match self {
-            Self::CheckPassed => translated_messages::signatures::pass_label(),
-            Self::NeedsReview => translated_messages::signatures::warning_label(),
-            Self::CheckFailed => translated_messages::signatures::fail_label(),
-            Self::StatusUnknown => translated_messages::signatures::unknown_label(),
-            Self::CheckSkipped => translated_messages::signatures::skipped_label(),
-            Self::CheckInProgress => translated_messages::signatures::checking_label(),
+            Self::CheckPassed => translated_messages::signatures::check_passed(),
+            Self::NeedsReview => translated_messages::signatures::needs_review(),
+            Self::CheckFailed => translated_messages::signatures::check_failed(),
+            Self::StatusUnknown => translated_messages::signatures::status_unknown(),
+            Self::CheckSkipped => translated_messages::signatures::check_skipped(),
+            Self::CheckInProgress => translated_messages::signatures::check_progress(),
         }
     }
 

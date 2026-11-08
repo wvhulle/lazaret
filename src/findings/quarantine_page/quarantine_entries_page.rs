@@ -232,12 +232,12 @@ fn verdict_failure_text(verdict_failure: &VerdictFailure) -> String {
             sanitize_scanner_line(&replaceable_path.to_string_lossy()),
         ),
         VerdictFailure::ContentPipeFailed(pipe_failure) => {
-            translated_messages::findings::file_not_passed_scanner(pipe_failure)
+            translated_messages::findings::content_pipe_failed(pipe_failure)
         }
         VerdictFailure::ScannerSpawnFailed(spawn_failure) => {
-            translated_messages::findings::scanner_not_started_error(spawn_failure)
+            translated_messages::findings::scanner_spawn_failed(spawn_failure)
         }
-        VerdictFailure::VerdictTimedOut => translated_messages::findings::scan_took_too_long(),
+        VerdictFailure::VerdictTimedOut => translated_messages::findings::verdict_timed_out(),
         VerdictFailure::ScannerReported { scanner_message } => {
             sanitize_scanner_line(scanner_message)
         }
@@ -245,13 +245,13 @@ fn verdict_failure_text(verdict_failure: &VerdictFailure) -> String {
             abnormal_scanner_exit_text(abnormal_exit)
         }
         VerdictFailure::DetectionSettingsUnreadable(settings_failure) => {
-            translated_messages::findings::clamd_detection_not_read(settings_failure)
+            translated_messages::findings::detection_settings_unreadable(settings_failure)
         }
         VerdictFailure::ProgramLookupFailed(lookup_failure) => {
-            translated_messages::findings::scanner_programs_not_looked(lookup_failure)
+            translated_messages::findings::program_lookup_failed(lookup_failure)
         }
         VerdictFailure::PayloadUnreadable(read_failure) => {
-            translated_messages::findings::quarantined_copy_not_read(read_failure)
+            translated_messages::findings::payload_unreadable(read_failure)
         }
     }
 }
@@ -501,7 +501,7 @@ impl QuarantineEntriesPage {
 
     fn entry_count_text(&self) -> String {
         let listed_count = self.page_state.listed_entries().len();
-        translated_messages::findings::count_item(listed_count)
+        translated_messages::findings::entry_count(listed_count)
     }
 
     fn show_matching_entries(&mut self) {

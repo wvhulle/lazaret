@@ -65,9 +65,7 @@ impl UploadsInFlight {
 
 pub fn upload_refusal_text(upload_refusal: &UploadRefusal) -> String {
     match upload_refusal {
-        UploadRefusal::SameUploadRunning(_) => {
-            translated_messages::findings::file_already_sent_service()
-        }
+        UploadRefusal::SameUploadRunning(_) => translated_messages::findings::same_upload_running(),
     }
 }
 

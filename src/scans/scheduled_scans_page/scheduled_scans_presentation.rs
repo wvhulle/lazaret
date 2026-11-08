@@ -96,7 +96,7 @@ fn last_run_row(
             scan_findings: ScanRunFindings::NothingFound,
             ..
         } => translated_messages::scans::nothing_found(),
-        ScanRunHistory::NoCompletedScan => translated_messages::scans::not_run_yet(),
+        ScanRunHistory::NoCompletedScan => translated_messages::scans::no_completed_scan(),
         ScanRunHistory::JournalUnreadable(read_failure) => unknown_run_text(read_failure),
     };
     timed_evidence_row(
@@ -164,7 +164,7 @@ fn scheduled_status_text(
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerInactive,
             ..
-        } => translated_messages::scans::system_timer_not_active(),
+        } => translated_messages::scans::system_timer(),
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerActive { next_run },
             scan_service,
@@ -185,8 +185,8 @@ fn scheduled_status_text(
                 translated_messages::scans::service_not_read_systemd()
             }
         },
-        ScheduledScanEvidence::LazaretSchedule => translated_messages::scans::scheduled_lazaret(),
-        ScheduledScanEvidence::NoSchedule => translated_messages::scans::no_scan_scheduled(),
+        ScheduledScanEvidence::LazaretSchedule => translated_messages::scans::lazaret_schedule(),
+        ScheduledScanEvidence::NoSchedule => translated_messages::scans::no_schedule(),
     }
 }
 

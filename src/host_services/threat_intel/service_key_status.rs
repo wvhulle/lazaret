@@ -27,10 +27,10 @@ impl ServiceKeyStatus {
 
     pub fn status_text(&self) -> String {
         match self {
-            Self::KeyConfigured => translated_messages::host::api_key_configured(),
-            Self::KeyMissing => translated_messages::host::no_api_key_service(),
+            Self::KeyConfigured => translated_messages::host::key_configured(),
+            Self::KeyMissing => translated_messages::host::key_missing(),
             Self::KeyUnreadable { failure_text } => {
-                translated_messages::host::api_key_cannot_read(failure_text)
+                translated_messages::host::key_unreadable(failure_text)
             }
         }
     }

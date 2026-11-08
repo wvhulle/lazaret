@@ -224,7 +224,7 @@ fn database_updates_text(
     area_context: &AreaSummaryContext,
 ) -> String {
     match signature_evidence.database_evidence {
-        DatabaseEvidence::DatabaseMissing => translated_messages::window::no_virus_definitions(),
+        DatabaseEvidence::DatabaseMissing => translated_messages::window::database_missing(),
         DatabaseEvidence::AgeUndetermined | DatabaseEvidence::InspectionInterrupted => {
             translated_messages::window::age_definitions_unknown()
         }
@@ -298,11 +298,13 @@ fn daemon_text(daemon_evidence: &DaemonEvidence) -> String {
                 LoadedSignatures::MatchesDisk | LoadedSignatures::ComparisonUnavailable,
         } => translated_messages::window::clamd_answering(),
         DaemonEvidence::UnitActiveNotAnswering { .. } => {
-            translated_messages::window::clamd_not_answering()
+            translated_messages::window::unit_active_not_answering()
         }
-        DaemonEvidence::UnitStateUnknown => translated_messages::window::clamd_state_unknown(),
-        DaemonEvidence::UnitStopped { .. } => translated_messages::window::clamd_not_running(),
-        DaemonEvidence::NeverSetUp => translated_messages::window::clamd_not_set_up(),
+        DaemonEvidence::UnitStateUnknown => {
+            translated_messages::window::unit_state_unknown_daemon()
+        }
+        DaemonEvidence::UnitStopped { .. } => translated_messages::window::unit_stopped_daemon(),
+        DaemonEvidence::NeverSetUp => translated_messages::window::never_set_up_daemon(),
     }
 }
 
@@ -311,15 +313,15 @@ fn engine_installation_summary(engine_installation: &EngineInstallation) -> Opti
         EngineInstallation::VersionReported { .. } => None,
         EngineInstallation::EngineMissing => Some(summary_of(
             AreaStatus::AreaFailing,
-            translated_messages::window::clamav_not_installed(),
+            translated_messages::window::engine_missing(),
         )),
         EngineInstallation::ScannerRefused { .. } => Some(condition_summary(
             engine_condition(engine_installation),
-            translated_messages::window::clamscan_refused(),
+            translated_messages::window::scanner_refused(),
         )),
         EngineInstallation::VersionUnverified(_) => Some(condition_summary(
             engine_condition(engine_installation),
-            translated_messages::window::clamav_version_unknown(),
+            translated_messages::window::version_unverified(),
         )),
     }
 }
@@ -383,7 +385,7 @@ fn scan_engine_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary 
 }
 
 fn waiting_for_daemon_text() -> String {
-    translated_messages::window::waiting_clamd()
+    translated_messages::window::waiting_daemon()
 }
 
 fn shown_coverage_text(coverage_summary: &str, home_directory: &str) -> String {
@@ -413,18 +415,18 @@ fn on_access_text(
     home_directory: &str,
 ) -> String {
     match on_access_evidence.on_access_scanner {
-        OnAccessScanner::UnitStateUnknown => translated_messages::window::state_unknown(),
-        OnAccessScanner::NeverSetUp => translated_messages::window::not_set_up(),
+        OnAccessScanner::UnitStateUnknown => {
+            translated_messages::window::unit_state_unknown_access()
+        }
+        OnAccessScanner::NeverSetUp => translated_messages::window::never_set_up_access(),
         OnAccessScanner::UnitStopped { .. } | OnAccessScanner::MonitorRunning
             if !daemon_answering =>
         {
             waiting_for_daemon_text()
         }
-        OnAccessScanner::UnitStopped { .. } => translated_messages::window::clamonacc_not_running(),
+        OnAccessScanner::UnitStopped { .. } => translated_messages::window::unit_stopped_access(),
         OnAccessScanner::MonitorRunning => match &on_access_evidence.on_access_config {
-            OnAccessConfig::ConfigUnreadable(_) => {
-                translated_messages::window::clamd_conf_unreadable()
-            }
+            OnAccessConfig::ConfigUnreadable(_) => translated_messages::window::config_unreadable(),
             OnAccessConfig::ConfigRead {
                 watch_scope: WatchScope::NothingWatched,
                 ..
@@ -477,17 +479,17 @@ fn on_access_setup_summary(on_access_evidence: &OnAccessEvidence) -> Option<Area
                 CheckedCondition::ReviewSuggested,
                 match first_finding {
                     OnAccessSetupFinding::MountWatchConflicts { .. } => {
-                        translated_messages::window::mount_watching_conflicts()
+                        translated_messages::window::mount_watch_conflicts()
                     }
                     OnAccessSetupFinding::ClamdUserNotExcluded => {
-                        translated_messages::window::clamd_not_excluded()
+                        translated_messages::window::clamd_user_not_excluded()
                     }
                     OnAccessSetupFinding::WholeRootIncluded => {
-                        translated_messages::window::watches_directly()
+                        translated_messages::window::whole_root_included()
                     }
                     OnAccessSetupFinding::WatchLimitLow { .. }
                     | OnAccessSetupFinding::WatchLimitUnknown { .. } => {
-                        translated_messages::window::folder_watch_limit_low()
+                        translated_messages::window::watch_limit_low()
                     }
                 },
             )
@@ -548,15 +550,13 @@ fn scheduled_scan_text(
                 }
                 UnitTimestamp::NeverRecorded => translated_messages::window::no_next_scan_planned(),
             },
-            ScanServiceEvidence::ServiceMissing => {
-                translated_messages::window::scan_service_missing()
-            }
+            ScanServiceEvidence::ServiceMissing => translated_messages::window::service_missing(),
             ScanServiceEvidence::ServiceUnreadable => {
-                translated_messages::window::scan_service_unknown()
+                translated_messages::window::service_unreadable()
             }
         },
-        ScheduledScanEvidence::LazaretSchedule => translated_messages::window::scheduled_lazaret(),
-        ScheduledScanEvidence::NoSchedule => translated_messages::window::no_scan_scheduled(),
+        ScheduledScanEvidence::LazaretSchedule => translated_messages::window::lazaret_schedule(),
+        ScheduledScanEvidence::NoSchedule => translated_messages::window::no_schedule(),
     }
 }
 
@@ -608,7 +608,7 @@ fn manual_scan_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary 
     let scanner_summary = match protection_evidence.engine_installation {
         EngineInstallation::EngineMissing => summary_of(
             AreaStatus::AreaFailing,
-            translated_messages::window::clamav_not_installed(),
+            translated_messages::window::engine_missing(),
         ),
         EngineInstallation::VersionReported { .. }
         | EngineInstallation::ScannerRefused { .. }
@@ -641,14 +641,14 @@ fn removable_drives_summary(removable_drives_status: &RemovableDrivesStatus) -> 
     match &removable_drives_status.device_scan_status {
         DeviceScanStatus::DeviceScanRunning { drive_name } => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::scanning_drive(drive_name),
+            translated_messages::window::device_scan_running(drive_name),
         ),
         DeviceScanStatus::DeviceScanEnded {
             drive_name,
             scan_result: ScanResultsStatus::ThreatsDetected,
         } => summary_of(
             AreaStatus::AreaNeedsReview,
-            translated_messages::window::threats_found_drive(drive_name),
+            translated_messages::window::device_scan_ended(drive_name),
         ),
         DeviceScanStatus::NoDeviceScanYet
         | DeviceScanStatus::DeviceScanEnded {
@@ -677,9 +677,7 @@ fn alerts_summary(
     }
     let live_state_text = match alert_readiness.journal_access {
         JournalAccess::JournalUnreadable => translated_messages::window::journal_unreadable(),
-        JournalAccess::FollowingFailed(_) => {
-            translated_messages::window::following_journal_stopped()
-        }
+        JournalAccess::FollowingFailed(_) => translated_messages::window::following_failed(),
         JournalAccess::FollowingJournal if !alert_readiness.notifications_enabled => {
             translated_messages::window::notifications_off()
         }

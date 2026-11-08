@@ -91,15 +91,15 @@ impl ScanResultsView {
 pub fn status_title(results_status: ScanResultsStatus) -> String {
     match results_status {
         ScanResultsStatus::ThreatsDetected => {
-            translated_messages::widgets::threats_detected_results()
+            translated_messages::widgets::threats_detected_status()
         }
         ScanResultsStatus::NoThreatsDetected => {
-            translated_messages::widgets::no_threats_found_results()
+            translated_messages::widgets::no_threats_detected_status()
         }
         ScanResultsStatus::FinishedWithProblems => {
-            translated_messages::widgets::scan_not_finish_results()
+            translated_messages::widgets::finished_problems_status()
         }
-        ScanResultsStatus::ScanCancelled => translated_messages::widgets::scan_cancelled_user(),
+        ScanResultsStatus::ScanCancelled => translated_messages::widgets::scan_cancelled_status(),
     }
 }
 
@@ -189,9 +189,7 @@ pub fn format_scan_report(results_view: &ScanResultsView) -> String {
 pub fn fingerprint_failure_text(fingerprint_failure: &std::io::Error) -> String {
     match fingerprint_failure.kind() {
         std::io::ErrorKind::NotFound => translated_messages::widgets::file_no_longer_quarantine(),
-        std::io::ErrorKind::PermissionDenied => {
-            translated_messages::widgets::file_cannot_read_possibly()
-        }
+        std::io::ErrorKind::PermissionDenied => translated_messages::widgets::permission_denied(),
         _other_kind => translated_messages::widgets::file_not_read_scan(fingerprint_failure),
     }
 }
