@@ -37,4 +37,5 @@ jobs:
           CI_REPO: ${{ github.repository }}
           CI_COMMIT_TAG: ${{ github.ref_name }}
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
         run: nix run --quiet .#upload-release-assets -- dist

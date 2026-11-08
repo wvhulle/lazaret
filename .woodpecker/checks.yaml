@@ -25,6 +25,18 @@ steps:
     commands:
       - nix build --quiet --no-link --print-build-logs .#checks.x86_64-linux.tests .#checks.x86_64-linux.clippy .#checks.x86_64-linux.fmt .#checks.x86_64-linux.xtaskTests .#checks.x86_64-linux.xtaskClippy .#checks.x86_64-linux.clamavAdminTests .#checks.x86_64-linux.clamavAdminClippy
 
+  - name: dependency-checks
+    image: nixos/nix:latest
+    environment: *nix_environment
+    commands:
+      - nix build --quiet --no-link --print-build-logs .#dependency-checks
+
+  - name: text-checks
+    image: nixos/nix:latest
+    environment: *nix_environment
+    commands:
+      - nix build --quiet --no-link --print-build-logs .#text-checks
+
   - name: module-checks
     image: nixos/nix:latest
     environment: *nix_environment

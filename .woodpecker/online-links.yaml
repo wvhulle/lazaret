@@ -1,0 +1,18 @@
+when:
+  - repo: wvhulle/lazaret
+    event: cron
+    cron: weekly-online-links
+
+labels:
+  host: ryzen
+
+steps:
+  - name: check-online-links
+    image: nixos/nix:latest
+    failure: ignore
+    environment:
+      XDG_CACHE_HOME: /woodpecker/nix-cache
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+    commands:
+      - nix shell --quiet --inputs-from . nixpkgs#lychee -c lychee --no-progress --include-fragments docs README.md CONTRIBUTING.md

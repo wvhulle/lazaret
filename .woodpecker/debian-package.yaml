@@ -68,5 +68,7 @@ steps:
         require-sigs = false
       CODEBERG_TOKEN:
         from_secret: bot_token
+      MINISIGN_SECRET_KEY:
+        from_secret: minisign_secret_key
     commands:
       - nix run --quiet .#upload-release-assets -- dist

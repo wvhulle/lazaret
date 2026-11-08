@@ -9,7 +9,17 @@ cargo clippy --all-targets
 nix flake check path:.
 ```
 
-`nix flake check` runs the unit tests, Clippy and formatting of the three crates, the checks of the NixOS and Home Manager modules, the screenshot and recording render and four NixOS VM tests. Run one VM test on its own with:
+`nix flake check` runs the unit tests, Clippy and formatting of the three crates, the checks of the NixOS and Home Manager modules, the screenshot and recording render and four NixOS VM tests.
+
+It also checks the dependencies and the text:
+
+- `dependencyAdvisories`: `cargo audit` against the RustSec advisory database pinned as the `advisory-db` flake input, which the weekly dependency update refreshes.
+- `dependencyPolicy`: `cargo deny` with `deny.toml`: allowed licenses, crates.io as the only source, and no wildcard versions.
+- `unusedDependencies`: `cargo machete`. Dependencies it can't see, such as a crate renamed in `[lib]`, go in `[package.metadata.cargo-machete]`.
+- `spelling`: `typos` with `_typos.toml`, over the code and the English catalog. Other languages are excluded.
+- `documentationLinks`: `lychee --offline` over the Markdown files, for relative links and anchors. External links are checked weekly by `.woodpecker/online-links.yaml`, which never fails the build.
+
+The same tools are in the dev shell, so `cargo deny check`, `cargo machete`, `typos` and `lychee --offline docs` run locally. The dev shell also has `minisign`, to make the release key pair with `minisign -G -W` and to check a signed release asset. Run one VM test on its own with:
 
 ```sh
 nix build path:.#checks.x86_64-linux.vm-live-tuning
@@ -116,6 +126,6 @@ Releases are cut by [release-plz](https://release-plz.dev/) on Codeberg, configu
 
 1. On every push to `main`, `.woodpecker/release.yaml` opens or updates a release pull request. It bumps the version from the conventional commits since the last tag and writes the changelog.
 2. Merging that pull request tags `v<version>` and creates a Codeberg release.
-3. The release starts `.woodpecker/debian-package.yaml`, which attaches `lazaret_<version>_amd64.deb`, and `.forgejo/workflows/flatpak.yaml`, which attaches `lazaret-x86_64.flatpak`. Each file gets a `.sha256` next to it.
+3. The release starts `.woodpecker/debian-package.yaml`, which attaches `lazaret_<version>_amd64.deb`, and `.forgejo/workflows/flatpak.yaml`, which attaches `lazaret-x86_64.flatpak`. Each file gets a `.sha256` checksum and a `.minisig` signature next to it, made with the minisign key in the `minisign_secret_key` secret (Woodpecker) and `MINISIGN_SECRET_KEY` (Forgejo). Without that secret the upload fails rather than publishing unsigned files. The matching public key is `minisign.pub` in the repository root.
 
 A weekly cron job, `.woodpecker/dependency-update-pr.yaml`, updates `Cargo.lock` and `flake.lock` on the `bot/dependency-updates` branch and opens a pull request. Everything automatic that pushes, opens pull requests or creates releases acts as `wvhulle-bot`, with the `bot_token` secret.

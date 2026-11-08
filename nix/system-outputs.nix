@@ -3,6 +3,7 @@
   nixpkgs,
   crane,
   rust-overlay,
+  advisory-db,
   system,
 }:
 let
@@ -34,6 +35,34 @@ let
       ../clamav_admin_service/system_files
       ../clamd_configuration/setting_lists
       ../migrations
+      ../deny.toml
+    ];
+  };
+
+  documentationSources = lib.fileset.toSource {
+    root = ../.;
+    fileset = lib.fileset.unions [
+      ../README.md
+      ../CONTRIBUTING.md
+      ../LICENSE
+      ../AUTHORS
+      ../docs
+    ];
+  };
+
+  spellingSources = lib.fileset.toSource {
+    root = ../.;
+    fileset = lib.fileset.unions [
+      (craneLib.fileset.commonCargoSources ../.)
+      ../_typos.toml
+      ../README.md
+      ../CONTRIBUTING.md
+      ../docs
+      ../locales/en
+      ../migrations
+      ../nix
+      ../vm-tests
+      ../data
     ];
   };
 
@@ -206,6 +235,45 @@ let
     }
   );
 
+  dependencyAdvisories = craneLib.cargoAudit {
+    inherit src advisory-db;
+    pname = "lazaret";
+    inherit (commonArgs) version;
+  };
+
+  dependencyPolicy = craneLib.cargoDeny {
+    inherit src;
+    pname = "lazaret";
+    inherit (commonArgs) version;
+    cargoDenyChecks = "bans licenses sources";
+  };
+
+  unusedDependencies =
+    pkgs.runCommand "lazaret-unused-dependencies" { nativeBuildInputs = [ pkgs.cargo-machete ]; }
+      ''
+        cd ${src}
+        cargo-machete
+        touch "$out"
+      '';
+
+  spelling = pkgs.runCommand "lazaret-spelling" { nativeBuildInputs = [ pkgs.typos ]; } ''
+    cd ${spellingSources}
+    typos --format brief
+    touch "$out"
+  '';
+
+  documentationLinks =
+    pkgs.runCommand "lazaret-documentation-links"
+      {
+        nativeBuildInputs = [ pkgs.lychee ];
+        SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      }
+      ''
+        cd ${documentationSources}
+        lychee --offline --no-progress --include-fragments docs README.md CONTRIBUTING.md
+        touch "$out"
+      '';
+
   fmt = rustfmtCrane.cargoFmt {
     inherit src;
     pname = "lazaret";
@@ -248,6 +316,15 @@ in
     render-screenshots = screenshotRendering.renderScreenshots;
     publish-screenshots = screenshotRendering.publishScreenshots;
     push-to-cachix = screenshotRendering.cachixPush;
+    dependency-checks = pkgs.linkFarmFromDrvs "lazaret-dependency-checks" [
+      dependencyAdvisories
+      dependencyPolicy
+      unusedDependencies
+    ];
+    text-checks = pkgs.linkFarmFromDrvs "lazaret-text-checks" [
+      spelling
+      documentationLinks
+    ];
     inherit (screenshotRendering) screenshots;
   }
   // ciTools;
@@ -265,6 +342,11 @@ in
         xtaskClippy
         clamavAdminTests
         clamavAdminClippy
+        dependencyAdvisories
+        dependencyPolicy
+        unusedDependencies
+        spelling
+        documentationLinks
         ;
       inherit (screenshotRendering) screenshots;
     };
@@ -310,6 +392,11 @@ in
       pkgs.gnumake
       pkgs.nixfmt
       pkgs.sqlite
+      pkgs.cargo-deny
+      pkgs.cargo-machete
+      pkgs.typos
+      pkgs.lychee
+      pkgs.minisign
       pkgs.dbus
       pkgs.grim
       pkgs.libwebp

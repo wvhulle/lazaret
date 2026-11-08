@@ -6,6 +6,10 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    advisory-db = {
+      url = "github:rustsec/advisory-db";
+      flake = false;
+    };
   };
 
   outputs =
@@ -14,6 +18,7 @@
       nixpkgs,
       crane,
       rust-overlay,
+      advisory-db,
     }:
     let
       inherit (nixpkgs) lib;
@@ -26,6 +31,7 @@
             nixpkgs
             crane
             rust-overlay
+            advisory-db
             system
             ;
         }

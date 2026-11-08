@@ -15,10 +15,11 @@ sudo apt install clamav clamav-daemon clamav-freshclam clamdscan
 
 ## Install Lazaret
 
-Download `lazaret_<version>_amd64.deb` from the [releases](https://codeberg.org/wvhulle/lazaret/releases), check it against its `.sha256` file, and install it:
+Download `lazaret_<version>_amd64.deb` from the [releases](https://codeberg.org/wvhulle/lazaret/releases), check it against its `.sha256` file and its `.minisig` signature, made with the key in [`minisign.pub`](https://codeberg.org/wvhulle/lazaret/src/branch/main/minisign.pub), and install it:
 
 ```sh
 sha256sum --check lazaret_<version>_amd64.deb.sha256
+minisign -Vm lazaret_<version>_amd64.deb -p minisign.pub
 sudo apt install ./lazaret_<version>_amd64.deb
 ```
 

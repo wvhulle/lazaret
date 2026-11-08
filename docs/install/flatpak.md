@@ -17,10 +17,11 @@ Install ClamAV with your distribution's package manager, and start the daemon an
 
 ## Install Lazaret
 
-Download `lazaret-x86_64.flatpak` from the [releases](https://codeberg.org/wvhulle/lazaret/releases), check it against its `.sha256` file, and install it:
+Download `lazaret-x86_64.flatpak` from the [releases](https://codeberg.org/wvhulle/lazaret/releases), check it against its `.sha256` file and its `.minisig` signature, made with the key in [`minisign.pub`](https://codeberg.org/wvhulle/lazaret/src/branch/main/minisign.pub), and install it:
 
 ```sh
 sha256sum --check lazaret-x86_64.flatpak.sha256
+minisign -Vm lazaret-x86_64.flatpak -p minisign.pub
 flatpak install --user lazaret-x86_64.flatpak
 flatpak run page.codeberg.wvhulle.Lazaret
 ```

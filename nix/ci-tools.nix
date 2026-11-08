@@ -70,6 +70,7 @@ in
     runtimeInputs = [
       pkgs.tea
       pkgs.coreutils
+      pkgs.minisign
     ];
   };
   prepare-ci-tools = wrapXtaskTask xtaskStatic { name = "prepare-ci-tools"; };

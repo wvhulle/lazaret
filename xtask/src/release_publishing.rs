@@ -2,6 +2,7 @@ use std::{
     env,
     ffi::OsStr,
     fs,
+    io::Write,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -18,6 +19,8 @@ use crate::{
 };
 
 const CHECKSUM_EXTENSION: &str = "sha256";
+const SIGNATURE_EXTENSION: &str = "minisig";
+const SIGNING_KEY_VARIABLE: &str = "MINISIGN_SECRET_KEY";
 const CHANGELOG_PATH: &str = "CHANGELOG.md";
 const RELEASED_MANIFEST_PATH: &str = "Cargo.toml";
 
@@ -122,8 +125,10 @@ pub fn run_release_plz(release_plz_command: ReleasePlzCommand) -> Result<(), Tas
     )
 }
 
-fn is_checksum_file(file_path: &Path) -> bool {
-    file_path.extension() == Some(OsStr::new(CHECKSUM_EXTENSION))
+fn is_release_metadata_file(file_path: &Path) -> bool {
+    [CHECKSUM_EXTENSION, SIGNATURE_EXTENSION]
+        .iter()
+        .any(|metadata_extension| file_path.extension() == Some(OsStr::new(metadata_extension)))
 }
 
 pub fn regular_files_sorted(directory_path: &Path) -> Result<Vec<PathBuf>, TaskFailure> {
@@ -149,11 +154,37 @@ fn write_asset_checksum(assets_directory: &Path, asset_path: &Path) -> Result<()
     Ok(())
 }
 
+fn write_asset_signature(signing_key_file: &Path, asset_path: &Path) -> Result<(), TaskFailure> {
+    run_tool(
+        "minisign",
+        Command::new("minisign")
+            .arg("-S")
+            .arg("-s")
+            .arg(signing_key_file)
+            .arg("-m")
+            .arg(asset_path)
+            .arg("-x")
+            .arg(asset_path.with_added_extension(SIGNATURE_EXTENSION)),
+    )
+}
+
+fn signing_key_file() -> Result<tempfile::NamedTempFile, TaskFailure> {
+    let mut key_file = tempfile::NamedTempFile::new()?;
+    key_file.write_all(required_variable(SIGNING_KEY_VARIABLE)?.as_bytes())?;
+    key_file.as_file().sync_all()?;
+    Ok(key_file)
+}
+
 pub fn upload_release_assets(assets_directory: &Path) -> Result<(), TaskFailure> {
-    regular_files_sorted(assets_directory)?
-        .iter()
-        .filter(|file_path| !is_checksum_file(file_path))
-        .try_for_each(|asset_path| write_asset_checksum(assets_directory, asset_path))?;
+    let signing_key = signing_key_file()?;
+    let released_files = regular_files_sorted(assets_directory)?
+        .into_iter()
+        .filter(|file_path| !is_release_metadata_file(file_path))
+        .collect::<Vec<_>>();
+    released_files.iter().try_for_each(|asset_path| {
+        write_asset_checksum(assets_directory, asset_path)?;
+        write_asset_signature(signing_key.path(), asset_path)
+    })?;
     let repository_name = required_variable("CI_REPO")?;
     let release_tag = required_variable("CI_COMMIT_TAG")?;
     log_tea_into_bot_account()?;
@@ -185,12 +216,19 @@ mod release_publishing_tests {
     use super::*;
 
     #[test]
-    fn recognises_checksum_files_by_extension() {
-        assert!(is_checksum_file(Path::new(
+    fn recognises_checksum_and_signature_files_by_extension() {
+        assert!(is_release_metadata_file(Path::new(
             "dist/lazaret_0.2.0_amd64.deb.sha256"
         )));
-        assert!(!is_checksum_file(Path::new("dist/lazaret_0.2.0_amd64.deb")));
-        assert!(!is_checksum_file(Path::new("dist/lazaret-x86_64.flatpak")));
+        assert!(is_release_metadata_file(Path::new(
+            "dist/lazaret_0.2.0_amd64.deb.minisig"
+        )));
+        assert!(!is_release_metadata_file(Path::new(
+            "dist/lazaret_0.2.0_amd64.deb"
+        )));
+        assert!(!is_release_metadata_file(Path::new(
+            "dist/lazaret-x86_64.flatpak"
+        )));
     }
 
     #[test]
