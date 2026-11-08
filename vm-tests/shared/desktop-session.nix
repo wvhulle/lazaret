@@ -2,6 +2,7 @@
 {
   programs.sway.enable = true;
   security.polkit.enable = true;
+  programs.ydotool.enable = true;
   services.gnome.at-spi2-core.enable = true;
 
   services.greetd = {
@@ -23,6 +24,7 @@
     pathsToLink = [ "/libexec" ];
     systemPackages = [
       pkgs.adwaita-icon-theme
+      pkgs.grim
       pkgs.mako
       pkgs.nushell
       pkgs.polkit_gnome

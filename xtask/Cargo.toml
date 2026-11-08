@@ -6,11 +6,19 @@ publish = false
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+fluent-bundle = "0.16"
 hex = "0.4"
 md-5 = "0.10"
+rusqlite = { version = "0.41", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"
 thiserror = "2"
+unic-langid = "0.9"
 zbus = { version = "5.19", default-features = false, features = ["blocking-api", "tokio"] }
 gtk_scene_capture = { version = "0.1.0", path = "../gtk_scene_capture" }
 tokio = { version = "1.54.1", features = ["rt", "time"] }
+
+[build-dependencies]
+lazaret-translation-codegen = { version = "0.1.0", path = "../translation_codegen" }

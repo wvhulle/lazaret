@@ -16,7 +16,7 @@ mod screenshot_publishing;
 mod task_failure;
 mod tool_commands;
 mod vm_fixture_corpus;
-mod vm_session_widgets;
+mod vm_journeys;
 
 use std::{path::PathBuf, process::ExitCode};
 
@@ -34,11 +34,7 @@ use crate::{
     screenshot_publishing::publish_screenshots,
     task_failure::TaskFailure,
     vm_fixture_corpus::build_vm_fixture_corpus,
-    vm_session_widgets::{
-        SessionTextEntry, SessionWidgetQuery, await_session_widget, await_session_widget_gone,
-        describe_session_widgets, describe_widget_ancestry, press_session_widget,
-        type_into_session_widget,
-    },
+    vm_journeys::{JourneyName, describe_session_widgets, run_vm_journey},
 };
 
 #[derive(Parser)]
@@ -111,14 +107,11 @@ enum RepositoryTask {
     BuildVmFixtures {
         output_directory: PathBuf,
     },
-    PressWidget(SessionWidgetQuery),
-    AwaitWidget(SessionWidgetQuery),
-    AwaitWidgetGone(SessionWidgetQuery),
-    TypeIntoWidget(SessionTextEntry),
-    DescribeSessionWidgets,
-    DescribeWidgetAncestry {
-        name_fragment: String,
+    VmJourney {
+        #[arg(value_enum)]
+        journey_name: JourneyName,
     },
+    DescribeSessionWidgets,
 }
 
 fn run_repository_task(repository_task: RepositoryTask) -> Result<(), TaskFailure> {
@@ -165,23 +158,12 @@ fn run_repository_task(repository_task: RepositoryTask) -> Result<(), TaskFailur
         RepositoryTask::BuildVmFixtures { output_directory } => {
             build_vm_fixture_corpus(&output_directory)
         }
-        RepositoryTask::PressWidget(widget_query) => press_session_widget(&widget_query),
-        RepositoryTask::AwaitWidget(widget_query) => await_session_widget(&widget_query),
-        RepositoryTask::AwaitWidgetGone(widget_query) => await_session_widget_gone(&widget_query),
-        RepositoryTask::TypeIntoWidget(text_entry) => type_into_session_widget(&text_entry),
-        RepositoryTask::DescribeWidgetAncestry { name_fragment } => {
-            describe_widget_ancestry(&name_fragment).map(|ancestry_descriptions| {
-                ancestry_descriptions
-                    .iter()
-                    .for_each(|ancestry_description| println!("{ancestry_description}"));
-            })
-        }
+        RepositoryTask::VmJourney { journey_name } => Ok(run_vm_journey(journey_name)?),
         RepositoryTask::DescribeSessionWidgets => {
-            describe_session_widgets().map(|widget_descriptions| {
-                widget_descriptions
-                    .iter()
-                    .for_each(|widget_description| println!("{widget_description}"));
-            })
+            describe_session_widgets()?
+                .iter()
+                .for_each(|widget_description| println!("{widget_description}"));
+            Ok(())
         }
         RepositoryTask::ListWidgets { page_argument } => {
             list_visible_widgets(&page_argument).map(|widget_descriptions| {

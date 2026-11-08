@@ -4,5 +4,7 @@
 
   nodes.machine = machine;
 
-  testScript = builtins.readFile ../shared/desktop_session.py + builtins.readFile ./check.py;
+  testScript = builtins.readFile ../shared/run_journey.py + ''
+    run_journey("desktop-user-journey")
+  '';
 }

@@ -14,10 +14,23 @@
     extraGroups = [
       "systemd-journal"
       "wheel"
+      "ydotool"
     ];
   };
 
   services.clamav.daemon.enable = true;
+
+  security.sudo.extraRules = [
+    {
+      users = [ "sample-user" ];
+      commands = [
+        {
+          command = "ALL";
+          options = [ "NOPASSWD" ];
+        }
+      ];
+    }
+  ];
 
   systemd.tmpfiles.rules = [
     "d /var/lib/clamav 0755 clamav clamav -"

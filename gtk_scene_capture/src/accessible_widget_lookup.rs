@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use atspi::{
-    AccessibilityConnection, CoordType, ObjectRefOwned, Role, State, StateSet,
+    AccessibilityConnection, CoordType, ObjectRefOwned, Role, State,
     proxy::{
         accessible::{AccessibleProxy, ObjectRefExt},
         action::ActionProxy,
@@ -166,17 +166,30 @@ async fn proxy_for<'reference>(
     Ok(object_reference.as_accessible_proxy(connection).await?)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NodeVisibility {
+    Showing,
+    Hidden,
+    VisibilityUnknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NodeRole {
+    KnownRole(Role),
+    RoleUnknown,
+}
+
 struct InspectedNode {
     object_reference: ObjectRefOwned,
-    widget_role: Role,
+    node_role: NodeRole,
     accessible_name: String,
-    widget_state: StateSet,
+    node_visibility: NodeVisibility,
     child_references: Vec<ObjectRefOwned>,
 }
 
 impl InspectedNode {
     fn is_showing(&self) -> bool {
-        self.widget_state.contains(State::Showing)
+        self.node_visibility == NodeVisibility::Showing
     }
 
     fn matches(&self, widget_target: &WidgetTarget) -> bool {
@@ -186,11 +199,14 @@ impl InspectedNode {
                 .accessible_name
                 .contains(&widget_target.accessible_name),
         };
-        self.widget_role == widget_target.widget_role && name_matches && self.is_showing()
+        self.node_role == NodeRole::KnownRole(widget_target.widget_role)
+            && name_matches
+            && self.is_showing()
     }
 
     fn may_hold_showing_widgets(&self) -> bool {
-        self.widget_role == Role::Application || self.is_showing()
+        self.node_role == NodeRole::KnownRole(Role::Application)
+            || self.node_visibility != NodeVisibility::Hidden
     }
 }
 
@@ -209,9 +225,15 @@ async fn inspect_node(
         accessible_proxy.get_children(),
     );
     Some(InspectedNode {
-        widget_role: widget_role.ok()?,
+        node_role: widget_role.map_or(NodeRole::RoleUnknown, NodeRole::KnownRole),
         accessible_name: accessible_name.unwrap_or_default(),
-        widget_state: widget_state.unwrap_or_default(),
+        node_visibility: widget_state.map_or(NodeVisibility::VisibilityUnknown, |widget_state| {
+            if widget_state.contains(State::Showing) {
+                NodeVisibility::Showing
+            } else {
+                NodeVisibility::Hidden
+            }
+        }),
         child_references: child_references.unwrap_or_default(),
         object_reference,
     })
@@ -400,10 +422,12 @@ impl AccessibleTree {
             searched_nodes += level_references.len();
             let mut next_level_references = Vec::new();
             for inspected_node in inspect_level(self.bus_connection(), level_references).await {
-                if inspected_node.is_showing() {
+                if inspected_node.node_visibility != NodeVisibility::Hidden {
                     widget_descriptions.push(format!(
-                        "{:?} {:?}",
-                        inspected_node.widget_role, inspected_node.accessible_name
+                        "{:?} {:?} {:?}",
+                        inspected_node.node_role,
+                        inspected_node.accessible_name,
+                        inspected_node.node_visibility
                     ));
                 }
                 if inspected_node.may_hold_showing_widgets() {

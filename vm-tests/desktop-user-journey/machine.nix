@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 let
   testKeyDirectory = "/var/lib/lazaret-test-keys";
   downloadsDirectory = "/home/sample-user/Downloads";
@@ -49,6 +49,13 @@ in
     "f+ ${testKeyDirectory}/virustotal 0440 root users - 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     "d /srv/shared 1777 root root -"
   ];
+
+  systemd.user.services.lazaret.environment.GDK_DEBUG = "no-portals";
+
+  systemd.services.clamav-fangfrisch.environment.REQUESTS_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt";
+
+  systemd.services.clamav-fangfrisch.serviceConfig.ExecStart =
+    lib.mkForce "${lib.getExe pkgs.fangfrisch} --conf \${RUNTIME_DIRECTORY}/fangfrisch.conf refresh";
 
   environment.systemPackages = [ pkgs.glib ];
 }

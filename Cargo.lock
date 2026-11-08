@@ -5394,13 +5394,19 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent-bundle",
  "gtk_scene_capture",
  "hex",
+ "lazaret-translation-codegen",
  "md-5",
+ "rusqlite",
+ "serde",
+ "serde_json",
  "sha2",
  "tempfile",
  "thiserror",
  "tokio",
+ "unic-langid",
  "zbus",
 ]
 
