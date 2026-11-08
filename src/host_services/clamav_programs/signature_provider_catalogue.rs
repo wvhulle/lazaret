@@ -33,10 +33,14 @@ pub enum CredentialLabel {
 }
 
 impl CredentialLabel {
-    pub fn described(self) -> String {
+    pub fn translated_choice(self) -> translated_messages::signatures::CredentialChoice {
         match self {
-            Self::PurchaseReceipt => translated_messages::host::purchase_receipt(),
-            Self::CustomerIdentifier => translated_messages::host::customer_identifier(),
+            Self::PurchaseReceipt => {
+                translated_messages::signatures::CredentialChoice::PurchaseReceipt
+            }
+            Self::CustomerIdentifier => {
+                translated_messages::signatures::CredentialChoice::CustomerIdentifier
+            }
         }
     }
 }

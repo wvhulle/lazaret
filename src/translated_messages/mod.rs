@@ -26,6 +26,7 @@ fn load_language_bundle(language_catalog: &BundledLanguageCatalog) -> FluentBund
     let mut language_bundle =
         FluentBundle::new_concurrent(vec![parsed_language(language_catalog.language_tag)]);
     language_bundle.set_use_isolating(false);
+    let _builtin_functions_added = language_bundle.add_builtins();
     for fluent_source in language_catalog.fluent_sources {
         let catalog_resource = FluentResource::try_new((*fluent_source).to_owned())
             .unwrap_or_else(|(partial_resource, _syntax_errors)| partial_resource);

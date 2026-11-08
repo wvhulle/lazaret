@@ -136,7 +136,7 @@ mod clamav_report_review_tests {
 
     fn still_detected() -> ContentVerdict {
         ContentVerdict::StillDetected {
-            detection_name: "Win.Trojan.Agent".to_owned(),
+            detection_name: Some("Win.Trojan.Agent".to_owned()),
         }
     }
 

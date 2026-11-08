@@ -585,7 +585,7 @@ mod quarantine_page_state_tests {
         page_state.record_recheck_verdict(
             1,
             ContentVerdict::StillDetected {
-                detection_name: "Win.Trojan.Agent".to_owned(),
+                detection_name: Some("Win.Trojan.Agent".to_owned()),
             },
         );
         page_state.record_loaded_entries(Ok(vec![quarantined_entry(1)]));

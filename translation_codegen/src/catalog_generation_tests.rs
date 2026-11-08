@@ -187,3 +187,134 @@ fn translation_must_define_the_terms_it_uses() {
         [CatalogProblem::UnresolvedTermReference { referenced_id, .. }] if referenced_id == "brand-name"
     ));
 }
+
+#[test]
+fn number_function_types_a_variable_as_number_without_selecting() {
+    let locales_directory = locales_with(&[(
+        "en/lazaret.ftl",
+        "host-engine-verdict = { $total ->\n    [one] { NUMBER($count) } of { $total } engine\n   \
+         *[other] { NUMBER($count) } of { $total } engines\n}\n",
+    )]);
+    let generated_messages =
+        generate_message_functions(locales_directory.path(), "en").expect("valid catalogs");
+    assert!(generated_messages.rust_source.contains(
+        "pub(crate) fn engine_verdict(total: impl \
+         ::core::convert::Into<::fluent_bundle::types::FluentNumber>, count: impl \
+         ::core::convert::Into<::fluent_bundle::types::FluentNumber>)"
+    ));
+}
+
+#[test]
+fn translation_may_select_on_a_number_variable() {
+    let locales_directory =
+        locales_with(
+            &[
+                (
+                    "en/lazaret.ftl",
+                    "host-engine-verdict = { $total ->\n    [one] { NUMBER($count) } of { $total \
+                     } engine\n   *[other] { NUMBER($count) } of { $total } engines\n}\n",
+                ),
+                (
+                    "fr/lazaret.ftl",
+                    "host-engine-verdict = { $count ->\n    [one] { $count } moteur sur { $total \
+                     }\n   *[other] { $count } moteurs sur { $total }\n}\n",
+                ),
+            ],
+        );
+    assert!(generate_message_functions(locales_directory.path(), "en").is_ok());
+}
+
+#[test]
+fn non_plural_variant_keys_become_a_choice_enum() {
+    let locales_directory = locales_with(&[(
+        "en/lazaret.ftl",
+        "signatures-credential-needed = { $credential ->\n    [purchase-receipt] Needs a purchase \
+         receipt number\n   *[customer-identifier] Needs a customer \
+         ID\n}\nsignatures-credential-missing = { $credential ->\n    [purchase-receipt] No \
+         receipt\n   *[customer-identifier] No customer ID\n}\n",
+    )]);
+    let generated_messages =
+        generate_message_functions(locales_directory.path(), "en").expect("valid catalogs");
+    let rust_source = &generated_messages.rust_source;
+    assert_eq!(
+        rust_source
+            .matches("pub(crate) enum CredentialChoice {")
+            .count(),
+        1
+    );
+    assert!(rust_source.contains("        CustomerIdentifier,\n        PurchaseReceipt,\n"));
+    assert!(rust_source.contains("Self::PurchaseReceipt => \"purchase-receipt\","));
+    assert!(rust_source.contains("pub(crate) fn credential_needed(credential: CredentialChoice)"));
+}
+
+#[test]
+fn translation_with_unknown_choice_is_rejected() {
+    let locales_directory = locales_with(&[
+        (
+            "en/lazaret.ftl",
+            "signatures-credential-needed = { $credential ->\n    [purchase-receipt] Needs a \
+             purchase receipt number\n   *[customer-identifier] Needs a customer ID\n}\n",
+        ),
+        (
+            "de/lazaret.ftl",
+            "signatures-credential-needed = { $credential ->\n    [receipt] Braucht eine \
+             Kaufbelegnummer\n   *[customer-identifier] Braucht eine Kundennummer\n}\n",
+        ),
+    ]);
+    assert!(matches!(
+        problems_for(locales_directory.path()).as_slice(),
+        [CatalogProblem::UnknownVariantKey { variant_key, .. }] if variant_key == "receipt"
+    ));
+}
+
+#[test]
+fn choices_must_agree_within_a_module() {
+    let locales_directory = locales_with(&[(
+        "en/lazaret.ftl",
+        "signatures-credential-needed = { $credential ->\n    [purchase-receipt] Receipt\n   \
+         *[customer-identifier] Customer ID\n}\nsignatures-credential-missing = { $credential \
+         ->\n    [password] Password\n   *[customer-identifier] Customer ID\n}\n",
+    )]);
+    assert!(matches!(
+        problems_for(locales_directory.path()).as_slice(),
+        [CatalogProblem::ConflictingChoiceKeys { message_id, .. }] if message_id == "signatures-credential-missing"
+    ));
+}
+
+#[test]
+fn number_function_on_text_variable_is_rejected() {
+    let locales_directory = locales_with(&[
+        (
+            "en/lazaret.ftl",
+            "scans-found-threats = Found { $count } threats\n",
+        ),
+        (
+            "de/lazaret.ftl",
+            "scans-found-threats = { NUMBER($count) } Bedrohungen gefunden\n",
+        ),
+    ]);
+    assert!(matches!(
+        problems_for(locales_directory.path()).as_slice(),
+        [CatalogProblem::NumberFunctionOnTextVariable { variable_name, .. }] if variable_name == "count"
+    ));
+}
+
+#[test]
+fn plural_selector_with_made_up_category_is_rejected() {
+    let locales_directory = locales_with(&[
+        (
+            "en/lazaret.ftl",
+            "scans-count-target = { $count ->\n    [one] { $count } target\n   *[other] { $count \
+             } targets\n}\n",
+        ),
+        (
+            "de/lazaret.ftl",
+            "scans-count-target = { $count ->\n    [single] { $count } Ziel\n   *[other] { $count \
+             } Ziele\n}\n",
+        ),
+    ]);
+    assert!(matches!(
+        problems_for(locales_directory.path()).as_slice(),
+        [CatalogProblem::UnknownVariantKey { variant_key, .. }] if variant_key == "single"
+    ));
+}

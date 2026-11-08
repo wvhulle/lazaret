@@ -81,21 +81,7 @@ fn merged_references(fluent_message: &fluent_syntax::ast::Message<&str>) -> Patt
         .map(PatternReferences::collected_from)
         .unwrap_or_default();
     for message_attribute in &fluent_message.attributes {
-        let attribute_references = PatternReferences::collected_from(&message_attribute.value);
-        for variable_name in attribute_references.variables_in_order {
-            if !references.variables_in_order.contains(&variable_name) {
-                references.variables_in_order.push(variable_name);
-            }
-        }
-        references
-            .selector_variables
-            .extend(attribute_references.selector_variables);
-        references
-            .message_references
-            .extend(attribute_references.message_references);
-        references
-            .term_references
-            .extend(attribute_references.term_references);
+        references.merge(PatternReferences::collected_from(&message_attribute.value));
     }
     references
 }

@@ -1,6 +1,6 @@
 -brand-name = Lazaret
 startup-settings-schema-missing = Innstillingsskjemaet for { -brand-name } er ikke installert. Kjør make install, eller sett GSETTINGS_SCHEMA_DIR.
-startup-unknown-page-name = { -brand-name } har ingen side kalt { $page }, så Beskyttelse åpnes. Sider: { $pages }
+startup-unknown-page-name = { -brand-name } har ingen side som heter { $page }, så det åpner det første området som trenger oppmerksomhet. Sider: { $pages }
 
 window-signature-sources = Signaturkilder
 window-database-updates = Databaseoppdateringer
@@ -49,8 +49,8 @@ window-database-missing = Ingen virusdefinisjoner
 window-age-definitions-unknown = Definisjonenes alder er ukjent
 window-last-update-failed = Siste oppdatering mislyktes
 window-definitions-dated-future = Definisjonene er datert fram i tid
-window-updated-label = Oppdatert { $when }
-window-definitions-label = Definisjoner fra { $when }
+window-updated-label = Oppdatert { $relative-time }
+window-definitions-label = Definisjoner fra { $relative-time }
 window-freshclam-refused = freshclam blir avvist
 window-unknown-whether-freshclam-trusted = Ukjent om freshclam er klarert
 window-freshclam-copy-account-ignored = En freshclam-kopi i kontoen din ignoreres
@@ -85,7 +85,7 @@ window-whole-root-included = Overvåker / direkte
 window-watch-limit-low = Lav grense for mappeovervåking
 window-timer-not-active = Tidsuret er ikke aktivt
 window-last-scan-failed = Siste skanning mislyktes
-window-next-scan = Neste skanning { $when }
+window-next-scan = Neste skanning { $relative-time }
 window-no-next-scan-planned = Ingen neste skanning planlagt
 window-service-missing = Skannetjeneste mangler
 window-service-unreadable = Skannetjeneste ukjent
@@ -110,7 +110,7 @@ window-count-needs-decision =
        *[other] { $count } trenger en avgjørelse
     }
 window-loading-label = Laster inn …
-window-empty-label = Tom
+window-quarantine-empty = Tom
 window-count-item =
     { $count ->
         [one] { $count } element
@@ -128,17 +128,17 @@ window-another-allowlist-silences-clamav = En annen tillatelsesliste demper Clam
 window-lazaret-allowlist-unreadable = Tillatelseslisten til { -brand-name } kan ikke leses
 window-sent-samples-cannot-read = Innsendte prøver kan ikke leses
 window-nothing-sent = Ingenting sendt
-window-count-refused-service =
+window-count-samples-refused =
     { $count ->
         [one] { $count } avvist av tjenesten sin
        *[other] { $count } avvist av tjenestene sine
     }
-window-count-awaiting-review =
+window-count-samples-awaiting-review =
     { $count ->
         [one] { $count } venter på vurdering
        *[other] { $count } venter på vurdering
     }
-window-count-sent =
+window-count-samples-sent =
     { $count ->
         [one] { $count } sendt
        *[other] { $count } sendt
@@ -302,16 +302,16 @@ scans-default-limit = ClamAV-standarden
 scans-configuration-label = Oppsett
 scans-watched-folders = Overvåkede mapper
 scans-largest-file-scanned = Største fil som skannes
-scans-no-kernel-config-found = verken /proc/config.gz eller kjernens konfigurasjonsfil i /boot finnes
-scans-kernel-config-unreadable = kjernekonfigurasjonen kunne ikke leses
-scans-compressed-config-corrupt = /proc/config.gz kunne ikke pakkes ut
-scans-kernel-release-unreadable = versjonen av den kjørende kjernen kunne ikke leses
-scans-reading-task-aborted-config = lesingen av kjernekonfigurasjonen stoppet før den var ferdig
+scans-no-kernel-config-found = Verken /proc/config.gz eller kjernens oppsettsfil i /boot finnes.
+scans-kernel-config-unreadable = Kjerneoppsettet kunne ikke leses.
+scans-compressed-config-corrupt = /proc/config.gz kunne ikke pakkes ut.
+scans-kernel-release-unreadable = Versjonen til kjernen som kjører, kunne ikke leses.
+scans-reading-task-aborted-config = Lesingen av kjerneoppsettet stoppet før den var ferdig.
 scans-blocks-detected-files = Oppdagede filer blokkeres
 scans-prevention-off = Filer sjekkes, men oppdagede filer blokkeres ikke
 scans-prevention-conflicts-mounts = Filer sjekkes, men oppdagede filer blokkeres ikke, fordi OnAccessPrevention ikke fungerer med OnAccessMountPath
 scans-kernel-cannot-block = Filer sjekkes, men denne kjernen kan ikke blokkere oppdagede filer, fordi den ble bygget uten CONFIG_FANOTIFY_ACCESS_PERMISSIONS
-scans-kernel-support-unknown = Filer sjekkes, men det er ukjent om kjernen kan blokkere oppdagede filer, fordi { $reason }
+scans-kernel-support-unknown = Filer sjekkes, men det er ukjent om kjernen kan blokkere oppdagede filer. { $reason }
 scans-config-unreadable-monitor = Kjører, men clamd.conf kunne ikke leses, så det er ukjent hva som sjekkes og om oppdagede filer blokkeres
 scans-running-no-folders-status = Kjører, men ingen mapper eller monteringspunkter overvåkes
 scans-running-detected-status = Kjører, men ingen mapper eller monteringspunkter overvåkes, og oppdagede filer ville ikke blitt blokkert
@@ -351,7 +351,7 @@ scans-no-drive-connected-title = Ingen stasjon er koblet til ennå
 scans-close-results-button = Lukk resultater
 scans-drive-scans-title = Stasjonsskanninger
 scans-drives-lazaret-scanned-description = Stasjoner { -brand-name } skannet da de ble koblet til, nyeste først. Velg en for å lese utskriften.
-scans-off-label = Av
+scans-auto-scan-off = Av
 scans-every-drive = Skanner alle stasjoner
 scans-drives-up-size = Skanner stasjoner opptil { $size }
 scans-skipped-larger-than-limit = Ikke skannet: { $size } er større enn grensen på { $limit }
@@ -486,8 +486,8 @@ findings-alerts-stop-quit-lazaret = Varsler stopper når du avslutter { -brand-n
 findings-running-background-following-journal = Kjører i bakgrunnen og følger journalen
 findings-alerts-label = Varsler
 findings-lazaret-follows-system-journal = { -brand-name } følger systemjournalen og varsler deg når noe oppdages. Det kan bare gjøre det mens det kjører, så det bør kjøre i bakgrunnen.
-findings-on-label = På
-findings-off-label = Av
+findings-notifications-on = På
+findings-notifications-off = Av
 findings-running-label = Kjører
 findings-not-running = Kjører ikke
 findings-unit-not-found = Ikke satt opp
@@ -566,7 +566,7 @@ findings-times-seen = Antall ganger sett
 findings-detected-label = Oppdaget
 findings-signature-matches-harmless-eicar = Denne signaturen samsvarer med det ufarlige EICAR-testmønsteret, som finnes for å sjekke at deteksjonen fungerer.
 findings-clamav-matched-file-against = ClamAV fant at denne filen samsvarer med en signatur. Et treff er et sterkt bevis, men falske positiver forekommer, særlig med pakkede verktøy eller administrasjonsverktøy.
-findings-signature-first-seen-time = { $signature }, først sett { $time }
+findings-signature-first-seen-time = { $signature }, først sett { $local-time }
 findings-opening-file-refused-why = Åpning av denne filen blir nektet, og derfor åpnes den ikke
 findings-not-opened-again-after = Ikke åpnet igjen etter avgjørelsen din
 findings-no-longer-there-blocked = Filen finnes ikke lenger
@@ -606,22 +606,23 @@ findings-resolved-state-step = { $state }, { $time }
 findings-send-quarantined-copy-description = Send kopien i karantene til ClamAV, MalwareBazaar eller VirusTotal. En falsk positiv som rapporteres til ClamAV, rettes for alle ved en senere signaturoppdatering.
 findings-cancel-quarantine = Avbryt
 findings-delete-entries = Slett
-findings-scanner-program-not-installed = skanneprogrammet er ikke installert
-findings-scanner-program-replaced-account = skanneprogrammet på { $program } kan erstattes av kontoen din gjennom { $path }
-findings-content-pipe-failed = filen kunne ikke sendes til skanneren: { $error }
-findings-scanner-spawn-failed = skanneren kunne ikke startes: { $error }
-findings-verdict-timed-out = skanningen tok for lang tid
-findings-detection-settings-unreadable = deteksjonsinnstillingene til clamd kunne ikke leses: { $error }
-findings-program-lookup-failed = skanneprogrammene kunne ikke slås opp: { $error }
-findings-payload-unreadable = kopien i karantene kunne ikke leses: { $error }
+findings-scanner-program-not-installed = Skanneprogrammet er ikke installert.
+findings-scanner-program-replaced-account = Skanneprogrammet i { $program } kan erstattes av kontoen din via { $path }.
+findings-content-pipe-failed = Filen kunne ikke sendes videre til skanneren: { $error }
+findings-scanner-spawn-failed = Skanneren kunne ikke startes: { $error }
+findings-verdict-timed-out = Skanningen tok for lang tid.
+findings-detection-settings-unreadable = Deteksjonsinnstillingene til clamd kunne ikke leses: { $error }
+findings-program-lookup-failed = Skanneprogrammene kunne ikke slås opp: { $error }
+findings-payload-unreadable = Kopien i karantene kunne ikke leses: { $error }
 findings-restore-file-heading = Vil du gjenopprette denne filen?
 findings-clamav-no-longer-verdict = ClamAV oppdager ikke lenger denne filen med dagens signaturer.
 findings-restore-button = Gjenopprett
 findings-restore-file-clamav-heading = Vil du gjenopprette en fil som ClamAV fortsatt oppdager?
 findings-clamav-still-detects-verdict = ClamAV oppdager fortsatt denne filen som { $detection } med dagens signaturer. Gjenopprett den bare hvis du er sikker på at det er en falsk positiv, og vurder å klarere den først.
+findings-clamav-still-detects-unnamed-verdict = ClamAV oppdager fortsatt denne filen med dagens signaturer, uten å navngi deteksjonen. Gjenopprett den bare hvis du er sikker på at det er en falsk positiv, og vurder å klarere den først.
 findings-restore-anyway-button = Gjenopprett likevel
 findings-restore-unchecked-file-heading = Vil du gjenopprette en ukontrollert fil?
-findings-file-not-checked-verdict = Filen kunne ikke sjekkes på nytt før gjenoppretting: { $error }
+findings-file-not-checked-verdict = Filen kunne ikke sjekkes på nytt før den ble gjenopprettet. { $reason }
 findings-location-outside-home-folder = Denne plasseringen er utenfor hjemmemappen din.
 findings-file-goes-back = Filen flyttes tilbake til:
 findings-entry-count =
@@ -721,8 +722,8 @@ findings-malwarebazaar-refused-reason = MalwareBazaar avviste den: { $reason }
 findings-queued-analysis-virustotal = I kø for analyse på VirusTotal
 findings-count-total-engine-flags =
     { $total ->
-        [one] { $count } av { $total } motor merker den som skadelig
-       *[other] { $count } av { $total } motorer merker den som skadelig
+        [one] { NUMBER($count) } av { $total } motor markerer den som skadelig
+       *[other] { NUMBER($count) } av { $total } motorer markerer den som skadelig
     }
 findings-virustotal-refused-reason = VirusTotal avviste den: { $reason }
 findings-service-kind-hash-date = { $service } · { $kind } · { $hash } · { $date }
@@ -778,7 +779,7 @@ findings-access-denied = Tilgang nektet
 findings-other-read-failure = Lesingen mislyktes: { $reason }
 findings-reading-task-aborted = Lesingen stoppet før den var ferdig
 findings-journal-unreadable-added = Ukjent hvem som la til dette. { $reason }
-findings-known-user = Lagt til { $time } av bruker { $uid }
+findings-known-user = Lagt til { $local-time } av bruker { $uid }
 findings-unknown-user = Lagt til { $time } av en ukjent bruker
 findings-no-record-added-system = Ingen oppføring i systemjournalen om hvem som la til dette
 findings-count-entry-not-added =
@@ -820,14 +821,14 @@ signatures-command-copied-clipboard-database = Kommandoen er kopiert til utklipp
 signatures-update-not-added-history = Oppdateringen kunne ikke legges til i historikken: { $error }
 signatures-update-signatures = Oppdater nå
 signatures-cancel-signature-update = Avbryt
-signatures-definitions-built-date = Definisjoner bygget { $when } ({ $date })
+signatures-definitions-built-date = Definisjoner bygget { $relative-time } ({ $date })
 signatures-definitions-exist-not-determined = Definisjoner finnes, men alderen deres kunne ikke fastslås
 signatures-no-virus-definitions-found = Fant ingen virusdefinisjoner
 signatures-age-definitions-unknown-checking = Definisjonenes alder er ukjent, fordi kontrollen stoppet før den var ferdig
 signatures-last-update-failed = Den siste oppdateringen mislyktes
 signatures-no-completed-update = Ingen fullført oppdatering er registrert ennå
-signatures-updater-updated = { $updater } oppdatert
-signatures-provider-fetched = { $provider } hentet
+signatures-updater-updated = Oppdatert av { $updater }
+signatures-provider-fetched = Hentet fra { $provider }
 signatures-count-signature-size-file =
     { $count ->
         [one] { $count } signatur, { $size } ({ $file })
@@ -885,8 +886,16 @@ signatures-service-ran-without-verdict = Oppdateringstjenesten kjørte, men logg
 signatures-update-requested-daemon = Tjenesten aksepterte signalet; den utfører oppdateringen asynkront. Sjekk loggene for fullføring.
 signatures-update-cancelled = Oppdatering av databasen avbrutt
 signatures-scanner-program-missing = Installer freshclam før du ber om databaseoppdateringer.
-signatures-provider-needs-credential-fangfrisch = { $provider } krever en { $credential }, og fangfrisch leser den bare fra innstillingene sine. På NixOS kopieres services.clamav.fangfrisch.settings inn i Nix-lageret, som alle brukere av denne datamaskinen kan lese, så { $credential } ville blitt eksponert. La { $provider } være av, eller kjør fangfrisch med en innstillingsfil som holdes utenfor Nix-lageret, for eksempel en agenix- eller sops-nix-hemmelighet.
-signatures-provider-needs-credential-website = { $provider } krever en { $credential } fra nettstedet sitt. fangfrisch leser den fra innstillingsfilen sin, vanligvis { $path }. Legg til disse linjene der, erstatt plassholderen med din { $credential }, og gjør filen lesbar bare for root, slik at andre brukere ikke kan se den.
+signatures-provider-needs-credential-fangfrisch =
+    { $credential ->
+        [purchase-receipt] { $provider } krever et kjøpskvitteringsnummer, og fangfrisch leser det bare fra innstillingene sine. På NixOS kopieres services.clamav.fangfrisch.settings til Nix-lageret, som alle brukere av denne datamaskinen kan lese, så kjøpskvitteringsnummeret ville blitt eksponert. La { $provider } være av, eller kjør fangfrisch med en innstillingsfil som holdes utenfor Nix-lageret, for eksempel en agenix- eller sops-nix-hemmelighet.
+       *[customer-identifier] { $provider } krever en kunde-ID, og fangfrisch leser den bare fra innstillingene sine. På NixOS kopieres services.clamav.fangfrisch.settings til Nix-lageret, som alle brukere av denne datamaskinen kan lese, så kunde-ID-en ville blitt eksponert. La { $provider } være av, eller kjør fangfrisch med en innstillingsfil som holdes utenfor Nix-lageret, for eksempel en agenix- eller sops-nix-hemmelighet.
+    }
+signatures-provider-needs-credential-website =
+    { $credential ->
+        [purchase-receipt] { $provider } krever et kjøpskvitteringsnummer fra nettstedet sitt. fangfrisch leser det fra innstillingsfilen sin, vanligvis { $path }. Legg til disse linjene der, erstatt plassholderen med kjøpskvitteringsnummeret ditt, og gjør filen lesbar bare for root, slik at andre brukere ikke kan se det.
+       *[customer-identifier] { $provider } krever en kunde-ID fra nettstedet sitt. fangfrisch leser den fra innstillingsfilen sin, vanligvis { $path }. Legg til disse linjene der, erstatt plassholderen med kunde-ID-en din, og gjør filen lesbar bare for root, slik at andre brukere ikke kan se den.
+    }
 signatures-not-use = Ikke i bruk
 signatures-add-lines-fangfrisch-settings = Legg til disse linjene i innstillingsfilen til fangfrisch, vanligvis { $path }.
 signatures-provider-needs-free-abuse = { $provider } krever en gratis abuse.ch Auth-Key. Legg til disse linjene i innstillingsfilen til fangfrisch, vanligvis { $path }, erstatt plassholderen med nøkkelen din, og gjør filen lesbar bare for root, slik at andre brukere ikke kan se den.
@@ -1057,9 +1066,9 @@ widgets-journal-read-failed = Systemjournalen kunne ikke leses: { $error }
 widgets-journal-reading-incomplete = Lesingen av systemjournalen stoppet før den var ferdig
 widgets-folder-unreadable = Signaturmappen kunne ikke leses: { $error }
 widgets-reading-signature-folder-stopped = Lesingen av signaturmappen stoppet før den var ferdig
-widgets-entry-timestamp-invalid = en journaloppføring har et tidsstempel utenfor det støttede området
-widgets-reader-thread-failed = journalleseren kunne ikke starte: { $error }
-widgets-journal-reading-stopped = Lesingen av systemjournalen stoppet: { $error }
+widgets-entry-timestamp-invalid = En journaloppføring har et tidsstempel utenfor det støttede området.
+widgets-reader-thread-failed = Journalleseren kunne ikke starte: { $error }
+widgets-journal-reading-stopped = Lesingen av systemjournalen stoppet. { $reason }
 widgets-file-hash-mismatch = Filhash samsvarer ikke — filen kan være ødelagt
 widgets-restore-refused-integrity-unknown = Denne karanteneoppføringen har ingen brukbar hash, så filen kan ikke verifiseres og blir ikke gjenopprettet. Du kan fortsatt slette den.
 widgets-upload-refused-integrity-unknown = Denne karanteneoppføringen har ingen brukbar hash, så { -brand-name } kan ikke bevise at filen er den som ble satt i karantene, og sender den ikke noe sted.
@@ -1176,8 +1185,8 @@ widgets-results-copied-clipboard = Resultatene er kopiert til utklippstavlen
 widgets-results-exported = Resultatene er eksportert
 widgets-done-total-file-scanned =
     { $total ->
-        [one] { $done } av { $total } fil skannet
-       *[other] { $done } av { $total } filer skannet
+        [one] { NUMBER($done) } av { $total } fil skannet
+       *[other] { NUMBER($done) } av { $total } filer skannet
     }
 widgets-count-file-scanned-results =
     { $count ->
@@ -1308,14 +1317,14 @@ widgets-file-not-regular = Bare vanlige filer kan sendes
 widgets-file-too-large = Filen er større enn { $size }, som er det meste { -brand-name } sender.
 widgets-reading-interrupted = Lesingen av filen stoppet uventet
 widgets-history-failure = Innsendingshistorikken kunne ikke leses: { $error }
-widgets-earlier-submission = Denne filen ble allerede sendt { $time }. Ingenting ble sendt på nytt.
+widgets-earlier-submission = Denne filen ble allerede sendt { $local-time }. Ingenting ble sendt på nytt.
 widgets-report-recorded = Rapporten er sendt. ClamAVs vurdering tar minst 48 timer; Innsendte prøver viser når en signaturoppdatering endrer vurderingen.
 widgets-report-not-sent-error = Rapporten ble ikke sendt: { $error }
 widgets-report-sent-without-record = Rapporten er sendt, men den kunne ikke legges til i Innsendte prøver: { $error }
-widgets-nothing-uploaded-error = Ingenting ble lastet opp: { $error }
+widgets-nothing-uploaded-error = Ingenting ble lastet opp. { $reason }
 widgets-malwarebazaar-refused-sample-reason = MalwareBazaar avviste prøven: { $reason }
 widgets-malwarebazaar-sample-sent-samples = MalwareBazaar har prøven. Innsendte prøver lenker til den offentlige oppføringen.
-widgets-add-abuse-ch-key = legg først til en abuse.ch-nøkkel i Brukervalg
+widgets-add-abuse-ch-key = Legg først til en abuse.ch-nøkkel i Brukervalg.
 widgets-not-detected-clamav = MalwareBazaar tar bare imot filer som en ClamAV-signatur har oppdaget
 widgets-unwanted-program-only = MalwareBazaar tar ikke imot potensielt uønskede programmer, bare skadevare
 widgets-sent-without-record = Lastet opp, men den kunne ikke legges til i Innsendte prøver: { $error }
@@ -1323,11 +1332,11 @@ widgets-virustotal-refused-file-reason = VirusTotal avviste filen: { $reason }
 widgets-virustotal-analysing-file-refresh = VirusTotal analyserer filen. Oppdater på siden Innsendte prøver viser vurderingen.
 widgets-report-already-available =
     { $total ->
-        [one] VirusTotal kjenner allerede denne filen: { $count } av { $total } motor oppdager den. Ingenting ble lastet opp.
-       *[other] VirusTotal kjenner allerede denne filen: { $count } av { $total } motorer oppdager den. Ingenting ble lastet opp.
+        [one] VirusTotal kjenner allerede denne filen: { NUMBER($count) } av { $total } motor oppdager den. Ingenting ble lastet opp.
+       *[other] VirusTotal kjenner allerede denne filen: { NUMBER($count) } av { $total } motorer oppdager den. Ingenting ble lastet opp.
     }
-widgets-add-virustotal-key-preferences = legg først til en VirusTotal-nøkkel i Brukervalg
-widgets-known-user = { $time } · { $outcome } · forespurt av bruker { $uid }
+widgets-add-virustotal-key-preferences = Legg først til en VirusTotal-nøkkel i Brukervalg.
+widgets-known-user = { $local-time } · { $outcome } · forespurt av bruker { $uid }
 widgets-unknown-user = { $time } · { $outcome } · forespurt av en ukjent bruker
 widgets-change-lowered-protection-tooltip = Denne endringen senket beskyttelsen
 widgets-system-changes-failed = Systemjournalen kan ikke leses: { $error }
@@ -1394,14 +1403,11 @@ host-submitter-missing = Rapportering krever clamsubmit, som følger med ClamAV,
 host-submitter-replaceable = { -brand-name } nektet å kjøre clamsubmit, fordi kontoen din kan erstatte den
 host-report-not-sent-error = Rapporten ble ikke sendt: { $error }
 host-upload-timed-out = Rapporten ble ikke sendt: opplastingen tok for lang tid
-host-purchase-receipt = kvitteringsnummer for kjøp
-host-customer-identifier = kunde-ID
 host-unrecognized-source = Annen kilde
-host-unnamed-detection = en navnløs oppdagelse
 host-file-progress =
     { $total ->
-        [one] { $done } av { $total } fil
-       *[other] { $done } av { $total } filer
+        [one] { NUMBER($done) } av { $total } fil
+       *[other] { NUMBER($done) } av { $total } filer
     }
 host-count-second-left =
     { $count ->
@@ -1428,22 +1434,27 @@ host-exact-byte-size =
        *[other] { $size } ({ $count } byte)
     }
 host-needs-key = Krever en nøkkel
-host-unnamed-source = en navnløs kilde
 host-hash-unknown = Ikke i databasen over kjente filer
 host-listed-malicious-source-name = Oppført som skadelig av { $source } (som { $name })
+host-listed-malicious-unnamed-source-name = Oppført som skadelig av en navnløs kilde (som { $name })
 host-listed-malicious-source = Oppført som skadelig av { $source }
+host-listed-malicious-unnamed-source = Oppført som skadelig av en navnløs kilde
 host-listed-known-file-source = Oppført som kjent fil av { $source }
+host-listed-known-file-unnamed-source = Oppført som kjent fil av en navnløs kilde
 host-known-file-name-listed = Kjent fil { $name }, oppført av { $source }
+host-known-file-name-unnamed-source = Kjent fil { $name }, oppført av en navnløs kilde
 host-unnamed-family = navnløs familie
-host-first-seen-unknown = en ukjent dato
 host-no-known-samples = Ikke en kjent skadevareprøve
 host-known-malware-sample = Kjent skadevareprøve
 host-samples-found = Kjent skadevare: { $family }, først sett { $date }
+host-samples-found-date-unknown = Kjent skadevare: { $family }, først sett på en ukjent dato
+host-unnamed-family-samples-found = Kjent skadevare fra en navnløs familie, først sett { $date }
+host-unnamed-family-date-unknown = Kjent skadevare fra en navnløs familie, først sett på en ukjent dato
 host-file-unknown-virustotal = Ukjent for VirusTotal
 host-count-total-engine-verdict =
     { $total ->
-        [one] { $count } av { $total } motor oppdager den
-       *[other] { $count } av { $total } motorer oppdager den
+        [one] { NUMBER($count) } av { $total } motor oppdager den
+       *[other] { NUMBER($count) } av { $total } motorer oppdager den
     }
 host-api-key-rejected = VirusTotal avviste API-nøkkelen.
 host-request-limit-reached = Grensen for forespørsler til VirusTotal er nådd. Prøv igjen senere.
@@ -1473,7 +1484,7 @@ headless-count-threat-found =
        *[other] { $count } trusler funnet
     }
 headless-open-lazaret-review = Åpne { -brand-name } for å se gjennom dem.
-headless-count-moved-quarantine =
+headless-count-threats-quarantined =
     { $count ->
         [one] { $count } flyttet til karantene.
        *[other] { $count } flyttet til karantene.

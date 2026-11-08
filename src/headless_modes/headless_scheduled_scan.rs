@@ -158,7 +158,7 @@ fn finished_scan_notification_body(
     } else {
         format!(
             "{found_text}. {}",
-            translated_messages::headless::count_moved_quarantine(quarantined_count)
+            translated_messages::headless::count_threats_quarantined(quarantined_count)
         )
     }
 }

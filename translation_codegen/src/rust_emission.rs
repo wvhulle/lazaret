@@ -1,15 +1,39 @@
 use std::{collections::BTreeMap, fmt::Write};
 
 use crate::{
-    catalog_consistency::{message_function_path, rust_name_for},
+    catalog_consistency::{
+        choice_type_name, message_function_path, pascal_case_name, rust_name_for,
+    },
     catalog_reading::{CatalogMessage, LanguageCatalog},
+    pattern_references::VariableKind,
 };
 
-fn is_selector(catalog_message: &CatalogMessage, variable_name: &str) -> bool {
-    catalog_message
-        .references
-        .selector_variables
-        .contains(variable_name)
+fn parameter_bound(catalog_message: &CatalogMessage, variable_name: &str) -> String {
+    match catalog_message.references.variable_kind(variable_name) {
+        VariableKind::PlainText => "impl ::core::fmt::Display".to_owned(),
+        VariableKind::CountedNumber => {
+            "impl ::core::convert::Into<::fluent_bundle::types::FluentNumber>".to_owned()
+        }
+        VariableKind::NamedChoice(_) => choice_type_name(variable_name),
+    }
+}
+
+fn argument_value(
+    catalog_message: &CatalogMessage,
+    variable_name: &str,
+    parameter_name: &str,
+) -> String {
+    match catalog_message.references.variable_kind(variable_name) {
+        VariableKind::PlainText => {
+            format!("::fluent_bundle::FluentValue::from({parameter_name}.to_string())")
+        }
+        VariableKind::CountedNumber => {
+            format!("::fluent_bundle::FluentValue::Number({parameter_name}.into())")
+        }
+        VariableKind::NamedChoice(_) => {
+            format!("::fluent_bundle::FluentValue::from({parameter_name}.fluent_key())")
+        }
+    }
 }
 
 fn emit_parameter_list(catalog_message: &CatalogMessage) -> String {
@@ -19,15 +43,51 @@ fn emit_parameter_list(catalog_message: &CatalogMessage) -> String {
         .iter()
         .filter_map(|variable_name| {
             let parameter_name = rust_name_for(variable_name)?;
-            let parameter_bound = if is_selector(catalog_message, variable_name) {
-                "impl ::core::convert::Into<::fluent_bundle::types::FluentNumber>"
-            } else {
-                "impl ::core::fmt::Display"
-            };
-            Some(format!("{parameter_name}: {parameter_bound}"))
+            Some(format!(
+                "{parameter_name}: {}",
+                parameter_bound(catalog_message, variable_name)
+            ))
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn emit_choice_types(generated_code: &mut String, module_messages: &[(String, &CatalogMessage)]) {
+    let mut choice_types = BTreeMap::new();
+    for (_, catalog_message) in module_messages {
+        for variable_name in &catalog_message.references.variables_in_order {
+            if let VariableKind::NamedChoice(choice_keys) =
+                catalog_message.references.variable_kind(variable_name)
+            {
+                choice_types
+                    .entry(choice_type_name(variable_name))
+                    .or_insert(choice_keys);
+            }
+        }
+    }
+    for (type_name, choice_keys) in choice_types {
+        let _ = writeln!(
+            generated_code,
+            "    #[derive(Clone, Copy, Debug, PartialEq, Eq)]\n    pub(crate) enum {type_name} {{"
+        );
+        for choice_key in &choice_keys {
+            let _ = writeln!(generated_code, "        {},", pascal_case_name(choice_key));
+        }
+        let _ = writeln!(generated_code, "    }}");
+        let _ = writeln!(
+            generated_code,
+            "    impl {type_name} {{\n        fn fluent_key(self) -> &'static str {{\n            \
+             match self {{"
+        );
+        for choice_key in &choice_keys {
+            let _ = writeln!(
+                generated_code,
+                "                Self::{} => {choice_key:?},",
+                pascal_case_name(choice_key)
+            );
+        }
+        let _ = writeln!(generated_code, "            }}\n        }}\n    }}");
+    }
 }
 
 fn emit_message_function(
@@ -55,14 +115,10 @@ fn emit_message_function(
             let Some(parameter_name) = rust_name_for(variable_name) else {
                 continue;
             };
-            let argument_value = if is_selector(catalog_message, variable_name) {
-                format!("::fluent_bundle::FluentValue::Number({parameter_name}.into())")
-            } else {
-                format!("::fluent_bundle::FluentValue::from({parameter_name}.to_string())")
-            };
+            let fluent_argument = argument_value(catalog_message, variable_name, &parameter_name);
             let _ = writeln!(
                 generated_code,
-                "        message_arguments.set({variable_name:?}, {argument_value});"
+                "        message_arguments.set({variable_name:?}, {fluent_argument});"
             );
         }
         let _ = writeln!(
@@ -119,6 +175,7 @@ pub fn emit_generated_messages(
     }
     for (module_name, module_messages) in &messages_by_module {
         let _ = writeln!(generated_code, "pub(crate) mod {module_name} {{");
+        emit_choice_types(&mut generated_code, module_messages);
         for (function_name, catalog_message) in module_messages {
             emit_message_function(&mut generated_code, function_name, catalog_message);
         }

@@ -1,6 +1,6 @@
 -brand-name = Lazaret
 startup-settings-schema-missing = A { -brand-name } beállításséma nincs telepítve. Futtassa a make install parancsot, vagy állítsa be a GSETTINGS_SCHEMA_DIR változót.
-startup-unknown-page-name = A { -brand-name } alkalmazásban nincs { $page } nevű oldal, ezért a Védelem oldal nyílik meg. Oldalak: { $pages }
+startup-unknown-page-name = A { -brand-name } alkalmazásban nincs { $page } nevű oldal, ezért az első figyelmet igénylő terület nyílik meg. Oldalak: { $pages }
 
 window-signature-sources = Aláírásforrások
 window-database-updates = Adatbázis-frissítések
@@ -49,8 +49,8 @@ window-database-missing = Nincsenek vírusdefiníciók
 window-age-definitions-unknown = A definíciók kora ismeretlen
 window-last-update-failed = A legutóbbi frissítés sikertelen
 window-definitions-dated-future = Jövőbeli dátumú definíciók
-window-updated-label = Frissítve: { $when }
-window-definitions-label = Definíciók dátuma: { $when }
+window-updated-label = Frissítve: { $relative-time }
+window-definitions-label = Definíciók dátuma: { $relative-time }
 window-freshclam-refused = A freshclam elutasítva
 window-unknown-whether-freshclam-trusted = Nem tudható, megbízható-e a freshclam
 window-freshclam-copy-account-ignored = A fiókjában lévő freshclam-példány figyelmen kívül marad
@@ -85,7 +85,7 @@ window-whole-root-included = Közvetlenül a / figyelése
 window-watch-limit-low = Alacsony mappafigyelési korlát
 window-timer-not-active = Az időzítő nem aktív
 window-last-scan-failed = A legutóbbi vizsgálat sikertelen
-window-next-scan = Következő vizsgálat: { $when }
+window-next-scan = Következő vizsgálat: { $relative-time }
 window-no-next-scan-planned = Nincs tervezett következő vizsgálat
 window-service-missing = A vizsgálati szolgáltatás hiányzik
 window-service-unreadable = A vizsgálati szolgáltatás ismeretlen
@@ -110,7 +110,7 @@ window-count-needs-decision =
        *[other] { $count } döntésre vár
     }
 window-loading-label = Betöltés…
-window-empty-label = Üres
+window-quarantine-empty = Üres
 window-count-item =
     { $count ->
         [one] { $count } elem
@@ -128,17 +128,17 @@ window-another-allowlist-silences-clamav = Egy másik engedélyezési lista eln�
 window-lazaret-allowlist-unreadable = A { -brand-name } engedélyezési listája nem olvasható
 window-sent-samples-cannot-read = Az elküldött minták nem olvashatók
 window-nothing-sent = Nincs elküldött elem
-window-count-refused-service =
+window-count-samples-refused =
     { $count ->
         [one] { $count } elemet elutasított a szolgáltatása
        *[other] { $count } elemet elutasítottak a szolgáltatásaik
     }
-window-count-awaiting-review =
+window-count-samples-awaiting-review =
     { $count ->
         [one] { $count } felülvizsgálatra vár
        *[other] { $count } felülvizsgálatra vár
     }
-window-count-sent =
+window-count-samples-sent =
     { $count ->
         [one] { $count } elküldve
        *[other] { $count } elküldve
@@ -302,16 +302,16 @@ scans-default-limit = A ClamAV alapértéke
 scans-configuration-label = Konfiguráció
 scans-watched-folders = Figyelt mappák
 scans-largest-file-scanned = Legnagyobb vizsgált fájl
-scans-no-kernel-config-found = sem a /proc/config.gz, sem a kernel konfigurációs fájlja nem létezik a /boot könyvtárban
-scans-kernel-config-unreadable = a kernel konfigurációja nem olvasható
-scans-compressed-config-corrupt = a /proc/config.gz nem tömöríthető ki
-scans-kernel-release-unreadable = a futó kernel kiadása nem olvasható
-scans-reading-task-aborted-config = a kernel konfigurációjának olvasása befejezés előtt leállt
+scans-no-kernel-config-found = Sem a /proc/config.gz, sem a kernel /boot könyvtárban lévő konfigurációs fájlja nem létezik.
+scans-kernel-config-unreadable = A kernelkonfiguráció nem olvasható.
+scans-compressed-config-corrupt = A /proc/config.gz nem tömöríthető ki.
+scans-kernel-release-unreadable = A futó kernel kiadása nem olvasható.
+scans-reading-task-aborted-config = A kernelkonfiguráció olvasása a befejezés előtt leállt.
 scans-blocks-detected-files = Az észlelt fájlok blokkolva vannak
 scans-prevention-off = A fájlok ellenőrzése megtörténik, de az észlelt fájlok nincsenek blokkolva
 scans-prevention-conflicts-mounts = A fájlok ellenőrzése megtörténik, de az észlelt fájlok nincsenek blokkolva, mert az OnAccessPrevention nem működik együtt az OnAccessMountPath beállítással
 scans-kernel-cannot-block = A fájlok ellenőrzése megtörténik, de ez a kernel nem tudja blokkolni az észlelt fájlokat, mert CONFIG_FANOTIFY_ACCESS_PERMISSIONS nélkül készült
-scans-kernel-support-unknown = A fájlok ellenőrzése megtörténik, de nem tudható, hogy a kernel képes-e blokkolni az észlelt fájlokat, mert { $reason }
+scans-kernel-support-unknown = A fájlok ellenőrzése megtörténik, de nem tudható, hogy a kernel képes-e blokkolni az észlelt fájlokat. { $reason }
 scans-config-unreadable-monitor = Fut, de a clamd.conf nem olvasható, így nem tudható, mi kerül ellenőrzésre, és blokkolódnak-e az észlelt fájlok
 scans-running-no-folders-status = Fut, de egyetlen mappa vagy csatolási pont sincs figyelve
 scans-running-detected-status = Fut, de egyetlen mappa vagy csatolási pont sincs figyelve, és az észlelt fájlok nem lennének blokkolva
@@ -351,7 +351,7 @@ scans-no-drive-connected-title = Még nem csatlakoztattak meghajtót
 scans-close-results-button = Eredmények bezárása
 scans-drive-scans-title = Meghajtóvizsgálatok
 scans-drives-lazaret-scanned-description = A { -brand-name } által csatlakoztatáskor megvizsgált meghajtók, a legújabb elöl. Válasszon ki egyet az átirata megtekintéséhez.
-scans-off-label = Ki
+scans-auto-scan-off = Ki
 scans-every-drive = Minden meghajtót megvizsgál
 scans-drives-up-size = Legfeljebb { $size } méretű meghajtókat vizsgál
 scans-skipped-larger-than-limit = Nem lett megvizsgálva: a(z) { $size } nagyobb a(z) { $limit } korlátnál
@@ -486,8 +486,8 @@ findings-alerts-stop-quit-lazaret = A riasztások leállnak, amikor kilép a { -
 findings-running-background-following-journal = Fut a háttérben, és követi a naplót
 findings-alerts-label = Riasztások
 findings-lazaret-follows-system-journal = A { -brand-name } követi a rendszernaplót, és értesíti, ha valamit észlel. Ezt csak futás közben tudja megtenni, ezért a háttérben kell futnia.
-findings-on-label = Be
-findings-off-label = Ki
+findings-notifications-on = Be
+findings-notifications-off = Ki
 findings-running-label = Fut
 findings-not-running = Nem fut
 findings-unit-not-found = Nincs beállítva
@@ -566,7 +566,7 @@ findings-times-seen = Előfordulások száma
 findings-detected-label = Észlelve
 findings-signature-matches-harmless-eicar = Ez az aláírás az ártalmatlan EICAR tesztmintára illeszkedik, amely az észlelés működésének ellenőrzésére szolgál.
 findings-clamav-matched-file-against = A ClamAV ezt a fájlt egy aláírásra illesztette. Az egyezés erős bizonyíték, de előfordulnak téves riasztások, különösen tömörített vagy adminisztrációs eszközök esetén.
-findings-signature-first-seen-time = { $signature }, először látva: { $time }
+findings-signature-first-seen-time = { $signature }, először látva: { $local-time }
 findings-opening-file-refused-why = A fájl megnyitása meg van tagadva, ezért nem nyílik meg
 findings-not-opened-again-after = A döntése óta nem nyitották meg újra
 findings-no-longer-there-blocked = A fájl már nincs ott
@@ -606,22 +606,23 @@ findings-resolved-state-step = { $state }, { $time }
 findings-send-quarantined-copy-description = A karanténba helyezett példány elküldése a ClamAV, a MalwareBazaar vagy a VirusTotal számára. A ClamAV-nak jelentett téves riasztást egy későbbi aláírásfrissítés mindenki számára kijavítja.
 findings-cancel-quarantine = Mégse
 findings-delete-entries = Törlés
-findings-scanner-program-not-installed = a vizsgálóprogram nincs telepítve
-findings-scanner-program-replaced-account = a(z) { $program } vizsgálóprogramot a fiókja lecserélheti ezen keresztül: { $path }
-findings-content-pipe-failed = a fájlt nem sikerült átadni a vizsgálóprogramnak: { $error }
-findings-scanner-spawn-failed = a vizsgálóprogramot nem sikerült elindítani: { $error }
-findings-verdict-timed-out = a vizsgálat túl sokáig tartott
-findings-detection-settings-unreadable = a clamd észlelési beállításai nem olvashatók: { $error }
-findings-program-lookup-failed = a vizsgálóprogramokat nem sikerült megkeresni: { $error }
-findings-payload-unreadable = a karanténba helyezett példány nem olvasható: { $error }
+findings-scanner-program-not-installed = A vizsgálóprogram nincs telepítve.
+findings-scanner-program-replaced-account = A(z) { $program } helyen lévő vizsgálóprogramot a fiókja lecserélheti a következőn keresztül: { $path }.
+findings-content-pipe-failed = A fájlt nem sikerült átadni a vizsgálónak: { $error }
+findings-scanner-spawn-failed = A vizsgálót nem sikerült elindítani: { $error }
+findings-verdict-timed-out = A vizsgálat túl sokáig tartott.
+findings-detection-settings-unreadable = A clamd észlelési beállításai nem olvashatók: { $error }
+findings-program-lookup-failed = A vizsgálóprogramokat nem sikerült megkeresni: { $error }
+findings-payload-unreadable = A karanténba helyezett példány nem olvasható: { $error }
 findings-restore-file-heading = Visszaállítja ezt a fájlt?
 findings-clamav-no-longer-verdict = A ClamAV a mai aláírásokkal már nem észleli ezt a fájlt.
 findings-restore-button = Visszaállítás
 findings-restore-file-clamav-heading = Visszaállít egy fájlt, amelyet a ClamAV még észlel?
-findings-clamav-still-detects-verdict = A ClamAV a mai aláírásokkal továbbra is { $detection } néven észleli ezt a fájlt. Csak akkor állítsa vissza, ha biztos benne, hogy téves riasztásról van szó, és fontolja meg, hogy előbb megbízhatónak jelöli.
+findings-clamav-still-detects-verdict = A ClamAV a mai aláírásokkal továbbra is { $detection } néven észleli ezt a fájlt. Csak akkor állítsa vissza, ha biztos benne, hogy téves riasztásról van szó, és előtte fontolja meg, hogy megbízhatónak jelöli.
+findings-clamav-still-detects-unnamed-verdict = A ClamAV a mai aláírásokkal továbbra is észleli ezt a fájlt, de nem nevezi meg az észlelést. Csak akkor állítsa vissza, ha biztos benne, hogy téves riasztásról van szó, és előtte fontolja meg, hogy megbízhatónak jelöli.
 findings-restore-anyway-button = Visszaállítás mégis
 findings-restore-unchecked-file-heading = Visszaállít egy ellenőrizetlen fájlt?
-findings-file-not-checked-verdict = A fájlt visszaállítás előtt nem sikerült újra ellenőrizni: { $error }
+findings-file-not-checked-verdict = A fájlt nem sikerült visszaállítás előtt újra ellenőrizni. { $reason }
 findings-location-outside-home-folder = Ez a hely a saját mappáján kívül található.
 findings-file-goes-back = A fájl ide kerül vissza:
 findings-entry-count =
@@ -721,8 +722,8 @@ findings-malwarebazaar-refused-reason = A MalwareBazaar elutasította: { $reason
 findings-queued-analysis-virustotal = Elemzésre vár a VirusTotal szolgáltatásban
 findings-count-total-engine-flags =
     { $total ->
-        [one] { $total } motorból { $count } kártékonynak jelöli
-       *[other] { $total } motorból { $count } kártékonynak jelöli
+        [one] { $total } motorból { NUMBER($count) } kártékonynak jelöli
+       *[other] { $total } motorból { NUMBER($count) } kártékonynak jelöli
     }
 findings-virustotal-refused-reason = A VirusTotal elutasította: { $reason }
 findings-service-kind-hash-date = { $service } · { $kind } · { $hash } · { $date }
@@ -778,7 +779,7 @@ findings-access-denied = Hozzáférés megtagadva
 findings-other-read-failure = Az olvasás sikertelen: { $reason }
 findings-reading-task-aborted = Az olvasás befejezés előtt leállt
 findings-journal-unreadable-added = Nem tudható, ki vette fel. { $reason }
-findings-known-user = Felvette: { $uid } azonosítójú felhasználó, ekkor: { $time }
+findings-known-user = Felvette: { $uid } azonosítójú felhasználó, ekkor: { $local-time }
 findings-unknown-user = Felvette: ismeretlen felhasználó, ekkor: { $time }
 findings-no-record-added-system = A rendszernaplóban nincs nyilvántartás arról, ki vette fel
 findings-count-entry-not-added =
@@ -820,14 +821,14 @@ signatures-command-copied-clipboard-database = A parancs a vágólapra másolva
 signatures-update-not-added-history = A frissítést nem sikerült felvenni az előzmények közé: { $error }
 signatures-update-signatures = Frissítés most
 signatures-cancel-signature-update = Mégse
-signatures-definitions-built-date = Definíciók készítése: { $when } ({ $date })
+signatures-definitions-built-date = Definíciók készítése: { $relative-time } ({ $date })
 signatures-definitions-exist-not-determined = Vannak definíciók, de a koruk nem állapítható meg
 signatures-no-virus-definitions-found = Nem találhatók vírusdefiníciók
 signatures-age-definitions-unknown-checking = A definíciók kora ismeretlen, mert az ellenőrzésük befejezés előtt leállt
 signatures-last-update-failed = A legutóbbi frissítése sikertelen volt
 signatures-no-completed-update = Még nincs rögzített befejezett frissítés
-signatures-updater-updated = { $updater } frissítette
-signatures-provider-fetched = { $provider } letöltötte
+signatures-updater-updated = Frissítette: { $updater }
+signatures-provider-fetched = Letöltve innen: { $provider }
 signatures-count-signature-size-file =
     { $count ->
         [one] { $count } aláírás, { $size } ({ $file })
@@ -885,8 +886,16 @@ signatures-service-ran-without-verdict = A frissítési szolgáltatás lefutott,
 signatures-update-requested-daemon = A szolgáltatás elfogadta a jelzést; a frissítést aszinkron módon végzi. A befejezést a naplókban ellenőrizheti.
 signatures-update-cancelled = Az adatbázis-frissítés megszakítva
 signatures-scanner-program-missing = Az adatbázis-frissítés kérése előtt telepítse a freshclam programot.
-signatures-provider-needs-credential-fangfrisch = A(z) { $provider } szolgáltatónak szüksége van erre: { $credential }, és a fangfrisch csak a saját beállításaiból olvassa be. NixOS rendszeren a services.clamav.fangfrisch.settings a Nix tárolóba másolódik, amelyet a számítógép minden felhasználója olvashat, így ez is nyilvánossá válna: { $credential }. Hagyja kikapcsolva a(z) { $provider } szolgáltatót, vagy futtassa a fangfrisch programot a Nix tárolón kívül tartott beállításfájllal, például agenix vagy sops-nix titokkal.
-signatures-provider-needs-credential-website = A(z) { $provider } szolgáltatónak szüksége van erre a weboldaláról: { $credential }. A fangfrisch a beállításfájljából olvassa be, amely általában ez: { $path }. Adja hozzá ott ezeket a sorokat, cserélje le a helykitöltőt erre: { $credential }, és tegye a fájlt csak a root számára olvashatóvá, hogy más felhasználók ne láthassák.
+signatures-provider-needs-credential-fangfrisch =
+    { $credential ->
+        [purchase-receipt] A(z) { $provider } szolgáltatónak vásárlási nyugtaszám szükséges, és a fangfrisch csak a beállításaiból olvassa be. NixOS-en a services.clamav.fangfrisch.settings a Nix store-ba másolódik, amelyet a számítógép minden felhasználója olvashat, így a vásárlási nyugtaszám nyilvánossá válna. Hagyja kikapcsolva a(z) { $provider } szolgáltatót, vagy futtassa a fangfrischt a Nix store-on kívül tárolt beállításfájllal, például agenix- vagy sops-nix-titokkal.
+       *[customer-identifier] A(z) { $provider } szolgáltatónak ügyfél-azonosító szükséges, és a fangfrisch csak a beállításaiból olvassa be. NixOS-en a services.clamav.fangfrisch.settings a Nix store-ba másolódik, amelyet a számítógép minden felhasználója olvashat, így az ügyfél-azonosító nyilvánossá válna. Hagyja kikapcsolva a(z) { $provider } szolgáltatót, vagy futtassa a fangfrischt a Nix store-on kívül tárolt beállításfájllal, például agenix- vagy sops-nix-titokkal.
+    }
+signatures-provider-needs-credential-website =
+    { $credential ->
+        [purchase-receipt] A(z) { $provider } szolgáltatónak a weboldaláról származó vásárlási nyugtaszám szükséges. A fangfrisch a beállításfájljából olvassa be, amely általában ez: { $path }. Adja hozzá ott ezeket a sorokat, cserélje le a helykitöltőt a vásárlási nyugtaszámára, és tegye a fájlt csak a root számára olvashatóvá, hogy más felhasználók ne láthassák.
+       *[customer-identifier] A(z) { $provider } szolgáltatónak a weboldaláról származó ügyfél-azonosító szükséges. A fangfrisch a beállításfájljából olvassa be, amely általában ez: { $path }. Adja hozzá ott ezeket a sorokat, cserélje le a helykitöltőt az ügyfél-azonosítójára, és tegye a fájlt csak a root számára olvashatóvá, hogy más felhasználók ne láthassák.
+    }
 signatures-not-use = Nincs használatban
 signatures-add-lines-fangfrisch-settings = Adja hozzá ezeket a sorokat a fangfrisch beállításfájljához, amely általában ez: { $path }.
 signatures-provider-needs-free-abuse = A(z) { $provider } szolgáltatónak ingyenes abuse.ch Auth-Key szükséges. Adja hozzá ezeket a sorokat a fangfrisch beállításfájljához, amely általában ez: { $path }, cserélje le a helykitöltőt a kulcsára, és tegye a fájlt csak a root számára olvashatóvá, hogy más felhasználók ne láthassák.
@@ -1057,9 +1066,9 @@ widgets-journal-read-failed = A rendszernapló nem olvasható: { $error }
 widgets-journal-reading-incomplete = A rendszernapló olvasása befejezés előtt leállt
 widgets-folder-unreadable = Az aláírásmappa nem olvasható: { $error }
 widgets-reading-signature-folder-stopped = Az aláírásmappa olvasása befejezés előtt leállt
-widgets-entry-timestamp-invalid = egy naplóbejegyzés időbélyege a támogatott tartományon kívül esik
-widgets-reader-thread-failed = a naplóolvasó nem indítható el: { $error }
-widgets-journal-reading-stopped = A rendszernapló olvasása leállt: { $error }
+widgets-entry-timestamp-invalid = Egy naplóbejegyzés időbélyege kívül esik a támogatott tartományon.
+widgets-reader-thread-failed = A naplóolvasót nem sikerült elindítani: { $error }
+widgets-journal-reading-stopped = A rendszernapló olvasása leállt. { $reason }
 widgets-file-hash-mismatch = A fájl kivonata nem egyezik — a fájl sérült lehet
 widgets-restore-refused-integrity-unknown = Ennek a karantén-bejegyzésnek nincs használható kivonata, így a fájl nem ellenőrizhető, és nem lesz visszaállítva. Törölni viszont lehet.
 widgets-upload-refused-integrity-unknown = Ennek a karantén-bejegyzésnek nincs használható kivonata, így a { -brand-name } nem tudja igazolni, hogy a fájl azonos a karanténba helyezettel, és sehová sem küldi el.
@@ -1176,8 +1185,8 @@ widgets-results-copied-clipboard = Az eredmények a vágólapra másolva
 widgets-results-exported = Eredmények exportálva
 widgets-done-total-file-scanned =
     { $total ->
-        [one] { $total } fájlból { $done } megvizsgálva
-       *[other] { $total } fájlból { $done } megvizsgálva
+        [one] { NUMBER($done) } / { $total } fájl megvizsgálva
+       *[other] { NUMBER($done) } / { $total } fájl megvizsgálva
     }
 widgets-count-file-scanned-results =
     { $count ->
@@ -1308,14 +1317,14 @@ widgets-file-not-regular = Csak szabályos fájlok küldhetők
 widgets-file-too-large = A fájl nagyobb, mint { $size }, ami a { -brand-name } által elküldhető legnagyobb méret.
 widgets-reading-interrupted = A fájl olvasása váratlanul leállt
 widgets-history-failure = A beküldési előzmények nem olvashatók: { $error }
-widgets-earlier-submission = Ezt a fájlt már elküldték ekkor: { $time }. Semmi sem lett újra elküldve.
+widgets-earlier-submission = Ezt a fájlt már elküldték ekkor: { $local-time }. Semmi sem lett újra elküldve.
 widgets-report-recorded = Jelentés elküldve. A ClamAV felülvizsgálata legalább 48 órát vesz igénybe; az Elküldött minták oldal mutatja, ha egy aláírásfrissítés megváltoztatja az ítéletet.
 widgets-report-not-sent-error = A jelentés nem lett elküldve: { $error }
 widgets-report-sent-without-record = Jelentés elküldve, de nem sikerült felvenni az Elküldött minták közé: { $error }
-widgets-nothing-uploaded-error = Semmi sem lett feltöltve: { $error }
+widgets-nothing-uploaded-error = Nem történt feltöltés. { $reason }
 widgets-malwarebazaar-refused-sample-reason = A MalwareBazaar elutasította a mintát: { $reason }
 widgets-malwarebazaar-sample-sent-samples = A minta a MalwareBazaar szolgáltatásban van. Az Elküldött minták oldal hivatkozik a nyilvános bejegyzésére.
-widgets-add-abuse-ch-key = előbb adjon meg egy abuse.ch-kulcsot a Beállításokban
+widgets-add-abuse-ch-key = Előbb adjon meg egy abuse.ch-kulcsot a Beállításokban.
 widgets-not-detected-clamav = A MalwareBazaar csak olyan fájlokat fogad, amelyeket egy ClamAV-aláírás észlelt
 widgets-unwanted-program-only = A MalwareBazaar nem fogad esetlegesen nemkívánatos programokat, csak kártevőket
 widgets-sent-without-record = Feltöltve, de nem sikerült felvenni az Elküldött minták közé: { $error }
@@ -1323,11 +1332,11 @@ widgets-virustotal-refused-file-reason = A VirusTotal elutasította a fájlt: { 
 widgets-virustotal-analysing-file-refresh = A VirusTotal elemzi a fájlt. Az Elküldött minták oldalon a Frissítés megmutatja az ítéletét.
 widgets-report-already-available =
     { $total ->
-        [one] A VirusTotal már ismeri ezt a fájlt: { $total } motorból { $count } észleli. Semmi sem lett feltöltve.
-       *[other] A VirusTotal már ismeri ezt a fájlt: { $total } motorból { $count } észleli. Semmi sem lett feltöltve.
+        [one] A VirusTotal már ismeri ezt a fájlt: { $total } motorból { NUMBER($count) } észleli. Nem történt feltöltés.
+       *[other] A VirusTotal már ismeri ezt a fájlt: { $total } motorból { NUMBER($count) } észleli. Nem történt feltöltés.
     }
-widgets-add-virustotal-key-preferences = előbb adjon meg egy VirusTotal-kulcsot a Beállításokban
-widgets-known-user = { $time } · { $outcome } · kérte: { $uid } azonosítójú felhasználó
+widgets-add-virustotal-key-preferences = Előbb adjon meg egy VirusTotal-kulcsot a Beállításokban.
+widgets-known-user = { $local-time } · { $outcome } · kérte: { $uid } azonosítójú felhasználó
 widgets-unknown-user = { $time } · { $outcome } · kérte: ismeretlen felhasználó
 widgets-change-lowered-protection-tooltip = Ez a módosítás csökkentette a védelmet
 widgets-system-changes-failed = A rendszernapló nem olvasható: { $error }
@@ -1394,14 +1403,11 @@ host-submitter-missing = A jelentéshez a clamsubmit szükséges, amely a ClamAV
 host-submitter-replaceable = A { -brand-name } megtagadta a clamsubmit futtatását, mert a fiókja lecserélheti
 host-report-not-sent-error = A jelentés nem lett elküldve: { $error }
 host-upload-timed-out = A jelentés nem lett elküldve: a feltöltés túl sokáig tartott
-host-purchase-receipt = vásárlási bizonylat száma
-host-customer-identifier = ügyfél-azonosító
 host-unrecognized-source = Egyéb forrás
-host-unnamed-detection = egy névtelen észlelés
 host-file-progress =
     { $total ->
-        [one] { $total } fájlból { $done }
-       *[other] { $total } fájlból { $done }
+        [one] { NUMBER($done) } / { $total } fájl
+       *[other] { NUMBER($done) } / { $total } fájl
     }
 host-count-second-left =
     { $count ->
@@ -1428,22 +1434,27 @@ host-exact-byte-size =
        *[other] { $size } ({ $count } bájt)
     }
 host-needs-key = Kulcs szükséges
-host-unnamed-source = egy névtelen forrás
 host-hash-unknown = Nem szerepel az ismert fájlok adatbázisában
 host-listed-malicious-source-name = Kártékonyként listázza: { $source } ({ $name } néven)
+host-listed-malicious-unnamed-source-name = Egy meg nem nevezett forrás kártékonyként listázza ({ $name } néven)
 host-listed-malicious-source = Kártékonyként listázza: { $source }
+host-listed-malicious-unnamed-source = Egy meg nem nevezett forrás kártékonyként listázza
 host-listed-known-file-source = Ismert fájlként listázza: { $source }
+host-listed-known-file-unnamed-source = Egy meg nem nevezett forrás ismert fájlként listázza
 host-known-file-name-listed = Ismert fájl: { $name }, listázza: { $source }
+host-known-file-name-unnamed-source = Ismert fájl: { $name }, egy meg nem nevezett forrás listázza
 host-unnamed-family = névtelen család
-host-first-seen-unknown = ismeretlen dátum
 host-no-known-samples = Nem ismert kártevőminta
 host-known-malware-sample = Ismert kártevőminta
 host-samples-found = Ismert kártevő: { $family }, először látva: { $date }
+host-samples-found-date-unknown = Ismert kártevő: { $family }, először ismeretlen időpontban látva
+host-unnamed-family-samples-found = Névtelen családba tartozó ismert kártevő, először látva: { $date }
+host-unnamed-family-date-unknown = Névtelen családba tartozó ismert kártevő, először ismeretlen időpontban látva
 host-file-unknown-virustotal = A VirusTotal számára ismeretlen
 host-count-total-engine-verdict =
     { $total ->
-        [one] { $total } motorból { $count } észleli
-       *[other] { $total } motorból { $count } észleli
+        [one] { $total } motorból { NUMBER($count) } észleli
+       *[other] { $total } motorból { NUMBER($count) } észleli
     }
 host-api-key-rejected = A VirusTotal elutasította az API-kulcsot.
 host-request-limit-reached = Elérte a VirusTotal kéréskorlátját. Próbálja újra később.
@@ -1473,7 +1484,7 @@ headless-count-threat-found =
        *[other] { $count } fenyegetés található
     }
 headless-open-lazaret-review = Az áttekintésükhöz nyissa meg a { -brand-name } alkalmazást.
-headless-count-moved-quarantine =
+headless-count-threats-quarantined =
     { $count ->
         [one] { $count } karanténba helyezve.
        *[other] { $count } karanténba helyezve.

@@ -273,8 +273,9 @@ fn restore_confirmation_text(content_verdict: &ContentVerdict) -> RestoreConfirm
         },
         ContentVerdict::StillDetected { detection_name } => RestoreConfirmationText {
             heading: translated_messages::findings::restore_file_clamav_heading(),
-            verdict_text: translated_messages::findings::clamav_still_detects_verdict(
-                detection_name,
+            verdict_text: detection_name.as_ref().map_or_else(
+                translated_messages::findings::clamav_still_detects_unnamed_verdict,
+                translated_messages::findings::clamav_still_detects_verdict,
             ),
             confirm_label: translated_messages::findings::restore_anyway_button(),
             restores_detected_file: true,

@@ -1,7 +1,6 @@
 -brand-name = Lazaret
-
 startup-settings-schema-missing = The { -brand-name } settings schema is not installed. Run make install, or set GSETTINGS_SCHEMA_DIR.
-startup-unknown-page-name = { -brand-name } has no page named { $page }, so it opens Protection. Pages: { $pages }
+startup-unknown-page-name = { -brand-name } has no page named { $page }, so it opens the first area that needs attention. Pages: { $pages }
 
 window-signature-sources = Signature Sources
 window-database-updates = Database Updates
@@ -50,8 +49,8 @@ window-database-missing = No virus definitions
 window-age-definitions-unknown = Age of the definitions unknown
 window-last-update-failed = Last update failed
 window-definitions-dated-future = Definitions dated in the future
-window-updated-label = Updated { $when }
-window-definitions-label = Definitions from { $when }
+window-updated-label = Updated { $relative-time }
+window-definitions-label = Definitions from { $relative-time }
 window-freshclam-refused = freshclam is refused
 window-unknown-whether-freshclam-trusted = Unknown whether freshclam is trusted
 window-freshclam-copy-account-ignored = A freshclam copy in your account is ignored
@@ -86,7 +85,7 @@ window-whole-root-included = Watches / directly
 window-watch-limit-low = Folder watch limit low
 window-timer-not-active = Timer not active
 window-last-scan-failed = Last scan failed
-window-next-scan = Next scan { $when }
+window-next-scan = Next scan { $relative-time }
 window-no-next-scan-planned = No next scan planned
 window-service-missing = Scan service missing
 window-service-unreadable = Scan service unknown
@@ -111,7 +110,7 @@ window-count-needs-decision =
        *[other] { $count } need a decision
     }
 window-loading-label = Loading…
-window-empty-label = Empty
+window-quarantine-empty = Empty
 window-count-item =
     { $count ->
         [one] { $count } item
@@ -129,17 +128,17 @@ window-another-allowlist-silences-clamav = Another allowlist silences ClamAV
 window-lazaret-allowlist-unreadable = { -brand-name }'s allowlist is unreadable
 window-sent-samples-cannot-read = Sent samples can't be read
 window-nothing-sent = Nothing sent
-window-count-refused-service =
+window-count-samples-refused =
     { $count ->
         [one] { $count } refused by its service
        *[other] { $count } refused by their services
     }
-window-count-awaiting-review =
+window-count-samples-awaiting-review =
     { $count ->
         [one] { $count } awaiting review
        *[other] { $count } awaiting review
     }
-window-count-sent =
+window-count-samples-sent =
     { $count ->
         [one] { $count } sent
        *[other] { $count } sent
@@ -303,16 +302,16 @@ scans-default-limit = The ClamAV default
 scans-configuration-label = Configuration
 scans-watched-folders = Watched folders
 scans-largest-file-scanned = Largest file scanned
-scans-no-kernel-config-found = neither /proc/config.gz nor the kernel's config file in /boot exists
-scans-kernel-config-unreadable = the kernel configuration could not be read
-scans-compressed-config-corrupt = /proc/config.gz could not be decompressed
-scans-kernel-release-unreadable = the running kernel release could not be read
-scans-reading-task-aborted-config = reading the kernel configuration stopped before it finished
+scans-no-kernel-config-found = Neither /proc/config.gz nor the kernel's config file in /boot exists.
+scans-kernel-config-unreadable = The kernel configuration could not be read.
+scans-compressed-config-corrupt = /proc/config.gz could not be decompressed.
+scans-kernel-release-unreadable = The running kernel release could not be read.
+scans-reading-task-aborted-config = Reading the kernel configuration stopped before it finished.
 scans-blocks-detected-files = Detected files are blocked
 scans-prevention-off = Files are checked, but detected files are not blocked
 scans-prevention-conflicts-mounts = Files are checked, but detected files are not blocked, because OnAccessPrevention doesn't work with OnAccessMountPath
 scans-kernel-cannot-block = Files are checked, but this kernel can't block detected files, because it was built without CONFIG_FANOTIFY_ACCESS_PERMISSIONS
-scans-kernel-support-unknown = Files are checked, but whether the kernel can block detected files is unknown, because { $reason }
+scans-kernel-support-unknown = Files are checked, but whether the kernel can block detected files is unknown. { $reason }
 scans-config-unreadable-monitor = Running, but clamd.conf could not be read, so what is checked and whether detected files are blocked is unknown
 scans-running-no-folders-status = Running, but no folders or mounts are watched
 scans-running-detected-status = Running, but no folders or mounts are watched, and detected files would not be blocked
@@ -352,7 +351,7 @@ scans-no-drive-connected-title = No drive was connected yet
 scans-close-results-button = Close Results
 scans-drive-scans-title = Drive scans
 scans-drives-lazaret-scanned-description = Drives { -brand-name } scanned when they were connected, newest first. Select one to read its transcript.
-scans-off-label = Off
+scans-auto-scan-off = Off
 scans-every-drive = Scans every drive
 scans-drives-up-size = Scans drives up to { $size }
 scans-skipped-larger-than-limit = Not scanned: { $size } is larger than the { $limit } limit
@@ -379,7 +378,7 @@ scans-checking-scan-engine = Checking the scan engine…
 scans-command-copied-clipboard-scan = Command copied to clipboard
 scans-program-start-failed = clamscan could not be started: { $error }
 scans-probe-timed-out = clamscan did not answer in time
-scans-scanner-refused = refused { $path }, because your account can replace it
+scans-scanner-refused = Refused { $path }, because your account can replace it
 scans-engine-missing = ClamAV was not found on this computer
 scans-clamav-installed = ClamAV installed
 scans-clamav-engine-recognizes-malware = ClamAV is the engine that recognizes malware. { -brand-name } uses the copy installed on this computer and never bundles its own.
@@ -487,8 +486,8 @@ findings-alerts-stop-quit-lazaret = Alerts stop when you quit { -brand-name }, b
 findings-running-background-following-journal = Running in the background and following the journal
 findings-alerts-label = Alerts
 findings-lazaret-follows-system-journal = { -brand-name } follows the system journal and notifies you when something is detected. It can only do that while it is running, so it should run in the background.
-findings-on-label = On
-findings-off-label = Off
+findings-notifications-on = On
+findings-notifications-off = Off
 findings-running-label = Running
 findings-not-running = Not running
 findings-unit-not-found = Not set up
@@ -567,7 +566,7 @@ findings-times-seen = Times seen
 findings-detected-label = Detected
 findings-signature-matches-harmless-eicar = This signature matches the harmless EICAR test pattern, which exists to check that detection works.
 findings-clamav-matched-file-against = ClamAV matched this file against a signature. A match is strong evidence, but false positives happen, especially with packed or administrative tools.
-findings-signature-first-seen-time = { $signature }, first seen { $time }
+findings-signature-first-seen-time = { $signature }, first seen { $local-time }
 findings-opening-file-refused-why = Opening this file is refused, which is why it won't open
 findings-not-opened-again-after = Not opened again after your decision
 findings-no-longer-there-blocked = The file is no longer there
@@ -607,22 +606,23 @@ findings-resolved-state-step = { $state }, { $time }
 findings-send-quarantined-copy-description = Send the quarantined copy to ClamAV, MalwareBazaar or VirusTotal. A false positive reported to ClamAV is fixed for everyone by a later signature update.
 findings-cancel-quarantine = Cancel
 findings-delete-entries = Delete
-findings-scanner-program-not-installed = the scanner program is not installed
-findings-scanner-program-replaced-account = the scanner program at { $program } can be replaced by your account through { $path }
-findings-content-pipe-failed = the file could not be passed to the scanner: { $error }
-findings-scanner-spawn-failed = the scanner could not be started: { $error }
-findings-verdict-timed-out = the scan took too long
-findings-detection-settings-unreadable = the clamd detection settings could not be read: { $error }
-findings-program-lookup-failed = the scanner programs could not be looked up: { $error }
-findings-payload-unreadable = the quarantined copy could not be read: { $error }
+findings-scanner-program-not-installed = The scanner program is not installed.
+findings-scanner-program-replaced-account = The scanner program at { $program } can be replaced by your account through { $path }.
+findings-content-pipe-failed = The file could not be passed to the scanner: { $error }
+findings-scanner-spawn-failed = The scanner could not be started: { $error }
+findings-verdict-timed-out = The scan took too long.
+findings-detection-settings-unreadable = The clamd detection settings could not be read: { $error }
+findings-program-lookup-failed = The scanner programs could not be looked up: { $error }
+findings-payload-unreadable = The quarantined copy could not be read: { $error }
 findings-restore-file-heading = Restore This File?
 findings-clamav-no-longer-verdict = ClamAV no longer detects this file with today's signatures.
 findings-restore-button = Restore
 findings-restore-file-clamav-heading = Restore a File ClamAV Still Detects?
 findings-clamav-still-detects-verdict = ClamAV still detects this file as { $detection } with today's signatures. Only restore it if you are sure it is a false positive, and consider trusting it first.
+findings-clamav-still-detects-unnamed-verdict = ClamAV still detects this file with today's signatures, without naming the detection. Only restore it if you are sure it is a false positive, and consider trusting it first.
 findings-restore-anyway-button = Restore Anyway
 findings-restore-unchecked-file-heading = Restore an Unchecked File?
-findings-file-not-checked-verdict = The file could not be checked again before restoring it: { $error }
+findings-file-not-checked-verdict = The file could not be checked again before restoring it. { $reason }
 findings-location-outside-home-folder = This location is outside your home folder.
 findings-file-goes-back = The file goes back to:
 findings-entry-count =
@@ -722,8 +722,8 @@ findings-malwarebazaar-refused-reason = MalwareBazaar refused it: { $reason }
 findings-queued-analysis-virustotal = Queued for analysis on VirusTotal
 findings-count-total-engine-flags =
     { $total ->
-        [one] { $count } of { $total } engine flags it as malicious
-       *[other] { $count } of { $total } engines flag it as malicious
+        [one] { NUMBER($count) } of { $total } engine flags it as malicious
+       *[other] { NUMBER($count) } of { $total } engines flag it as malicious
     }
 findings-virustotal-refused-reason = VirusTotal refused it: { $reason }
 findings-service-kind-hash-date = { $service } · { $kind } · { $hash } · { $date }
@@ -779,7 +779,7 @@ findings-access-denied = Permission denied
 findings-other-read-failure = Reading failed: { $reason }
 findings-reading-task-aborted = Reading stopped before it finished
 findings-journal-unreadable-added = Unknown who added this. { $reason }
-findings-known-user = Added { $time } by user { $uid }
+findings-known-user = Added { $local-time } by user { $uid }
 findings-unknown-user = Added { $time } by an unknown user
 findings-no-record-added-system = No record of who added this in the system journal
 findings-count-entry-not-added =
@@ -821,14 +821,14 @@ signatures-command-copied-clipboard-database = Command copied to clipboard
 signatures-update-not-added-history = The update could not be added to the history: { $error }
 signatures-update-signatures = Update Now
 signatures-cancel-signature-update = Cancel
-signatures-definitions-built-date = Definitions built { $when } ({ $date })
+signatures-definitions-built-date = Definitions built { $relative-time } ({ $date })
 signatures-definitions-exist-not-determined = Definitions exist, but their age could not be determined
 signatures-no-virus-definitions-found = No virus definitions were found
 signatures-age-definitions-unknown-checking = The age of the definitions is unknown, because checking them stopped before it finished
 signatures-last-update-failed = Its last update failed
 signatures-no-completed-update = No completed update recorded yet
-signatures-updater-updated = { $updater } updated
-signatures-provider-fetched = { $provider } fetched
+signatures-updater-updated = Updated by { $updater }
+signatures-provider-fetched = Fetched from { $provider }
 signatures-count-signature-size-file =
     { $count ->
         [one] { $count } signature, { $size } ({ $file })
@@ -886,8 +886,16 @@ signatures-service-ran-without-verdict = The update service ran, but its log doe
 signatures-update-requested-daemon = The service accepted the signal; it performs the update asynchronously. Check its logs for completion.
 signatures-update-cancelled = Database update cancelled
 signatures-scanner-program-missing = Install freshclam before requesting database updates.
-signatures-provider-needs-credential-fangfrisch = { $provider } needs a { $credential }, and fangfrisch only reads it from its settings. On NixOS, services.clamav.fangfrisch.settings is copied into the Nix store, which every user of this computer can read, so the { $credential } would be exposed. Leave { $provider } off, or run fangfrisch with a settings file kept outside the Nix store, such as an agenix or sops-nix secret.
-signatures-provider-needs-credential-website = { $provider } needs a { $credential } from its website. fangfrisch reads it from its settings file, usually { $path }. Add these lines there, replace the placeholder with your { $credential }, and make the file readable by root only, so other users can't see it.
+signatures-provider-needs-credential-fangfrisch =
+    { $credential ->
+        [purchase-receipt] { $provider } needs a purchase receipt number, and fangfrisch only reads it from its settings. On NixOS, services.clamav.fangfrisch.settings is copied into the Nix store, which every user of this computer can read, so the purchase receipt number would be exposed. Leave { $provider } off, or run fangfrisch with a settings file kept outside the Nix store, such as an agenix or sops-nix secret.
+       *[customer-identifier] { $provider } needs a customer ID, and fangfrisch only reads it from its settings. On NixOS, services.clamav.fangfrisch.settings is copied into the Nix store, which every user of this computer can read, so the customer ID would be exposed. Leave { $provider } off, or run fangfrisch with a settings file kept outside the Nix store, such as an agenix or sops-nix secret.
+    }
+signatures-provider-needs-credential-website =
+    { $credential ->
+        [purchase-receipt] { $provider } needs a purchase receipt number from its website. fangfrisch reads it from its settings file, usually { $path }. Add these lines there, replace the placeholder with your purchase receipt number, and make the file readable by root only, so other users can't see it.
+       *[customer-identifier] { $provider } needs a customer ID from its website. fangfrisch reads it from its settings file, usually { $path }. Add these lines there, replace the placeholder with your customer ID, and make the file readable by root only, so other users can't see it.
+    }
 signatures-not-use = Not in use
 signatures-add-lines-fangfrisch-settings = Add these lines to fangfrisch's settings file, usually { $path }.
 signatures-provider-needs-free-abuse = { $provider } needs a free abuse.ch Auth-Key. Add these lines to fangfrisch's settings file, usually { $path }, replace the placeholder with your key, and make the file readable by root only, so other users can't see it.
@@ -1058,9 +1066,9 @@ widgets-journal-read-failed = The system journal could not be read: { $error }
 widgets-journal-reading-incomplete = Reading the system journal stopped before it finished
 widgets-folder-unreadable = The signature folder could not be read: { $error }
 widgets-reading-signature-folder-stopped = Reading the signature folder stopped before it finished
-widgets-entry-timestamp-invalid = a journal entry has a timestamp outside the supported range
-widgets-reader-thread-failed = the journal reader could not start: { $error }
-widgets-journal-reading-stopped = Reading the system journal stopped: { $error }
+widgets-entry-timestamp-invalid = A journal entry has a timestamp outside the supported range.
+widgets-reader-thread-failed = The journal reader could not start: { $error }
+widgets-journal-reading-stopped = Reading the system journal stopped. { $reason }
 widgets-file-hash-mismatch = File hash mismatch — file may be corrupted
 widgets-restore-refused-integrity-unknown = This quarantine record has no usable hash, so the file cannot be verified and is not restored. You can still delete it.
 widgets-upload-refused-integrity-unknown = This quarantine record has no usable hash, so { -brand-name } can't prove the file is the one it quarantined and doesn't send it anywhere.
@@ -1177,8 +1185,8 @@ widgets-results-copied-clipboard = Results copied to clipboard
 widgets-results-exported = Results exported
 widgets-done-total-file-scanned =
     { $total ->
-        [one] { $done } of { $total } file scanned
-       *[other] { $done } of { $total } files scanned
+        [one] { NUMBER($done) } of { $total } file scanned
+       *[other] { NUMBER($done) } of { $total } files scanned
     }
 widgets-count-file-scanned-results =
     { $count ->
@@ -1309,14 +1317,14 @@ widgets-file-not-regular = Only regular files can be sent
 widgets-file-too-large = The file is larger than { $size }, the most { -brand-name } sends.
 widgets-reading-interrupted = Reading the file stopped unexpectedly
 widgets-history-failure = The submission history could not be read: { $error }
-widgets-earlier-submission = This file was already sent on { $time }. Nothing was sent again.
+widgets-earlier-submission = This file was already sent on { $local-time }. Nothing was sent again.
 widgets-report-recorded = Report sent. ClamAV's review takes at least 48 hours; Sent Samples shows when a signature update changes the verdict.
 widgets-report-not-sent-error = The report was not sent: { $error }
 widgets-report-sent-without-record = Report sent, but it could not be added to Sent Samples: { $error }
-widgets-nothing-uploaded-error = Nothing was uploaded: { $error }
+widgets-nothing-uploaded-error = Nothing was uploaded. { $reason }
 widgets-malwarebazaar-refused-sample-reason = MalwareBazaar refused the sample: { $reason }
 widgets-malwarebazaar-sample-sent-samples = MalwareBazaar has the sample. Sent Samples links to its public entry.
-widgets-add-abuse-ch-key = add an abuse.ch key in Preferences first
+widgets-add-abuse-ch-key = Add an abuse.ch key in Preferences first.
 widgets-not-detected-clamav = MalwareBazaar only takes files a ClamAV signature detected
 widgets-unwanted-program-only = MalwareBazaar doesn't take potentially unwanted programs, only malware
 widgets-sent-without-record = Uploaded, but it could not be added to Sent Samples: { $error }
@@ -1324,11 +1332,11 @@ widgets-virustotal-refused-file-reason = VirusTotal refused the file: { $reason 
 widgets-virustotal-analysing-file-refresh = VirusTotal is analysing the file. Refresh on the Sent Samples page shows its verdict.
 widgets-report-already-available =
     { $total ->
-        [one] VirusTotal already knows this file: { $count } of { $total } engine detects it. Nothing was uploaded.
-       *[other] VirusTotal already knows this file: { $count } of { $total } engines detect it. Nothing was uploaded.
+        [one] VirusTotal already knows this file: { NUMBER($count) } of { $total } engine detects it. Nothing was uploaded.
+       *[other] VirusTotal already knows this file: { NUMBER($count) } of { $total } engines detect it. Nothing was uploaded.
     }
-widgets-add-virustotal-key-preferences = add a VirusTotal key in Preferences first
-widgets-known-user = { $time } · { $outcome } · requested by user { $uid }
+widgets-add-virustotal-key-preferences = Add a VirusTotal key in Preferences first.
+widgets-known-user = { $local-time } · { $outcome } · requested by user { $uid }
 widgets-unknown-user = { $time } · { $outcome } · requested by an unknown user
 widgets-change-lowered-protection-tooltip = This change lowered protection
 widgets-system-changes-failed = The system journal can't be read: { $error }
@@ -1395,14 +1403,11 @@ host-submitter-missing = Reporting needs clamsubmit, which comes with ClamAV but
 host-submitter-replaceable = { -brand-name } refused to run clamsubmit, because your account can replace it
 host-report-not-sent-error = The report was not sent: { $error }
 host-upload-timed-out = The report was not sent: the upload took too long
-host-purchase-receipt = purchase receipt number
-host-customer-identifier = customer ID
 host-unrecognized-source = Other source
-host-unnamed-detection = an unnamed detection
 host-file-progress =
     { $total ->
-        [one] { $done } of { $total } file
-       *[other] { $done } of { $total } files
+        [one] { NUMBER($done) } of { $total } file
+       *[other] { NUMBER($done) } of { $total } files
     }
 host-count-second-left =
     { $count ->
@@ -1429,22 +1434,27 @@ host-exact-byte-size =
        *[other] { $size } ({ $count } bytes)
     }
 host-needs-key = Needs a key
-host-unnamed-source = an unnamed source
 host-hash-unknown = Not in the known-files database
 host-listed-malicious-source-name = Listed as malicious by { $source } (as { $name })
+host-listed-malicious-unnamed-source-name = Listed as malicious by an unnamed source (as { $name })
 host-listed-malicious-source = Listed as malicious by { $source }
+host-listed-malicious-unnamed-source = Listed as malicious by an unnamed source
 host-listed-known-file-source = Listed as a known file by { $source }
+host-listed-known-file-unnamed-source = Listed as a known file by an unnamed source
 host-known-file-name-listed = Known file { $name }, listed by { $source }
+host-known-file-name-unnamed-source = Known file { $name }, listed by an unnamed source
 host-unnamed-family = unnamed family
-host-first-seen-unknown = an unknown date
 host-no-known-samples = Not a known malware sample
 host-known-malware-sample = Known malware sample
 host-samples-found = Known malware: { $family }, first seen { $date }
+host-samples-found-date-unknown = Known malware: { $family }, first seen on an unknown date
+host-unnamed-family-samples-found = Known malware of an unnamed family, first seen { $date }
+host-unnamed-family-date-unknown = Known malware of an unnamed family, first seen on an unknown date
 host-file-unknown-virustotal = Unknown to VirusTotal
 host-count-total-engine-verdict =
     { $total ->
-        [one] { $count } of { $total } engine detects it
-       *[other] { $count } of { $total } engines detect it
+        [one] { NUMBER($count) } of { $total } engine detects it
+       *[other] { NUMBER($count) } of { $total } engines detect it
     }
 host-api-key-rejected = VirusTotal rejected the API key.
 host-request-limit-reached = The VirusTotal request limit was reached. Try again later.
@@ -1474,7 +1484,7 @@ headless-count-threat-found =
        *[other] { $count } threats found
     }
 headless-open-lazaret-review = Open { -brand-name } to review them.
-headless-count-moved-quarantine =
+headless-count-threats-quarantined =
     { $count ->
         [one] { $count } moved to quarantine.
        *[other] { $count } moved to quarantine.

@@ -77,13 +77,20 @@ scans-count-target =
 
 becomes `translated_messages::scans::scanning_name(target_name)` and `translated_messages::scans::count_target(target_count)`. A variable used as a selector takes a number; any other variable takes anything that implements `Display`.
 
+Give translators data, not finished text, so every language can build a grammatical sentence:
+
+- A variable selected with plural categories, or written as `{ NUMBER($count) }`, takes a number. Use `NUMBER` for a second count in the same message (`{ NUMBER($count) } of { $total } engines`), so a translation may select on it.
+- A variable selected with other keys is a choice and becomes an enum in the generated module: `{ $credential -> [purchase-receipt] … *[customer-identifier] … }` takes `translated_messages::signatures::CredentialChoice`. Translations may only use those keys, and one variable name has the same choices across a module.
+- Never insert one translated message into another. Write a separate message for each case (`host-listed-malicious-unnamed-source`), or pass a choice. A reason inserted after another sentence (`… is unknown. { $reason }`) is itself a complete sentence.
+- Name variables after what they hold, such as `$relative-time` for "2 days ago" and `$local-time` for a formatted date and time.
+
 Name a message after where it appears, not after its English text, so rewording keeps the id: a module prefix (`startup`, `window`, `scans`, `findings`, `signatures`, `preferences`, `widgets`, `host`, `headless`), two to four words, and the widget role when there is one (`-title`, `-tooltip`, `-button`, `-heading`, `-body`). Give each place its own message even when the English is the same, because other languages may need different words. Write the application name as `{ -brand-name }`; every catalog defines that term.
 
 To add or change text, edit the English catalog and call the function. The build fails when:
 
 - a catalog has a syntax error;
 - a message id has no module prefix, or doesn't convert to a Rust name;
-- a translation uses a variable the English message doesn't pass, or selects on one that English passes as text;
+- a translation uses a variable the English message doesn't pass, selects on one that English passes as text, or uses a choice key English doesn't have;
 - a translation keeps a message that English no longer has, or uses a term its catalog doesn't define.
 
 An English message that no code calls shows up as a dead-code warning. Untranslated messages fall back to English, and the build prints how many each language is missing.

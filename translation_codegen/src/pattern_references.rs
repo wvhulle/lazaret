@@ -1,13 +1,30 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use fluent_syntax::ast::{CallArguments, Expression, InlineExpression, Pattern, PatternElement};
+use fluent_syntax::ast::{
+    CallArguments, Expression, InlineExpression, Pattern, PatternElement, VariantKey,
+};
+
+const PLURAL_CATEGORIES: [&str; 6] = ["zero", "one", "two", "few", "many", "other"];
+const NUMBER_FUNCTION_NAME: &str = "NUMBER";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VariableKind {
+    PlainText,
+    CountedNumber,
+    NamedChoice(BTreeSet<String>),
+}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PatternReferences {
     pub variables_in_order: Vec<String>,
-    pub selector_variables: BTreeSet<String>,
+    pub selector_keys: BTreeMap<String, BTreeSet<String>>,
+    pub number_function_variables: BTreeSet<String>,
     pub message_references: BTreeSet<String>,
     pub term_references: BTreeSet<String>,
+}
+
+pub fn is_plural_key(variant_key: &str) -> bool {
+    PLURAL_CATEGORIES.contains(&variant_key) || variant_key.parse::<f64>().is_ok()
 }
 
 impl PatternReferences {
@@ -15,6 +32,41 @@ impl PatternReferences {
         let mut collected_references = Self::default();
         collected_references.visit_pattern(pattern);
         collected_references
+    }
+
+    pub fn merge(&mut self, other_references: Self) {
+        for variable_name in other_references.variables_in_order {
+            self.record_variable(&variable_name);
+        }
+        for (variable_name, variant_keys) in other_references.selector_keys {
+            self.selector_keys
+                .entry(variable_name)
+                .or_default()
+                .extend(variant_keys);
+        }
+        self.number_function_variables
+            .extend(other_references.number_function_variables);
+        self.message_references
+            .extend(other_references.message_references);
+        self.term_references
+            .extend(other_references.term_references);
+    }
+
+    pub fn variable_kind(&self, variable_name: &str) -> VariableKind {
+        match self.selector_keys.get(variable_name) {
+            Some(variant_keys)
+                if variant_keys
+                    .iter()
+                    .any(|variant_key| !is_plural_key(variant_key)) =>
+            {
+                VariableKind::NamedChoice(variant_keys.clone())
+            }
+            Some(_) => VariableKind::CountedNumber,
+            None if self.number_function_variables.contains(variable_name) => {
+                VariableKind::CountedNumber
+            }
+            None => VariableKind::PlainText,
+        }
     }
 
     fn record_variable(&mut self, variable_name: &str) {
@@ -38,7 +90,19 @@ impl PatternReferences {
     fn visit_expression(&mut self, expression: &Expression<&str>) {
         match expression {
             Expression::Select { selector, variants } => {
-                self.record_selector(selector);
+                let variant_keys = variants
+                    .iter()
+                    .map(|select_variant| match &select_variant.key {
+                        VariantKey::Identifier { name } => (*name).to_owned(),
+                        VariantKey::NumberLiteral { value } => (*value).to_owned(),
+                    })
+                    .collect::<BTreeSet<_>>();
+                if let Some(selector_variable) = selected_variable(selector) {
+                    self.selector_keys
+                        .entry(selector_variable.to_owned())
+                        .or_default()
+                        .extend(variant_keys);
+                }
                 self.visit_inline_expression(selector);
                 for select_variant in variants {
                     self.visit_pattern(&select_variant.value);
@@ -47,22 +111,6 @@ impl PatternReferences {
             Expression::Inline(inline_expression) => {
                 self.visit_inline_expression(inline_expression)
             }
-        }
-    }
-
-    fn record_selector(&mut self, selector: &InlineExpression<&str>) {
-        match selector {
-            InlineExpression::VariableReference { id } => {
-                self.selector_variables.insert(id.name.to_owned());
-            }
-            InlineExpression::FunctionReference { arguments, .. } => {
-                for positional_argument in &arguments.positional {
-                    if let InlineExpression::VariableReference { id } = positional_argument {
-                        self.selector_variables.insert(id.name.to_owned());
-                    }
-                }
-            }
-            _ => {}
         }
     }
 
@@ -78,7 +126,14 @@ impl PatternReferences {
     fn visit_inline_expression(&mut self, inline_expression: &InlineExpression<&str>) {
         match inline_expression {
             InlineExpression::VariableReference { id } => self.record_variable(id.name),
-            InlineExpression::FunctionReference { arguments, .. } => {
+            InlineExpression::FunctionReference { id, arguments } => {
+                if id.name == NUMBER_FUNCTION_NAME {
+                    for positional_argument in &arguments.positional {
+                        if let InlineExpression::VariableReference { id } = positional_argument {
+                            self.number_function_variables.insert(id.name.to_owned());
+                        }
+                    }
+                }
                 self.visit_call_arguments(arguments)
             }
             InlineExpression::MessageReference { id, .. } => {
@@ -93,5 +148,19 @@ impl PatternReferences {
             InlineExpression::Placeable { expression } => self.visit_expression(expression),
             InlineExpression::StringLiteral { .. } | InlineExpression::NumberLiteral { .. } => {}
         }
+    }
+}
+
+fn selected_variable<'source>(selector: &InlineExpression<&'source str>) -> Option<&'source str> {
+    match selector {
+        InlineExpression::VariableReference { id } => Some(id.name),
+        InlineExpression::FunctionReference { arguments, .. } => arguments
+            .positional
+            .iter()
+            .find_map(|positional_argument| match positional_argument {
+                InlineExpression::VariableReference { id } => Some(id.name),
+                _ => None,
+            }),
+        _ => None,
     }
 }

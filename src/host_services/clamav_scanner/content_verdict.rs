@@ -7,28 +7,25 @@ use std::{
 
 use tokio::time::timeout;
 
-use crate::{
-    host_services::{
-        clamav_config::detection_options::{
-            DetectionSettingsFailure, read_host_clamscan_detection_arguments,
-        },
-        clamav_programs::trusted_program_lookup::ProgramRefusal,
-        clamav_scanner::{
-            scanner_command_builder::{
-                ProgramLookupFailure, ScannerBackend, ScannerProgramPaths, probe_clamd_availability,
-            },
-            scanner_exit_classification::{
-                AbnormalScannerExit, ScannerExit, classify_scanner_exit_status,
-            },
-            scanner_output_parser::sanitize_scanner_line,
-        },
-        desktop::{
-            content_pipe::pipe_content_for_child,
-            flatpak_sandbox::{C_LOCALE_ENVIRONMENT, host_program_async_command},
-        },
-        quarantine_vault::quarantine_file_moves::QuarantineMoveFailure,
+use crate::host_services::{
+    clamav_config::detection_options::{
+        DetectionSettingsFailure, read_host_clamscan_detection_arguments,
     },
-    translated_messages,
+    clamav_programs::trusted_program_lookup::ProgramRefusal,
+    clamav_scanner::{
+        scanner_command_builder::{
+            ProgramLookupFailure, ScannerBackend, ScannerProgramPaths, probe_clamd_availability,
+        },
+        scanner_exit_classification::{
+            AbnormalScannerExit, ScannerExit, classify_scanner_exit_status,
+        },
+        scanner_output_parser::sanitize_scanner_line,
+    },
+    desktop::{
+        content_pipe::pipe_content_for_child,
+        flatpak_sandbox::{C_LOCALE_ENVIRONMENT, host_program_async_command},
+    },
+    quarantine_vault::quarantine_file_moves::QuarantineMoveFailure,
 };
 
 const VERDICT_TIMEOUT: Duration = Duration::from_secs(600);
@@ -59,7 +56,7 @@ pub enum VerdictFailure {
 
 #[derive(Clone, Debug)]
 pub enum ContentVerdict {
-    StillDetected { detection_name: String },
+    StillDetected { detection_name: Option<String> },
     NoLongerDetected,
     VerdictUnavailable(Arc<VerdictFailure>),
 }
@@ -88,8 +85,7 @@ pub fn verdict_from_exit(
     match scanner_exit {
         ScannerExit::NoVirusFound => ContentVerdict::NoLongerDetected,
         ScannerExit::VirusFound => ContentVerdict::StillDetected {
-            detection_name: detection_in_report(report_text)
-                .unwrap_or_else(translated_messages::host::unnamed_detection),
+            detection_name: detection_in_report(report_text),
         },
         ScannerExit::ExitedAbnormally(abnormal_exit) => diagnostic_text
             .lines()
@@ -168,7 +164,7 @@ mod content_verdict_tests {
                 "stdin: Win.Test.EICAR_HDB-1 FOUND\n",
                 ""
             ),
-            ContentVerdict::StillDetected { detection_name } if detection_name == "Win.Test.EICAR_HDB-1"
+            ContentVerdict::StillDetected { detection_name } if detection_name.as_deref() == Some("Win.Test.EICAR_HDB-1")
         ));
         assert!(matches!(
             verdict_from_exit(ScannerExit::NoVirusFound, "stdin: OK\n", ""),

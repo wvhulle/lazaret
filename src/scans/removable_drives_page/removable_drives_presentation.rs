@@ -36,7 +36,7 @@ pub fn auto_scan_state_text(auto_scan_settings: DeviceAutoScanSettings) -> Strin
         auto_scan_settings.auto_scan_enabled,
         auto_scan_settings.drive_size_limit(),
     ) {
-        (false, _) => translated_messages::scans::off_label(),
+        (false, _) => translated_messages::scans::auto_scan_off(),
         (true, DriveSizeLimit::NoSizeLimit) => translated_messages::scans::every_drive(),
         (true, DriveSizeLimit::LimitedTo(size_limit)) => {
             translated_messages::scans::drives_up_size(drive_size_text(size_limit))

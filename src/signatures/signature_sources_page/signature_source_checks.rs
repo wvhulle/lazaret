@@ -25,13 +25,13 @@ fn settings_credential_check(
     settings_credential: SettingsOnlyCredential,
     distribution_family: DistributionFamily,
 ) -> AuditCheck {
-    let credential_text = settings_credential.credential_label.described();
+    let credential_choice = settings_credential.credential_label.translated_choice();
     if distribution_family == DistributionFamily::NixosFamily {
         return inactive_check
             .with_recommendation(
                 translated_messages::signatures::provider_needs_credential_fangfrisch(
+                    credential_choice,
                     provider_name,
-                    &credential_text,
                 ),
             )
             .with_documentation(settings_credential.signup_url);
@@ -39,8 +39,8 @@ fn settings_credential_check(
     inactive_check
         .with_recommendation(
             translated_messages::signatures::provider_needs_credential_website(
+                credential_choice,
                 provider_name,
-                &credential_text,
                 FANGFRISCH_CONFIG_PATH,
             ),
         )

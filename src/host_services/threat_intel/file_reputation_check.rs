@@ -75,38 +75,53 @@ pub struct ReputationAnswers {
     pub virustotal_answer: SourceAnswer,
 }
 
-fn listing_source_text(listing_source: &ListingSource) -> String {
-    match listing_source {
-        ListingSource::NamedSource(source_name) => sanitize_scanner_line(source_name),
-        ListingSource::UnnamedSource => translated_messages::host::unnamed_source(),
-    }
-}
-
 pub fn describe_known_file(known_file_lookup: &KnownFileLookup) -> SourceAnswer {
     let verdict_text = match known_file_lookup {
         KnownFileLookup::HashUnknown => translated_messages::host::hash_unknown(),
         KnownFileLookup::KnownMalicious {
             file_name: KnownName::NamedFile(file_name),
-            flagged_by,
+            flagged_by: ListingSource::NamedSource(source_name),
         } => translated_messages::host::listed_malicious_source_name(
-            listing_source_text(flagged_by),
+            sanitize_scanner_line(source_name),
+            sanitize_scanner_line(file_name),
+        ),
+        KnownFileLookup::KnownMalicious {
+            file_name: KnownName::NamedFile(file_name),
+            flagged_by: ListingSource::UnnamedSource,
+        } => translated_messages::host::listed_malicious_unnamed_source_name(
             sanitize_scanner_line(file_name),
         ),
         KnownFileLookup::KnownMalicious {
             file_name: KnownName::UnnamedFile,
-            flagged_by,
-        } => translated_messages::host::listed_malicious_source(listing_source_text(flagged_by)),
+            flagged_by: ListingSource::NamedSource(source_name),
+        } => translated_messages::host::listed_malicious_source(sanitize_scanner_line(source_name)),
+        KnownFileLookup::KnownMalicious {
+            file_name: KnownName::UnnamedFile,
+            flagged_by: ListingSource::UnnamedSource,
+        } => translated_messages::host::listed_malicious_unnamed_source(),
         KnownFileLookup::KnownFile {
             file_name: KnownName::UnnamedFile,
-            source_name,
-        } => translated_messages::host::listed_known_file_source(listing_source_text(source_name)),
+            source_name: ListingSource::NamedSource(source_name),
+        } => {
+            translated_messages::host::listed_known_file_source(sanitize_scanner_line(source_name))
+        }
+        KnownFileLookup::KnownFile {
+            file_name: KnownName::UnnamedFile,
+            source_name: ListingSource::UnnamedSource,
+        } => translated_messages::host::listed_known_file_unnamed_source(),
         KnownFileLookup::KnownFile {
             file_name: KnownName::NamedFile(file_name),
-            source_name,
+            source_name: ListingSource::NamedSource(source_name),
         } => translated_messages::host::known_file_name_listed(
             sanitize_scanner_line(file_name),
-            listing_source_text(source_name),
+            sanitize_scanner_line(source_name),
         ),
+        KnownFileLookup::KnownFile {
+            file_name: KnownName::NamedFile(file_name),
+            source_name: ListingSource::UnnamedSource,
+        } => translated_messages::host::known_file_name_unnamed_source(sanitize_scanner_line(
+            file_name,
+        )),
     };
     SourceAnswer::Answered { verdict_text }
 }
@@ -118,23 +133,31 @@ pub fn malware_family_text(malware_family: &MalwareFamily) -> String {
     }
 }
 
-pub fn first_seen_text(first_seen: &SampleFirstSeen) -> String {
-    match first_seen {
-        SampleFirstSeen::SeenAt(seen_at) => sanitize_scanner_line(seen_at),
-        SampleFirstSeen::FirstSeenUnknown => translated_messages::host::first_seen_unknown(),
-    }
-}
-
 pub fn describe_known_samples(sample_lookup: &KnownSampleLookup) -> SourceAnswer {
     let verdict_text = match sample_lookup {
         KnownSampleLookup::NoKnownSamples => translated_messages::host::no_known_samples(),
         KnownSampleLookup::SamplesFound { known_samples } => known_samples.first().map_or_else(
             translated_messages::host::known_malware_sample,
-            |first_sample| {
-                translated_messages::host::samples_found(
-                    malware_family_text(&first_sample.malware_family),
-                    first_seen_text(&first_sample.first_seen),
-                )
+            |first_sample| match (&first_sample.malware_family, &first_sample.first_seen) {
+                (MalwareFamily::NamedFamily(family_name), SampleFirstSeen::SeenAt(seen_at)) => {
+                    translated_messages::host::samples_found(
+                        sanitize_scanner_line(family_name),
+                        sanitize_scanner_line(seen_at),
+                    )
+                }
+                (MalwareFamily::NamedFamily(family_name), SampleFirstSeen::FirstSeenUnknown) => {
+                    translated_messages::host::samples_found_date_unknown(sanitize_scanner_line(
+                        family_name,
+                    ))
+                }
+                (MalwareFamily::UnnamedFamily, SampleFirstSeen::SeenAt(seen_at)) => {
+                    translated_messages::host::unnamed_family_samples_found(sanitize_scanner_line(
+                        seen_at,
+                    ))
+                }
+                (MalwareFamily::UnnamedFamily, SampleFirstSeen::FirstSeenUnknown) => {
+                    translated_messages::host::unnamed_family_date_unknown()
+                }
             },
         ),
     };
@@ -341,7 +364,7 @@ mod file_reputation_check_tests {
                 }],
             })
             .displayed_text(),
-            "Known malware: unnamed family, first seen an unknown date"
+            "Known malware of an unnamed family, first seen on an unknown date"
         );
     }
 

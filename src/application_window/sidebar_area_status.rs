@@ -733,7 +733,7 @@ fn quarantine_summary(quarantine_entry_count: QuarantineEntryCount) -> AreaSumma
         ),
         QuarantineEntryCount::EntriesCounted { entry_count: 0 } => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::empty_label(),
+            translated_messages::window::quarantine_empty(),
         ),
         QuarantineEntryCount::EntriesCounted { entry_count } => summary_of(
             AreaStatus::AreaHealthy,
@@ -796,17 +796,17 @@ fn sent_samples_summary(submission_tally: SubmissionTally) -> AreaSummary {
         ),
         SubmissionTally::TallyCounted { refused_count, .. } if refused_count > 0 => summary_of(
             AreaStatus::AreaNeedsReview,
-            translated_messages::window::count_refused_service(refused_count),
+            translated_messages::window::count_samples_refused(refused_count),
         ),
         SubmissionTally::TallyCounted { awaiting_count, .. } if awaiting_count > 0 => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::count_awaiting_review(awaiting_count),
+            translated_messages::window::count_samples_awaiting_review(awaiting_count),
         ),
         SubmissionTally::TallyCounted {
             submitted_count, ..
         } => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::count_sent(submitted_count),
+            translated_messages::window::count_samples_sent(submitted_count),
         ),
     }
 }

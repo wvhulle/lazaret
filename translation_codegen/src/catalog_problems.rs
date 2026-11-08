@@ -64,6 +64,25 @@ pub enum CatalogProblem {
         message_id: String,
         variable_name: String,
     },
+    NumberFunctionOnTextVariable {
+        path: PathBuf,
+        line_number: usize,
+        message_id: String,
+        variable_name: String,
+    },
+    UnknownVariantKey {
+        path: PathBuf,
+        line_number: usize,
+        message_id: String,
+        variable_name: String,
+        variant_key: String,
+    },
+    ConflictingChoiceKeys {
+        path: PathBuf,
+        line_number: usize,
+        message_id: String,
+        variable_name: String,
+    },
     UnresolvedMessageReference {
         path: PathBuf,
         line_number: usize,
@@ -185,6 +204,42 @@ impl fmt::Display for CatalogProblem {
                 formatter,
                 "{}:{line_number}: `{message_id}` selects on `${variable_name}`, which the source \
                  message passes as text; select on it in the source message first",
+                path.display()
+            ),
+            Self::NumberFunctionOnTextVariable {
+                path,
+                line_number,
+                message_id,
+                variable_name,
+            } => write!(
+                formatter,
+                "{}:{line_number}: `{message_id}` formats `${variable_name}` with NUMBER, but the \
+                 source message passes it as text or a choice; use NUMBER in the source message \
+                 first",
+                path.display()
+            ),
+            Self::UnknownVariantKey {
+                path,
+                line_number,
+                message_id,
+                variable_name,
+                variant_key,
+            } => write!(
+                formatter,
+                "{}:{line_number}: `{message_id}` selects `[{variant_key}]` on \
+                 `${variable_name}`, which is neither a plural category nor one of the source \
+                 message's choices",
+                path.display()
+            ),
+            Self::ConflictingChoiceKeys {
+                path,
+                line_number,
+                message_id,
+                variable_name,
+            } => write!(
+                formatter,
+                "{}:{line_number}: `{message_id}` gives `${variable_name}` other choices than \
+                 another message in the same module; one variable name means one set of choices",
                 path.display()
             ),
             Self::UnresolvedMessageReference {

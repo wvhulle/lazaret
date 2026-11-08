@@ -123,9 +123,9 @@ fn alerts_timeline_step<StepAction: StepActionButton>(
 
 fn notifications_text(notifications_enabled: bool) -> String {
     if notifications_enabled {
-        translated_messages::findings::on_label()
+        translated_messages::findings::notifications_on()
     } else {
-        translated_messages::findings::off_label()
+        translated_messages::findings::notifications_off()
     }
 }
 
