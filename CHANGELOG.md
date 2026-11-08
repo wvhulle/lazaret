@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://codeberg.org/wvhulle/lazaret/compare/v0.3.0...v0.4.0) - 2026-11-08
+
+### Added
+
+- *(sidebar)* fold Scan Files… into Manual Scan
+
+### CI
+
+- *(release)* keep the clamd configuration crate out of releases
+
+### Fixed
+
+- *(file-managers)* point Flatpak actions at the host launcher and data folder
+- *(launcher)* write a stable profile path instead of a Nix store path
+
 ## [0.3.0](https://codeberg.org/wvhulle/lazaret/compare/v0.2.0...v0.3.0) - 2026-11-07
 
 ### Added
