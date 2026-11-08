@@ -75,6 +75,12 @@ const RATE_LIMIT_MARKERS: &[&str] = &[
 const CDN_MARKERS: &[&str] = &["cloudfront", "cloudflare"];
 const CERTIFICATE_MARKERS: &[&str] = &["certificate", "ssl error", "tls error", "verify failed"];
 
+const SIGNATURE_DATABASE_SUFFIXES: &[&str] = &[
+    ".cvd", ".cld", ".cud", ".hdb", ".hsb", ".hdu", ".hsu", ".mdb", ".msb", ".mdu", ".msu", ".ndb",
+    ".ndu", ".ldb", ".ldu", ".idb", ".cdb", ".crb", ".cbc", ".pdb", ".gdb", ".wdb", ".fp", ".sfp",
+    ".ign", ".ign2", ".ftm", ".yar", ".yara", ".pwdb", ".cat",
+];
+
 fn database_name_in_line(report_line: &str) -> Option<String> {
     report_line
         .split(|line_character: char| {
@@ -82,7 +88,7 @@ fn database_name_in_line(report_line: &str) -> Option<String> {
         })
         .find(|line_word| {
             let lowercase_word = line_word.to_ascii_lowercase();
-            [".cvd", ".cld", ".cud"]
+            SIGNATURE_DATABASE_SUFFIXES
                 .iter()
                 .any(|database_suffix| lowercase_word.ends_with(database_suffix))
         })
@@ -347,6 +353,17 @@ pub fn interpret_unfinished_update(report_text: &str) -> DatabaseUpdateOutcome {
 #[cfg(test)]
 mod freshclam_output_parser_tests {
     use super::*;
+
+    #[test]
+    fn an_updated_custom_database_counts_as_updated() {
+        let report_summary = summarize_freshclam_report(
+            "lazaret-fixture.hdb updated (version: custom database, sigs: 2)\n",
+        );
+        assert_eq!(
+            report_summary.updated_databases,
+            vec!["lazaret-fixture.hdb"]
+        );
+    }
 
     #[test]
     fn updated_and_current_databases_are_separated() {
