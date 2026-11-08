@@ -599,6 +599,7 @@ impl Component for QuarantineEntriesPage {
                     pack_end = &gtk::MenuButton {
                         set_icon_name: "view-more-symbolic",
                         set_tooltip_text: Some(&translated_messages::findings::more_tooltip()),
+                        update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::more_tooltip())],
                         #[wrap(Some)]
                         set_popover = &gtk::Popover {
                             gtk::Button {
@@ -631,6 +632,7 @@ impl Component for QuarantineEntriesPage {
                     pack_end = &gtk::Button {
                         set_icon_name: "view-refresh-symbolic",
                         set_tooltip_text: Some(&translated_messages::findings::refresh_tooltip()),
+                        update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::refresh_tooltip())],
                         connect_clicked => QuarantineEntriesPageInput::ReloadEntriesRequested,
                     },
 

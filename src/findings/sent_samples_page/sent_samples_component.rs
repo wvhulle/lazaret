@@ -531,6 +531,7 @@ impl Component for SentSamplesPage {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
                             set_tooltip_text: Some(&translated_messages::findings::check_malwarebazaar_virustotal_tooltip()),
+                            update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::check_malwarebazaar_virustotal_tooltip())],
                             connect_clicked => SentSamplesPageInput::RemoteRefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
