@@ -50,6 +50,10 @@ pub fn in_row(widget_target: WidgetTarget, row_title: impl Into<String>) -> Widg
     widget_target.inside(WidgetTarget::list_item(row_title))
 }
 
+pub fn in_expanded_row(widget_target: WidgetTarget, row_title: impl Into<String>) -> WidgetTarget {
+    widget_target.inside_enclosing(WidgetRole::ListItem, WidgetTarget::list_item(row_title))
+}
+
 fn lookup_failed(lookup_failure: WidgetLookupFailure) -> JourneyFailure {
     JourneyFailure::WidgetUnavailable(SceneCaptureFailure::from(lookup_failure))
 }

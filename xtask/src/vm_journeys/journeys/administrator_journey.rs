@@ -16,7 +16,7 @@ use crate::vm_journeys::harness::{
     fixture_corpus::FixtureSample,
     journey_failure::{JourneyFailure, ensure},
     journey_run::{JourneyRun, SAMPLE_HOME, SAMPLE_PASSWORD},
-    session_widgets::{button, in_alert, in_row, label_containing, row_titled},
+    session_widgets::{button, in_alert, in_expanded_row, in_row, label_containing, row_titled},
     system_commands::{
         CommandOutcome, as_root, as_root_outcome, journal_text, root_file_text, root_path_exists,
         run_command, settle, succeed, wait_until, write_root_file,
