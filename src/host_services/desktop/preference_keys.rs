@@ -1,10 +1,16 @@
 use relm4::gtk::{gio, gio::prelude::*, glib};
 
 use crate::{
-    host_services::clamav_config::typed_setting_values::{
-        SettingParseFailure, SwitchPosition, TypedSettingValue, WriteRefusal,
+    application_window::window_close_behavior::{CLOSE_ACTION_CHOICES, CloseAction},
+    host_services::{
+        clamav_config::typed_setting_values::{
+            SettingParseFailure, SwitchPosition, TypedSettingValue, WriteRefusal,
+        },
+        desktop::stored_settings::SCAN_BACKEND_CHOICES,
     },
-    scans::scheduled_scans_page::scan_schedule_units::parse_schedule_time,
+    scans::scheduled_scans_page::{
+        scan_schedule_settings::FREQUENCY_CHOICES, scan_schedule_units::parse_schedule_time,
+    },
     translated_messages,
 };
 
@@ -27,30 +33,20 @@ pub enum PreferenceKey {
     ScheduleAutoQuarantine,
 }
 
-pub const PREFERENCE_KEYS: [PreferenceKey; 15] = [
-    PreferenceKey::CloseAction,
-    PreferenceKey::StartInBackground,
-    PreferenceKey::NotificationsEnabled,
-    PreferenceKey::ShowLiveProgress,
-    PreferenceKey::ScanBackend,
-    PreferenceKey::DeviceScanEnabled,
-    PreferenceKey::DeviceScanMaxGigabytes,
-    PreferenceKey::DeviceScanSkipOnBattery,
-    PreferenceKey::ScheduleEnabled,
-    PreferenceKey::ScheduleFrequency,
-    PreferenceKey::ScheduleTime,
-    PreferenceKey::ScheduleDayOfWeek,
-    PreferenceKey::ScheduleDayOfMonth,
-    PreferenceKey::ScheduleSkipOnBattery,
-    PreferenceKey::ScheduleAutoQuarantine,
-];
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PreferenceValueKind {
     SwitchPreference,
-    UnsignedCountPreference { minimum: u64, maximum: u64 },
-    SignedCountPreference { minimum: u64, maximum: u64 },
-    TextChoicePreference { stored_texts: &'static [&'static str] },
+    UnsignedCountPreference {
+        minimum: u64,
+        maximum: u64,
+    },
+    SignedCountPreference {
+        minimum: u64,
+        maximum: u64,
+    },
+    TextChoicePreference {
+        stored_texts: &'static [&'static str],
+    },
     NumberChoicePreference,
     ClockTimePreference,
 }
@@ -63,16 +59,25 @@ pub enum PreferenceWriteFailure {
     PreferenceNotWritable(#[from] glib::BoolError),
 }
 
-const CLOSE_ACTION_TEXTS: &[&str] = &["quit", "minimize", "ask"];
-const SCAN_BACKEND_TEXTS: &[&str] = &["auto", "clamd", "clamscan"];
-const SCHEDULE_FREQUENCY_TEXTS: &[&str] = &["hourly", "daily", "weekly", "monthly"];
+const CLOSE_ACTION_TEXTS: &[&str] = &[
+    CLOSE_ACTION_CHOICES[0].stored_text(),
+    CLOSE_ACTION_CHOICES[1].stored_text(),
+    CLOSE_ACTION_CHOICES[2].stored_text(),
+];
+const SCAN_BACKEND_TEXTS: &[&str] = &[
+    SCAN_BACKEND_CHOICES[0].stored_text(),
+    SCAN_BACKEND_CHOICES[1].stored_text(),
+    SCAN_BACKEND_CHOICES[2].stored_text(),
+];
+const SCHEDULE_FREQUENCY_TEXTS: &[&str] = &[
+    FREQUENCY_CHOICES[0].stored_text(),
+    FREQUENCY_CHOICES[1].stored_text(),
+    FREQUENCY_CHOICES[2].stored_text(),
+    FREQUENCY_CHOICES[3].stored_text(),
+];
 
 fn close_action_labels() -> Vec<String> {
-    vec![
-        translated_messages::window::quit_completely(),
-        translated_messages::window::hide_tray(),
-        translated_messages::window::ask_each_time(),
-    ]
+    CLOSE_ACTION_CHOICES.map(CloseAction::choice_label).to_vec()
 }
 
 fn scan_backend_labels() -> Vec<String> {
@@ -123,12 +128,6 @@ impl PreferenceKey {
             Self::ScheduleSkipOnBattery => "schedule-skip-on-battery",
             Self::ScheduleAutoQuarantine => "schedule-auto-quarantine",
         }
-    }
-
-    pub fn from_schema_key(schema_key: &str) -> Option<Self> {
-        PREFERENCE_KEYS
-            .into_iter()
-            .find(|preference_key| preference_key.schema_key() == schema_key)
     }
 
     const fn value_kind(self) -> PreferenceValueKind {
@@ -192,11 +191,11 @@ impl PreferenceKey {
 
     pub fn typed_value_of(self, stored_variant: &glib::Variant) -> Option<TypedSettingValue> {
         match self.value_kind() {
-            PreferenceValueKind::SwitchPreference => stored_variant
-                .get::<bool>()
-                .map(|switched_on| {
+            PreferenceValueKind::SwitchPreference => {
+                stored_variant.get::<bool>().map(|switched_on| {
                     TypedSettingValue::BooleanValue(SwitchPosition::from_switch_active(switched_on))
-                }),
+                })
+            }
             PreferenceValueKind::UnsignedCountPreference { minimum, maximum } => stored_variant
                 .get::<u32>()
                 .map(|stored_count| TypedSettingValue::CountValue {
@@ -231,22 +230,6 @@ impl PreferenceKey {
         }
     }
 
-    pub fn typed_value_of_json(self, declared_json: &serde_json::Value) -> Option<TypedSettingValue> {
-        let declared_variant = match self.value_kind() {
-            PreferenceValueKind::SwitchPreference => declared_json.as_bool()?.to_variant(),
-            PreferenceValueKind::UnsignedCountPreference { .. } => {
-                u32::try_from(declared_json.as_u64()?).ok()?.to_variant()
-            }
-            PreferenceValueKind::SignedCountPreference { .. }
-            | PreferenceValueKind::NumberChoicePreference => {
-                i32::try_from(declared_json.as_i64()?).ok()?.to_variant()
-            }
-            PreferenceValueKind::TextChoicePreference { .. }
-            | PreferenceValueKind::ClockTimePreference => declared_json.as_str()?.to_variant(),
-        };
-        self.typed_value_of(&declared_variant)
-    }
-
     pub fn variant_of(self, typed_value: &TypedSettingValue) -> Option<glib::Variant> {
         match (self.value_kind(), typed_value) {
             (
@@ -256,11 +239,15 @@ impl PreferenceKey {
             (
                 PreferenceValueKind::UnsignedCountPreference { .. },
                 TypedSettingValue::CountValue { count_value, .. },
-            ) => u32::try_from(*count_value).ok().map(|count| count.to_variant()),
+            ) => u32::try_from(*count_value)
+                .ok()
+                .map(|count| count.to_variant()),
             (
                 PreferenceValueKind::SignedCountPreference { .. },
                 TypedSettingValue::CountValue { count_value, .. },
-            ) => i32::try_from(*count_value).ok().map(|count| count.to_variant()),
+            ) => i32::try_from(*count_value)
+                .ok()
+                .map(|count| count.to_variant()),
             (
                 PreferenceValueKind::TextChoicePreference { stored_texts },
                 TypedSettingValue::ChoiceValue {
@@ -305,7 +292,9 @@ impl PreferenceKey {
             (_value_kind, _typed_value) => self
                 .variant_of(typed_value)
                 .map(|_stored_variant| ())
-                .ok_or(WriteRefusal::ValueNotParsed(SettingParseFailure::UnknownOption)),
+                .ok_or(WriteRefusal::ValueNotParsed(
+                    SettingParseFailure::UnknownOption,
+                )),
         }
     }
 
@@ -324,38 +313,11 @@ impl PreferenceKey {
         stored_settings.set_value(self.schema_key(), &stored_variant)?;
         Ok(())
     }
-
-    pub fn home_manager_line(self, typed_value: &TypedSettingValue) -> String {
-        let nix_value = self
-            .variant_of(typed_value)
-            .map(|stored_variant| {
-                stored_variant
-                    .str()
-                    .map(|stored_text| format!("\"{stored_text}\""))
-                    .or_else(|| stored_variant.get::<bool>().map(|switched_on| switched_on.to_string()))
-                    .unwrap_or_else(|| stored_variant.print(false).to_string())
-            })
-            .unwrap_or_default();
-        format!(
-            "services.lazaret.settings.\"{}\" = {nix_value};",
-            self.schema_key()
-        )
-    }
 }
 
 #[cfg(test)]
 mod preference_keys_tests {
     use super::*;
-
-    #[test]
-    fn every_preference_key_is_found_by_its_schema_name() {
-        PREFERENCE_KEYS.into_iter().for_each(|preference_key| {
-            assert_eq!(
-                PreferenceKey::from_schema_key(preference_key.schema_key()),
-                Some(preference_key)
-            );
-        });
-    }
 
     #[test]
     fn stored_values_round_trip_through_their_typed_value() {
@@ -383,9 +345,8 @@ mod preference_keys_tests {
     #[test]
     fn an_unreadable_clock_time_is_refused() {
         assert_eq!(
-            PreferenceKey::ScheduleTime.accepts_value(&TypedSettingValue::TextValue(
-                "25:00".to_owned()
-            )),
+            PreferenceKey::ScheduleTime
+                .accepts_value(&TypedSettingValue::TextValue("25:00".to_owned())),
             Err(WriteRefusal::ValueNotParsed(
                 SettingParseFailure::NotAClockTime
             ))
@@ -394,32 +355,6 @@ mod preference_keys_tests {
             PreferenceKey::ScheduleTime
                 .accepts_value(&TypedSettingValue::TextValue("02:15".to_owned())),
             Ok(())
-        );
-    }
-
-    #[test]
-    fn home_manager_declarations_read_like_stored_values() {
-        assert_eq!(
-            PreferenceKey::CloseAction.typed_value_of_json(&serde_json::json!("quit")),
-            PreferenceKey::CloseAction.typed_value_of(&"quit".to_variant())
-        );
-        assert_eq!(
-            PreferenceKey::NotificationsEnabled.typed_value_of_json(&serde_json::json!(true)),
-            Some(TypedSettingValue::BooleanValue(SwitchPosition::SwitchedOn))
-        );
-        assert_eq!(
-            PreferenceKey::CloseAction.home_manager_line(
-                &PreferenceKey::CloseAction
-                    .typed_value_of(&"quit".to_variant())
-                    .expect("quit is a close action")
-            ),
-            "services.lazaret.settings.\"close-action\" = \"quit\";"
-        );
-        assert_eq!(
-            PreferenceKey::NotificationsEnabled.home_manager_line(&TypedSettingValue::BooleanValue(
-                SwitchPosition::SwitchedOff
-            )),
-            "services.lazaret.settings.\"notifications-enabled\" = false;"
         );
     }
 }

@@ -52,23 +52,15 @@ pub fn listed_scan_targets(targets_text: &str) -> Vec<String> {
         .collect()
 }
 
+pub fn store_scan_targets(stored_settings: &gio::Settings, scan_targets: &[String]) {
+    let _read_only_settings = stored_settings.set_strv(
+        TARGETS_KEY,
+        scan_targets.iter().map(String::as_str).collect::<Vec<_>>(),
+    );
+}
+
 pub fn joined_scan_targets(scan_targets: &[String]) -> String {
     scan_targets.join(", ")
-}
-
-pub fn frequency_position(schedule_frequency: ScheduleFrequencyChoice) -> u32 {
-    FREQUENCY_CHOICES
-        .iter()
-        .position(|frequency_choice| *frequency_choice == schedule_frequency)
-        .and_then(|frequency_position| u32::try_from(frequency_position).ok())
-        .unwrap_or(1)
-}
-
-pub fn frequency_at(frequency_position: u32) -> Option<ScheduleFrequencyChoice> {
-    usize::try_from(frequency_position)
-        .ok()
-        .and_then(|frequency_position| FREQUENCY_CHOICES.get(frequency_position))
-        .copied()
 }
 
 impl StoredScheduleSettings {
@@ -89,30 +81,6 @@ impl StoredScheduleSettings {
             skip_on_battery: stored_settings.boolean(SKIP_ON_BATTERY_KEY),
             auto_quarantine: stored_settings.boolean(AUTO_QUARANTINE_KEY),
         }
-    }
-
-    pub fn write_to(&self, stored_settings: &gio::Settings) {
-        let _enabled_stored = stored_settings.set_boolean(ENABLED_KEY, self.schedule_enabled);
-        let _frequency_stored =
-            stored_settings.set_string(FREQUENCY_KEY, self.frequency_choice.stored_text());
-        let _time_stored = stored_settings.set_string(TIME_KEY, &self.schedule_time_text);
-        let _weekday_stored = stored_settings.set_int(
-            WEEKDAY_KEY,
-            i32::try_from(self.weekday_position).unwrap_or(0),
-        );
-        let _month_day_stored =
-            stored_settings.set_int(MONTH_DAY_KEY, i32::try_from(self.month_day).unwrap_or(1));
-        let _targets_stored = stored_settings.set_strv(
-            TARGETS_KEY,
-            self.scan_targets
-                .iter()
-                .map(String::as_str)
-                .collect::<Vec<_>>(),
-        );
-        let _battery_stored =
-            stored_settings.set_boolean(SKIP_ON_BATTERY_KEY, self.skip_on_battery);
-        let _quarantine_stored =
-            stored_settings.set_boolean(AUTO_QUARANTINE_KEY, self.auto_quarantine);
     }
 
     fn stored_weekday(&self) -> Weekday {
@@ -187,16 +155,15 @@ mod scan_schedule_settings_tests {
     }
 
     #[test]
-    fn frequency_positions_round_trip() {
+    fn frequency_texts_round_trip() {
         FREQUENCY_CHOICES
             .into_iter()
             .for_each(|schedule_frequency| {
                 assert_eq!(
-                    frequency_at(frequency_position(schedule_frequency)),
-                    Some(schedule_frequency)
+                    ScheduleFrequencyChoice::from_stored_text(schedule_frequency.stored_text()),
+                    schedule_frequency
                 );
             });
-        assert_eq!(frequency_at(9), None);
     }
 
     #[test]

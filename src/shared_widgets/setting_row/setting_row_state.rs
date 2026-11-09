@@ -32,10 +32,8 @@ impl RowChangeActivity {
 pub enum PreferenceSource {
     SchemaDefault,
     ChosenByYou,
-    DeclaredByHomeManager,
-    ChangedAfterHomeManager { declared_value: TypedSettingValue },
     AdministratorDefault,
-    LockedByAdministrator,
+    FixedByConfiguration,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -164,7 +162,7 @@ pub enum ChangeRoute {
     AsksAdministratorPassword,
     TakesEffectOnGroupApply,
     CopyLineForConfiguration(CopyOnlyReason),
-    LockedByAdministrator,
+    FixedByConfiguration,
     NeverChangedHere,
 }
 
@@ -172,7 +170,9 @@ impl ChangeRoute {
     pub const fn allows_editing(self) -> bool {
         matches!(
             self,
-            Self::ChangesImmediately | Self::AsksAdministratorPassword | Self::TakesEffectOnGroupApply
+            Self::ChangesImmediately
+                | Self::AsksAdministratorPassword
+                | Self::TakesEffectOnGroupApply
         )
     }
 }
@@ -195,17 +195,15 @@ pub struct SourceTexts {
 pub enum FollowUpAction {
     ResetToDefault,
     RevertRuntimeChange,
-    RestoreHomeManagerValue,
     CopyConfigurationLine,
-    CopyHomeManagerLine,
 }
 
 pub const fn change_route(setting_subject: &SettingSubject) -> ChangeRoute {
     match setting_subject {
         SettingSubject::Preference {
-            preference_source: PreferenceSource::LockedByAdministrator,
+            preference_source: PreferenceSource::FixedByConfiguration,
             ..
-        } => ChangeRoute::LockedByAdministrator,
+        } => ChangeRoute::FixedByConfiguration,
         SettingSubject::Preference {
             apply_stage: PreferenceApplyStage::AppliesImmediately,
             ..
@@ -298,10 +296,7 @@ fn override_source_texts(
     }
 }
 
-fn preference_source_texts(
-    preference_source: &PreferenceSource,
-    declared_value_text: impl FnOnce(&TypedSettingValue) -> String,
-) -> SourceTexts {
+fn preference_source_texts(preference_source: &PreferenceSource) -> SourceTexts {
     match preference_source {
         PreferenceSource::SchemaDefault => SourceTexts {
             short_tag: translated_messages::widgets::source_default_tag(),
@@ -313,26 +308,14 @@ fn preference_source_texts(
             explanation: String::new(),
             source_emphasis: SourceEmphasis::PlainSource,
         },
-        PreferenceSource::DeclaredByHomeManager => SourceTexts {
-            short_tag: translated_messages::widgets::source_home_manager_tag(),
-            explanation: translated_messages::widgets::source_home_manager_explanation(),
-            source_emphasis: SourceEmphasis::PlainSource,
-        },
-        PreferenceSource::ChangedAfterHomeManager { declared_value } => SourceTexts {
-            short_tag: translated_messages::widgets::source_changed_here_tag(),
-            explanation: translated_messages::widgets::source_home_manager_changed_explanation(
-                declared_value_text(declared_value),
-            ),
-            source_emphasis: SourceEmphasis::NeedsAttention,
-        },
         PreferenceSource::AdministratorDefault => SourceTexts {
             short_tag: translated_messages::widgets::source_administrator_default_tag(),
             explanation: translated_messages::widgets::source_administrator_default_explanation(),
             source_emphasis: SourceEmphasis::PlainSource,
         },
-        PreferenceSource::LockedByAdministrator => SourceTexts {
-            short_tag: translated_messages::widgets::source_locked_tag(),
-            explanation: translated_messages::widgets::source_locked_explanation(),
+        PreferenceSource::FixedByConfiguration => SourceTexts {
+            short_tag: translated_messages::widgets::source_fixed_tag(),
+            explanation: translated_messages::widgets::source_fixed_explanation(),
             source_emphasis: SourceEmphasis::FixedValue,
         },
     }
@@ -361,14 +344,14 @@ pub fn source_texts(setting_subject: &SettingSubject) -> SourceTexts {
             apply_stage: PreferenceApplyStage::WaitsForGroupApply,
             preference_source,
             ..
-        } if *preference_source != PreferenceSource::LockedByAdministrator => SourceTexts {
+        } if *preference_source != PreferenceSource::FixedByConfiguration => SourceTexts {
             short_tag: translated_messages::widgets::source_not_applied_tag(),
             explanation: translated_messages::widgets::source_not_applied_explanation(),
             source_emphasis: SourceEmphasis::NeedsAttention,
         },
         SettingSubject::Preference {
             preference_source, ..
-        } => preference_source_texts(preference_source, shown_value_text),
+        } => preference_source_texts(preference_source),
         SettingSubject::ClamavSetting { clamav_source, .. } => match clamav_source {
             ClamavSource::RootOwnedFile {
                 config_file,
@@ -392,7 +375,7 @@ pub fn source_texts(setting_subject: &SettingSubject) -> SourceTexts {
 pub fn route_explanation(route: ChangeRoute) -> String {
     match route {
         ChangeRoute::ChangesImmediately
-        | ChangeRoute::LockedByAdministrator
+        | ChangeRoute::FixedByConfiguration
         | ChangeRoute::NeverChangedHere => String::new(),
         ChangeRoute::AsksAdministratorPassword => {
             translated_messages::widgets::route_administrator_password_explanation()
@@ -421,14 +404,9 @@ pub fn follow_up_actions(
             preference_source, ..
         } => match preference_source {
             PreferenceSource::ChosenByYou => vec![FollowUpAction::ResetToDefault],
-            PreferenceSource::ChangedAfterHomeManager { .. } => vec![
-                FollowUpAction::RestoreHomeManagerValue,
-                FollowUpAction::CopyHomeManagerLine,
-            ],
             PreferenceSource::SchemaDefault
-            | PreferenceSource::DeclaredByHomeManager
             | PreferenceSource::AdministratorDefault
-            | PreferenceSource::LockedByAdministrator => Vec::new(),
+            | PreferenceSource::FixedByConfiguration => Vec::new(),
         },
         SettingSubject::ClamavSetting { clamav_source, .. } => match (clamav_source, shown_value) {
             (ClamavSource::SetViaAdminService { .. }, _shown_value) => vec![
@@ -608,7 +586,7 @@ mod setting_row_state_tests {
     }
 
     #[test]
-    fn protected_settings_and_administrator_locks_are_fixed() {
+    fn protected_settings_and_configured_preferences_are_fixed() {
         let protected_subject = clamav_subject(ClamavSource::ProtectedSetting {
             config_file: nixos_file(),
         });
@@ -618,12 +596,12 @@ mod setting_row_state_tests {
         );
         assert!(follow_up_actions(&protected_subject, &switch_value()).is_empty());
         let locked_subject = preference_subject(
-            PreferenceSource::LockedByAdministrator,
+            PreferenceSource::FixedByConfiguration,
             PreferenceApplyStage::WaitsForGroupApply,
         );
         assert_eq!(
             change_route(&locked_subject),
-            ChangeRoute::LockedByAdministrator
+            ChangeRoute::FixedByConfiguration
         );
         assert_eq!(
             source_texts(&locked_subject).source_emphasis,
@@ -645,7 +623,6 @@ mod setting_row_state_tests {
         );
         [
             PreferenceSource::SchemaDefault,
-            PreferenceSource::DeclaredByHomeManager,
             PreferenceSource::AdministratorDefault,
         ]
         .into_iter()
@@ -655,24 +632,6 @@ mod setting_row_state_tests {
             assert!(follow_up_actions(&quiet_subject, &switch_value()).is_empty());
             assert!(!row_needs_attention(&quiet_subject));
         });
-    }
-
-    #[test]
-    fn a_value_changed_after_home_manager_can_be_restored() {
-        let drifted_subject = preference_subject(
-            PreferenceSource::ChangedAfterHomeManager {
-                declared_value: TypedSettingValue::BooleanValue(SwitchPosition::SwitchedOff),
-            },
-            PreferenceApplyStage::AppliesImmediately,
-        );
-        assert!(row_needs_attention(&drifted_subject));
-        assert_eq!(
-            follow_up_actions(&drifted_subject, &switch_value()),
-            vec![
-                FollowUpAction::RestoreHomeManagerValue,
-                FollowUpAction::CopyHomeManagerLine
-            ]
-        );
     }
 
     #[test]

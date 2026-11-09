@@ -179,6 +179,7 @@ let
     ];
   };
 in
+assert !(homeManagerEvaluation.config.dconf.settings ? "page/codeberg/wvhulle/Lazaret");
 assert failedAssertions [ "OnAccessMaxFileSize" ] == [ ];
 assert refusedByOptionType [ "VirusEvent" ];
 assert refusedByOptionType [ "User" ];
@@ -217,6 +218,31 @@ assert
   } == [ ];
 assert urlhausSecretWarnings { owner = "wvhulle"; } == [ ];
 {
+  home-manager-declared-settings =
+    pkgs.runCommand "lazaret-home-manager-declared-settings"
+      {
+        nativeBuildInputs = [ (pkgs.lib.getBin pkgs.glib) ];
+        declaredSettingsDatabase = homeManagerEvaluation.config.services.lazaret.declaredSettingsDatabase;
+        schemaDirectory = "${
+          self.packages.${pkgs.stdenv.hostPlatform.system}.default
+        }/share/gsettings-schemas/lazaret-${
+          self.packages.${pkgs.stdenv.hostPlatform.system}.default.version
+        }/glib-2.0/schemas";
+        GIO_EXTRA_MODULES = "${pkgs.dconf.lib}/lib/gio/modules";
+        GSETTINGS_BACKEND = "dconf";
+      }
+      ''
+        export HOME=$(pwd) XDG_CONFIG_HOME=$(pwd)/config XDG_RUNTIME_DIR=$(pwd)/runtime
+        mkdir -p "$XDG_CONFIG_HOME" "$XDG_RUNTIME_DIR"
+        printf 'user-db:user\nfile-db:%s\n' "$declaredSettingsDatabase" > profile
+        export DCONF_PROFILE=$(pwd)/profile GSETTINGS_SCHEMA_DIR=$schemaDirectory
+        settingValue() { gsettings "$1" page.codeberg.wvhulle.Lazaret "$2"; }
+        [ "$(settingValue get close-action)" = "'minimize'" ] || { settingValue get close-action; exit 1; }
+        [ "$(settingValue writable close-action)" = "false" ] || { echo "close-action is writable"; exit 1; }
+        [ "$(settingValue writable abuse-ch-key-file)" = "false" ] || { echo "abuse-ch-key-file is writable"; exit 1; }
+        [ "$(settingValue writable notifications-enabled)" = "true" ] || { echo "an undeclared key is locked"; exit 1; }
+        touch $out
+      '';
   nixos-background-service = backgroundServiceSystem.config.systemd.user.units."lazaret.service".unit;
   home-manager-background-service = pkgs.writeText "lazaret-home-manager-service.json" (
     builtins.toJSON {

@@ -188,13 +188,12 @@ impl TypedSettingValue {
             }
             (Self::PathValue(_), DraftEdit::TextSet(draft_text)) => Self::PathValue(draft_text),
             (Self::TextValue(_), DraftEdit::TextSet(draft_text)) => Self::TextValue(draft_text),
-            (
-                Self::ChoiceValue { choice_labels, .. },
-                DraftEdit::ChoiceSet(chosen_position),
-            ) => Self::ChoiceValue {
-                chosen_position,
-                choice_labels,
-            },
+            (Self::ChoiceValue { choice_labels, .. }, DraftEdit::ChoiceSet(chosen_position)) => {
+                Self::ChoiceValue {
+                    chosen_position,
+                    choice_labels,
+                }
+            }
             (
                 unchanged_draft @ Self::BooleanValue(_),
                 DraftEdit::NumberSet(_)

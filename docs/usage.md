@@ -48,7 +48,17 @@ After a scan, the results show how many files were scanned out of how many were 
 
 <img src="https://codeberg.org/wvhulle/lazaret/raw/branch/screenshots/scan-engine.webp" width="800" alt="Recording of the Scan Engine page with the clamd status and the detection options">
 
-Every scan sends its files to clamd. Scan Engine shows whether clamd is running, which signature version it has loaded and which socket it listens on, and whether the scanner programs Lazaret runs can be trusted. Its detection options choose whether ClamAV reports potentially unwanted programs, heuristic findings, Office macros, encrypted archives and files too large to check, and whether it looks inside archives. Scans that run without clamd follow the same choices. Where your install allows it, you can change clamd settings here after entering your administrator password; see live tuning in your install guide. The page also lists the engine settings changed through Lazaret, as the system recorded them, and the clamd log.
+Every scan sends its files to clamd. Scan Engine shows whether clamd is running, which signature version it has loaded and which socket it listens on, and whether the scanner programs Lazaret runs can be trusted. Its detection options choose whether ClamAV reports potentially unwanted programs, heuristic findings, Office macros, encrypted archives and files too large to check, and whether it looks inside archives. Scans that run without clamd follow the same choices. Where your install allows it, you can change a clamd setting right in its row: Lazaret shows what will change, asks for your administrator password and restarts clamd; see live tuning in your install guide. The page also lists the engine settings changed through Lazaret, as the system recorded them, and the clamd log.
+
+### Where a setting comes from
+
+Every setting row says where its value comes from, under its title: your own choice, the default, your NixOS or Home Manager configuration, a configuration file such as `clamd.conf`, or your administrator. Open a row to read what that means and what you can do with it. A row whose value needs your attention opens by itself and carries a warning icon:
+
+- **Changed here**: the value was applied at runtime through Lazaret, but your system configuration doesn't have it yet. **Revert** goes back to the configuration; **Copy Configuration Line** gives you the line to add so the change lasts.
+- **Reduced until**: the change checks less than your configuration does, so it ends on its own at the time shown.
+- **Not applied yet**: a scheduled-scan setting is saved, but the timer still uses the old value until you choose **Apply**.
+
+A lock icon means the value can't change here: your NixOS or Home Manager configuration sets it (**Set in your configuration**), or it's a ClamAV setting that runs commands or changes who ClamAV runs as. A setting that your system doesn't let Lazaret change at runtime offers only **Copy Configuration Line**.
 
 ## On-Access Scanning
 

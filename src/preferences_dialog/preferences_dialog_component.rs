@@ -1,19 +1,16 @@
 use relm4::{
     Component, ComponentParts, ComponentSender, adw,
     adw::prelude::*,
-    gtk,
-    gtk::{gio, gio::prelude::SettingsExtManual},
     prelude::{ComponentController, Controller, FactoryVecDeque},
 };
 
 use crate::{
-    application_window::window_close_behavior::{CLOSE_ACTION_CHOICES, CloseAction},
     host_services::{
+        clamav_config::typed_setting_values::TypedSettingValue,
         desktop::{
             file_manager_actions::SUPPORTED_FILE_MANAGERS,
             flatpak_sandbox::{request_background_autostart, running_in_flatpak},
-            stored_settings::{CLOSE_ACTION_KEY, application_settings},
-            stored_settings_watch::forward_setting_changes,
+            preference_keys::PreferenceKey,
         },
         threat_intel::service_key_storage::ThreatIntelService,
     },
@@ -21,34 +18,17 @@ use crate::{
         file_manager_row::FileManagerRow,
         service_key_section::{ServiceKeySection, ServiceKeySectionOutput},
     },
+    shared_widgets::setting_row::preference_rows_group::{
+        PreferenceApplyMode, PreferenceRowSpec, PreferenceRowsGroup, PreferenceRowsInit,
+        PreferenceRowsOutput,
+    },
     translated_messages,
 };
 
 pub const ONLINE_SERVICES_PAGE_NAME: &str = "online-services";
 
-const START_IN_BACKGROUND_KEY: &str = "start-in-background";
-const NOTIFICATIONS_ENABLED_KEY: &str = "notifications-enabled";
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct WindowBehaviorSettings {
-    close_action: CloseAction,
-    start_in_background: bool,
-    notifications_enabled: bool,
-}
-
-impl WindowBehaviorSettings {
-    fn read_from(stored_settings: &gio::Settings) -> Self {
-        Self {
-            close_action: CloseAction::read_from(stored_settings),
-            start_in_background: stored_settings.boolean(START_IN_BACKGROUND_KEY),
-            notifications_enabled: stored_settings.boolean(NOTIFICATIONS_ENABLED_KEY),
-        }
-    }
-}
-
 pub struct PreferencesDialog {
-    stored_settings: gio::Settings,
-    window_behavior: WindowBehaviorSettings,
+    window_behavior_rows: Controller<PreferenceRowsGroup>,
     file_manager_rows: FactoryVecDeque<FileManagerRow>,
     abuse_ch_section: Controller<ServiceKeySection>,
     virustotal_section: Controller<ServiceKeySection>,
@@ -56,10 +36,10 @@ pub struct PreferencesDialog {
 
 #[derive(Debug)]
 pub enum PreferencesDialogInput {
-    CloseActionChosen(u32),
-    StartInBackgroundToggled(bool),
-    NotificationsToggled(bool),
-    StoredSettingChanged,
+    PreferenceStored {
+        preference_key: PreferenceKey,
+        stored_value: TypedSettingValue,
+    },
     StoredServiceKeyChanged,
 }
 
@@ -83,9 +63,40 @@ pub enum PreferencesDialogCommand {
     AutostartRequestFinished(zbus::Result<()>),
 }
 
-fn close_action_labels() -> gtk::StringList {
-    let close_labels = CLOSE_ACTION_CHOICES.map(CloseAction::choice_label);
-    gtk::StringList::new(&close_labels.iter().map(String::as_str).collect::<Vec<_>>())
+fn dialog_input_for_preference_output(
+    preference_output: PreferenceRowsOutput,
+) -> PreferencesDialogInput {
+    match preference_output {
+        PreferenceRowsOutput::PreferenceStored {
+            preference_key,
+            stored_value,
+        } => PreferencesDialogInput::PreferenceStored {
+            preference_key,
+            stored_value,
+        },
+    }
+}
+
+fn window_behavior_row_specs() -> Vec<PreferenceRowSpec> {
+    vec![
+        PreferenceRowSpec {
+            preference_key: PreferenceKey::CloseAction,
+            setting_title: translated_messages::preferences::closing_window_title(),
+            setting_description: String::new(),
+        },
+        PreferenceRowSpec {
+            preference_key: PreferenceKey::StartInBackground,
+            setting_title: translated_messages::preferences::start_background_title(),
+            setting_description:
+                translated_messages::preferences::launch_background_without_subtitle(),
+        },
+        PreferenceRowSpec {
+            preference_key: PreferenceKey::NotificationsEnabled,
+            setting_title: translated_messages::preferences::desktop_notifications_title(),
+            setting_description:
+                translated_messages::preferences::notify_detections_finished_subtitle(),
+        },
+    ]
 }
 
 #[relm4::component(pub)]
@@ -104,42 +115,10 @@ impl Component for PreferencesDialog {
                 set_title: &translated_messages::preferences::general_title(),
                 set_icon_name: Some("preferences-system-symbolic"),
 
-                adw::PreferencesGroup {
+                #[local_ref]
+                window_behavior_group -> adw::PreferencesGroup {
                     set_title: &translated_messages::preferences::window_behavior_title(),
                     set_description: Some(&translated_messages::preferences::detection_alerts_work_description()),
-
-                    adw::ComboRow {
-                        set_title: &translated_messages::preferences::closing_window_title(),
-                        set_model: Some(&close_action_labels()),
-                        #[watch]
-                        #[block_signal(close_action_handler)]
-                        set_selected: model.window_behavior.close_action.choice_position(),
-                        connect_selected_notify[sender] => move |changed_row| {
-                            sender.input(PreferencesDialogInput::CloseActionChosen(changed_row.selected()));
-                        } @close_action_handler,
-                    },
-
-                    adw::SwitchRow {
-                        set_title: &translated_messages::preferences::start_background_title(),
-                        set_subtitle: &translated_messages::preferences::launch_background_without_subtitle(),
-                        #[watch]
-                        #[block_signal(start_in_background_handler)]
-                        set_active: model.window_behavior.start_in_background,
-                        connect_active_notify[sender] => move |changed_row| {
-                            sender.input(PreferencesDialogInput::StartInBackgroundToggled(changed_row.is_active()));
-                        } @start_in_background_handler,
-                    },
-
-                    adw::SwitchRow {
-                        set_title: &translated_messages::preferences::desktop_notifications_title(),
-                        set_subtitle: &translated_messages::preferences::notify_detections_finished_subtitle(),
-                        #[watch]
-                        #[block_signal(notifications_handler)]
-                        set_active: model.window_behavior.notifications_enabled,
-                        connect_active_notify[sender] => move |changed_row| {
-                            sender.input(PreferencesDialogInput::NotificationsToggled(changed_row.is_active()));
-                        } @notifications_handler,
-                    },
                 },
 
                 #[local_ref]
@@ -181,17 +160,6 @@ impl Component for PreferencesDialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let stored_settings = application_settings();
-        forward_setting_changes(
-            &stored_settings,
-            &[
-                CLOSE_ACTION_KEY,
-                START_IN_BACKGROUND_KEY,
-                NOTIFICATIONS_ENABLED_KEY,
-            ],
-            sender.input_sender(),
-            |_changed_settings, _changed_key| PreferencesDialogInput::StoredSettingChanged,
-        );
         let mut file_manager_rows = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
             .detach();
@@ -204,8 +172,12 @@ impl Component for PreferencesDialog {
                 });
         }
         let model = Self {
-            window_behavior: WindowBehaviorSettings::read_from(&stored_settings),
-            stored_settings,
+            window_behavior_rows: PreferenceRowsGroup::builder()
+                .launch(PreferenceRowsInit {
+                    row_specs: window_behavior_row_specs(),
+                    apply_mode: PreferenceApplyMode::AppliesImmediately,
+                })
+                .forward(sender.input_sender(), dialog_input_for_preference_output),
             file_manager_rows,
             abuse_ch_section: ServiceKeySection::builder()
                 .launch(ThreatIntelService::AbuseChService)
@@ -214,6 +186,7 @@ impl Component for PreferencesDialog {
                 .launch(ThreatIntelService::VirusTotalService)
                 .forward(sender.input_sender(), dialog_input_for_key_output),
         };
+        let window_behavior_group = model.window_behavior_rows.widget();
         let file_manager_group = model.file_manager_rows.widget();
         let abuse_ch_group = model.abuse_ch_section.widget();
         let virustotal_group = model.virustotal_section.widget();
@@ -228,18 +201,12 @@ impl Component for PreferencesDialog {
         _root: &Self::Root,
     ) {
         match dialog_input {
-            PreferencesDialogInput::CloseActionChosen(choice_position) => {
-                if let Some(close_action) = CloseAction::from_choice_position(choice_position) {
-                    self.window_behavior.close_action = close_action;
-                    close_action.store_into(&self.stored_settings);
-                }
-            }
-            PreferencesDialogInput::StartInBackgroundToggled(start_in_background) => {
-                self.window_behavior.start_in_background = start_in_background;
-                let _read_only_settings = self
-                    .stored_settings
-                    .set(START_IN_BACKGROUND_KEY, start_in_background);
+            PreferencesDialogInput::PreferenceStored {
+                preference_key: PreferenceKey::StartInBackground,
+                stored_value: TypedSettingValue::BooleanValue(switch_position),
+            } => {
                 if running_in_flatpak() {
+                    let start_in_background = switch_position.is_switched_on();
                     sender.oneshot_command(async move {
                         PreferencesDialogCommand::AutostartRequestFinished(
                             request_background_autostart(start_in_background).await,
@@ -247,15 +214,7 @@ impl Component for PreferencesDialog {
                     });
                 }
             }
-            PreferencesDialogInput::NotificationsToggled(notifications_enabled) => {
-                self.window_behavior.notifications_enabled = notifications_enabled;
-                let _read_only_settings = self
-                    .stored_settings
-                    .set(NOTIFICATIONS_ENABLED_KEY, notifications_enabled);
-            }
-            PreferencesDialogInput::StoredSettingChanged => {
-                self.window_behavior = WindowBehaviorSettings::read_from(&self.stored_settings);
-            }
+            PreferencesDialogInput::PreferenceStored { .. } => {}
             PreferencesDialogInput::StoredServiceKeyChanged => {
                 let _shell_closed = sender.output(PreferencesDialogOutput::StoredServiceKeyChanged);
             }

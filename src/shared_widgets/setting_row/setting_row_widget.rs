@@ -10,15 +10,15 @@ use relm4::{
 use crate::{
     host_services::{
         clamav_config::typed_setting_values::{
-            SIZE_UNITS, SizeUnit, SwitchPosition, TypedSettingValue, DraftEdit,
+            DraftEdit, SIZE_UNITS, SizeUnit, SwitchPosition, TypedSettingValue,
         },
         desktop::locale_formatting::byte_size_text,
     },
     shared_widgets::setting_row::setting_row_state::{
         ChangeRoute, FollowUpAction, RowChangeActivity, SettingLabel, SettingRowState,
-        SettingSubject, ShownSettingValue, SourceEmphasis, change_route, draft_refusal,
-        follow_up_actions, route_explanation, row_needs_attention, shown_value_text,
-        source_texts, describe_parse_failure,
+        SettingSubject, ShownSettingValue, SourceEmphasis, change_route, describe_parse_failure,
+        draft_refusal, follow_up_actions, route_explanation, row_needs_attention, shown_value_text,
+        source_texts,
     },
     translated_messages,
 };
@@ -201,7 +201,7 @@ const fn editor_apply_timing(setting_route: ChangeRoute) -> EditorApplyTiming {
         ChangeRoute::ChangesImmediately
         | ChangeRoute::TakesEffectOnGroupApply
         | ChangeRoute::CopyLineForConfiguration(_)
-        | ChangeRoute::LockedByAdministrator
+        | ChangeRoute::FixedByConfiguration
         | ChangeRoute::NeverChangedHere => EditorApplyTiming::AppliedOnEveryEdit,
     }
 }
@@ -210,23 +210,14 @@ fn follow_up_label(follow_up_action: FollowUpAction) -> String {
     match follow_up_action {
         FollowUpAction::ResetToDefault => translated_messages::widgets::reset_default_button(),
         FollowUpAction::RevertRuntimeChange => translated_messages::widgets::revert_change_button(),
-        FollowUpAction::RestoreHomeManagerValue => {
-            translated_messages::widgets::restore_home_manager_button()
-        }
         FollowUpAction::CopyConfigurationLine => {
             translated_messages::widgets::copy_configuration_line_button()
-        }
-        FollowUpAction::CopyHomeManagerLine => {
-            translated_messages::widgets::copy_home_manager_line_button()
         }
     }
 }
 
 const fn follow_up_is_primary(follow_up_action: FollowUpAction) -> bool {
-    matches!(
-        follow_up_action,
-        FollowUpAction::RevertRuntimeChange | FollowUpAction::RestoreHomeManagerValue
-    )
+    matches!(follow_up_action, FollowUpAction::RevertRuntimeChange)
 }
 
 fn apply_button() -> gtk::Button {
@@ -245,15 +236,22 @@ fn labelled_for_assistive_technology(editor_widget: &impl IsA<gtk::Widget>, edit
 }
 
 fn spin_entered_input(spin_button: &gtk::SpinButton) -> SettingRowInput {
-    whole_number_in_text(spin_button.text().trim()).map_or(
-        SettingRowInput::ApplyRequested,
-        |entered_count| SettingRowInput::DraftEditedAndApplied(DraftEdit::NumberSet(entered_count)),
-    )
+    whole_number_in_text(spin_button.text().trim())
+        .map_or(SettingRowInput::ApplyRequested, |entered_count| {
+            SettingRowInput::DraftEditedAndApplied(DraftEdit::NumberSet(entered_count))
+        })
 }
 
 fn count_spin_button(minimum: f64, maximum: f64, shown_count: f64) -> gtk::SpinButton {
     let spin_button = gtk::SpinButton::new(
-        Some(&gtk::Adjustment::new(shown_count, minimum, maximum, 1.0, 10.0, 0.0)),
+        Some(&gtk::Adjustment::new(
+            shown_count,
+            minimum,
+            maximum,
+            1.0,
+            10.0,
+            0.0,
+        )),
         1.0,
         0,
     );
@@ -328,9 +326,11 @@ fn build_suffix_editor(
             labelled_for_assistive_technology(&value_switch, editor_label);
             let toggle_sender = sender.clone();
             let toggle_handler = value_switch.connect_active_notify(move |toggled_switch| {
-                toggle_sender.input(SettingRowInput::DraftEditedAndApplied(DraftEdit::SwitchSet(
-                    SwitchPosition::from_switch_active(toggled_switch.is_active()),
-                )));
+                toggle_sender.input(SettingRowInput::DraftEditedAndApplied(
+                    DraftEdit::SwitchSet(SwitchPosition::from_switch_active(
+                        toggled_switch.is_active(),
+                    )),
+                ));
             });
             editor_box.append(&value_switch);
             SuffixEditor::SwitchEditor {
@@ -436,9 +436,9 @@ fn build_suffix_editor(
             labelled_for_assistive_technology(&choice_dropdown, editor_label);
             let choice_sender = sender.clone();
             let choice_handler = choice_dropdown.connect_selected_notify(move |chosen_dropdown| {
-                choice_sender.input(SettingRowInput::DraftEditedAndApplied(DraftEdit::ChoiceSet(
-                    chosen_dropdown.selected(),
-                )));
+                choice_sender.input(SettingRowInput::DraftEditedAndApplied(
+                    DraftEdit::ChoiceSet(chosen_dropdown.selected()),
+                ));
             });
             editor_box.append(&choice_dropdown);
             SuffixEditor::ChoiceEditor {
@@ -531,7 +531,11 @@ impl SettingRow {
         }
     }
 
-    fn rebuild_follow_up_buttons(&self, widgets: &mut SettingRowWidgets, sender: &FactorySender<Self>) {
+    fn rebuild_follow_up_buttons(
+        &self,
+        widgets: &mut SettingRowWidgets,
+        sender: &FactorySender<Self>,
+    ) {
         let follow_ups =
             follow_up_actions(&self.row_state.setting_subject, &self.row_state.shown_value);
         while let Some(old_button) = widgets.action_box.first_child() {
@@ -580,8 +584,8 @@ impl SettingRow {
     }
 
     fn show_draft_in_editor(&self, widgets: &SettingRowWidgets) {
-        let explicit_apply = editor_apply_timing(self.setting_route())
-            == EditorApplyTiming::AppliedOnRequest;
+        let explicit_apply =
+            editor_apply_timing(self.setting_route()) == EditorApplyTiming::AppliedOnRequest;
         match &widgets.suffix_editor {
             SuffixEditor::ValueLabel(value_label) => {
                 value_label.set_label(&read_only_value_text(&self.row_state.shown_value));

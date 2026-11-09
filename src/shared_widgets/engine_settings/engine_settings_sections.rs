@@ -459,7 +459,10 @@ fn replace_row_states(
             .all(|(row_position, row_state)| {
                 row_factory.get(row_position).is_some_and(|setting_row| {
                     setting_row.row_state().setting_label == row_state.setting_label
-                        && setting_row.row_state().setting_subject.same_setting_as(&row_state.setting_subject)
+                        && setting_row
+                            .row_state()
+                            .setting_subject
+                            .same_setting_as(&row_state.setting_subject)
                 })
             });
     if same_rows {
@@ -467,7 +470,10 @@ fn replace_row_states(
             .into_iter()
             .enumerate()
             .for_each(|(row_position, row_state)| {
-                row_factory.send(row_position, SettingRowInput::StateReplaced(Box::new(row_state)));
+                row_factory.send(
+                    row_position,
+                    SettingRowInput::StateReplaced(Box::new(row_state)),
+                );
             });
         return;
     }
@@ -878,12 +884,7 @@ impl EngineSettingsSections {
                     self.open_copy_dialog(setting_address, editor_draft, sender, root);
                 }
             }
-            (
-                FollowUpAction::ResetToDefault
-                | FollowUpAction::RestoreHomeManagerValue
-                | FollowUpAction::CopyHomeManagerLine,
-                _clamav_source,
-            ) => {}
+            (FollowUpAction::ResetToDefault, _clamav_source) => {}
         }
     }
 }

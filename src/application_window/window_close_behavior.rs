@@ -44,21 +44,6 @@ impl CloseAction {
         }
     }
 
-    pub const fn choice_position(self) -> u32 {
-        match self {
-            Self::QuitCompletely => 0,
-            Self::HideToTray => 1,
-            Self::AskOnNextClose => 2,
-        }
-    }
-
-    pub fn from_choice_position(choice_position: u32) -> Option<Self> {
-        usize::try_from(choice_position)
-            .ok()
-            .and_then(|choice_index| CLOSE_ACTION_CHOICES.get(choice_index))
-            .copied()
-    }
-
     fn from_stored_text(stored_text: &str) -> Option<Self> {
         CLOSE_ACTION_CHOICES
             .into_iter()
@@ -142,16 +127,6 @@ mod close_action_tests {
     use crate::shared_widgets::awaited_dialogs::alert_choice_for_response;
 
     #[test]
-    fn every_close_action_sits_at_its_own_choice_position() {
-        CLOSE_ACTION_CHOICES.into_iter().for_each(|close_action| {
-            assert_eq!(
-                CloseAction::from_choice_position(close_action.choice_position()),
-                Some(close_action)
-            );
-        });
-    }
-
-    #[test]
     fn every_close_action_reads_back_from_its_stored_text() {
         CLOSE_ACTION_CHOICES.into_iter().for_each(|close_action| {
             assert_eq!(
@@ -159,14 +134,6 @@ mod close_action_tests {
                 Some(close_action)
             );
         });
-    }
-
-    #[test]
-    fn positions_past_the_choices_name_no_close_action() {
-        assert_eq!(
-            CloseAction::from_choice_position(relm4::gtk::INVALID_LIST_POSITION),
-            None
-        );
     }
 
     #[test]

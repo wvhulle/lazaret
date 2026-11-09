@@ -105,29 +105,10 @@ impl ScannerBackendPreference {
         }
     }
 
-    pub const fn choice_position(self) -> u32 {
-        match self {
-            Self::PreferClamdWhenAvailable => 0,
-            Self::AlwaysClamd => 1,
-            Self::AlwaysClamscan => 2,
-        }
-    }
-
-    pub fn from_choice_position(choice_position: u32) -> Option<Self> {
-        usize::try_from(choice_position)
-            .ok()
-            .and_then(|choice_index| SCAN_BACKEND_CHOICES.get(choice_index))
-            .copied()
-    }
-
     fn from_stored_text(stored_text: &str) -> Option<Self> {
         SCAN_BACKEND_CHOICES
             .into_iter()
             .find(|backend_choice| backend_choice.stored_text() == stored_text)
-    }
-
-    pub fn store_into(self, settings: &gio::Settings) {
-        let _read_only_settings = settings.set_string(SCAN_BACKEND_KEY, self.stored_text());
     }
 }
 
@@ -141,12 +122,8 @@ mod scan_backend_choice_tests {
     use super::*;
 
     #[test]
-    fn every_scan_backend_sits_at_its_own_choice_position() {
+    fn every_scan_backend_reads_back_from_its_stored_text() {
         SCAN_BACKEND_CHOICES.into_iter().for_each(|backend_choice| {
-            assert_eq!(
-                ScannerBackendPreference::from_choice_position(backend_choice.choice_position()),
-                Some(backend_choice)
-            );
             assert_eq!(
                 ScannerBackendPreference::from_stored_text(backend_choice.stored_text()),
                 Some(backend_choice)

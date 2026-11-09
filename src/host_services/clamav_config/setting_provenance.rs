@@ -408,9 +408,7 @@ mod setting_provenance_tests {
                 RuntimeTuningState::TuningMissing(CopyOnlyReason::AdminServiceNotInstalled)
             ),
             ClamavSource::RootOwnedFile {
-                runtime_route: RuntimeRoute::CopyLineOnly(
-                    CopyOnlyReason::AdminServiceNotInstalled
-                ),
+                runtime_route: RuntimeRoute::CopyLineOnly(CopyOnlyReason::AdminServiceNotInstalled),
                 ..
             }
         ));

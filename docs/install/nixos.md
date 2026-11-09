@@ -41,7 +41,7 @@ The flake uses the binary cache `wvhulle.cachix.org`. Accept its settings when N
 Choose one module:
 
 - `lazaret.nixosModules.default` installs Lazaret for every user and is required for live tuning and system-wide key files.
-- `lazaret.homeManagerModules.default` installs it for one user, from your Home Manager configuration. It also accepts `services.lazaret.settings`, which writes preferences through dconf:
+- `lazaret.homeManagerModules.default` installs it for one user, from your Home Manager configuration. It also accepts `services.lazaret.settings`, which fixes preferences from your configuration:
 
   ```nix
   services.lazaret = {
@@ -53,7 +53,7 @@ Choose one module:
   };
   ```
 
-  Activation applies these values again, so a change made in the app lasts only until the next switch.
+  The module compiles these values, and the key files from `apiKeyFiles`, into a read-only dconf database in the Nix store and locks them. Lazaret starts through a wrapper that adds this database in front of your system's dconf layers, so the app shows these settings as set in your configuration and doesn't let you change them there. Nothing is written to your own dconf database.
 
 Enable Lazaret in only one of them.
 

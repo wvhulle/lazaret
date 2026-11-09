@@ -1,38 +1,55 @@
 use relm4::{
-    Component, ComponentParts, ComponentSender, adw,
-    adw::prelude::*,
-    gtk,
-    gtk::{gio, gio::prelude::SettingsExtManual},
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, adw,
+    adw::prelude::*, gtk::gio,
 };
 
 use crate::{
     host_services::desktop::{
-        stored_settings::application_settings, stored_settings_watch::forward_setting_changes,
+        preference_keys::PreferenceKey, stored_settings::application_settings,
+        stored_settings_watch::forward_setting_changes,
     },
     scans::removable_drives_page::drive_mount_checks::{
-        DEVICE_SCAN_ENABLED_KEY, DEVICE_SCAN_MAX_GIGABYTES_KEY, DEVICE_SCAN_SETTING_KEYS,
-        DEVICE_SCAN_SKIP_BATTERY_KEY, DeviceAutoScanSettings,
+        DEVICE_SCAN_SETTING_KEYS, DeviceAutoScanSettings,
     },
-    shared_widgets::listed_spin_row::listed_spin_row,
+    shared_widgets::setting_row::preference_rows_group::{
+        PreferenceApplyMode, PreferenceRowSpec, PreferenceRowsGroup, PreferenceRowsInit,
+    },
     translated_messages,
 };
 
 pub struct DeviceAutoScanSection {
     stored_settings: gio::Settings,
-    auto_scan_settings: DeviceAutoScanSettings,
+    device_scan_rows: Controller<PreferenceRowsGroup>,
 }
 
 #[derive(Debug)]
 pub enum DeviceAutoScanSectionInput {
-    AutoScanToggled(bool),
-    MaximumSizeChanged(f64),
-    BatterySkipToggled(bool),
     StoredSettingChanged,
 }
 
 #[derive(Debug)]
 pub enum DeviceAutoScanSectionOutput {
     SettingsChanged(DeviceAutoScanSettings),
+}
+
+fn device_scan_row_specs() -> Vec<PreferenceRowSpec> {
+    vec![
+        PreferenceRowSpec {
+            preference_key: PreferenceKey::DeviceScanEnabled,
+            setting_title: translated_messages::scans::enable_device_auto_title(),
+            setting_description: String::new(),
+        },
+        PreferenceRowSpec {
+            preference_key: PreferenceKey::DeviceScanMaxGigabytes,
+            setting_title: translated_messages::scans::max_device_size_title(),
+            setting_description: translated_messages::scans::no_size_limit_subtitle(),
+        },
+        PreferenceRowSpec {
+            preference_key: PreferenceKey::DeviceScanSkipOnBattery,
+            setting_title: translated_messages::scans::skip_battery_device_title(),
+            setting_description: String::new(),
+        },
+    ]
 }
 
 #[relm4::component(pub)]
@@ -44,39 +61,11 @@ impl Component for DeviceAutoScanSection {
 
     view! {
         adw::PreferencesGroup {
+            #[local_ref]
+            device_scan_group -> adw::PreferencesGroup {
                 set_title: &translated_messages::scans::device_auto_scan_title(),
                 set_description: Some(&translated_messages::scans::automatically_scan_removable_description()),
-
-                adw::SwitchRow {
-                    set_title: &translated_messages::scans::enable_device_auto_title(),
-                    #[watch]
-                    #[block_signal(auto_scan_handler)]
-                    set_active: model.auto_scan_settings.auto_scan_enabled,
-                    connect_active_notify[sender] => move |changed_row| {
-                        sender.input(DeviceAutoScanSectionInput::AutoScanToggled(changed_row.is_active()));
-                    } @auto_scan_handler,
-                },
-
-                listed_spin_row(&translated_messages::scans::max_device_size_title()) -> adw::SpinRow {
-                    set_subtitle: &translated_messages::scans::no_size_limit_subtitle(),
-                    set_adjustment: Some(&gtk::Adjustment::new(32.0, 0.0, 10_000.0, 1.0, 10.0, 0.0)),
-                    #[watch]
-                    #[block_signal(maximum_size_handler)]
-                    set_value: f64::from(model.auto_scan_settings.maximum_gigabytes),
-                    connect_value_notify[sender] => move |changed_row| {
-                        sender.input(DeviceAutoScanSectionInput::MaximumSizeChanged(changed_row.value()));
-                    } @maximum_size_handler,
-                },
-
-                adw::SwitchRow {
-                    set_title: &translated_messages::scans::skip_battery_device_title(),
-                    #[watch]
-                    #[block_signal(battery_skip_handler)]
-                    set_active: model.auto_scan_settings.skip_on_battery,
-                    connect_active_notify[sender] => move |changed_row| {
-                        sender.input(DeviceAutoScanSectionInput::BatterySkipToggled(changed_row.is_active()));
-                    } @battery_skip_handler,
-                },
+            },
         }
     }
 
@@ -93,9 +82,15 @@ impl Component for DeviceAutoScanSection {
             |_changed_settings, _changed_key| DeviceAutoScanSectionInput::StoredSettingChanged,
         );
         let model = Self {
-            auto_scan_settings: DeviceAutoScanSettings::read_from(&stored_settings),
             stored_settings,
+            device_scan_rows: PreferenceRowsGroup::builder()
+                .launch(PreferenceRowsInit {
+                    row_specs: device_scan_row_specs(),
+                    apply_mode: PreferenceApplyMode::AppliesImmediately,
+                })
+                .detach(),
         };
+        let device_scan_group = model.device_scan_rows.widget();
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -107,29 +102,9 @@ impl Component for DeviceAutoScanSection {
         _root: &Self::Root,
     ) {
         match section_input {
-            DeviceAutoScanSectionInput::AutoScanToggled(auto_scan_enabled) => {
-                self.auto_scan_settings.auto_scan_enabled = auto_scan_enabled;
-                let _read_only_settings = self
-                    .stored_settings
-                    .set(DEVICE_SCAN_ENABLED_KEY, auto_scan_enabled);
-            }
-            DeviceAutoScanSectionInput::MaximumSizeChanged(spin_value) => {
-                let maximum_gigabytes = spin_value.clamp(0.0, f64::from(u32::MAX)) as u32;
-                self.auto_scan_settings.maximum_gigabytes = maximum_gigabytes;
-                let _read_only_settings = self
-                    .stored_settings
-                    .set(DEVICE_SCAN_MAX_GIGABYTES_KEY, maximum_gigabytes);
-            }
-            DeviceAutoScanSectionInput::BatterySkipToggled(skip_on_battery) => {
-                self.auto_scan_settings.skip_on_battery = skip_on_battery;
-                let _read_only_settings = self
-                    .stored_settings
-                    .set(DEVICE_SCAN_SKIP_BATTERY_KEY, skip_on_battery);
-            }
             DeviceAutoScanSectionInput::StoredSettingChanged => {
-                self.auto_scan_settings = DeviceAutoScanSettings::read_from(&self.stored_settings);
                 let _page_closed = sender.output(DeviceAutoScanSectionOutput::SettingsChanged(
-                    self.auto_scan_settings,
+                    DeviceAutoScanSettings::read_from(&self.stored_settings),
                 ));
             }
         }
