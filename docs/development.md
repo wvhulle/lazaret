@@ -16,10 +16,9 @@ It also checks the dependencies and the text:
 - `dependencyAdvisories`: `cargo audit` against the RustSec advisory database pinned as the `advisory-db` flake input, which the weekly dependency update refreshes.
 - `dependencyPolicy`: `cargo deny` with `deny.toml`: allowed licenses, crates.io as the only source, and no wildcard versions.
 - `unusedDependencies`: `cargo machete`. Dependencies it can't see, such as a crate renamed in `[lib]`, go in `[package.metadata.cargo-machete]`.
-- `spelling`: `typos` with `_typos.toml`, over the code and the English catalog. Other languages are excluded.
 - `documentationLinks`: `lychee --offline` over the Markdown files, for relative links and anchors. External links are checked weekly by `.woodpecker/online-links.yaml`, which never fails the build.
 
-The same tools are in the dev shell, so `cargo deny check`, `cargo machete`, `typos` and `lychee --offline docs` run locally. The dev shell also has `minisign`, to make the release key pair with `minisign -G -W` and to check a signed release asset. Run one VM test on its own with:
+The same tools are in the dev shell, so `cargo deny check`, `cargo machete` and `lychee --offline docs` run locally. The dev shell also has `minisign`, to make the release key pair with `minisign -G -W` and to check a signed release asset. Run one VM test on its own with:
 
 ```sh
 nix build path:.#checks.x86_64-linux.vm-administrator-journey

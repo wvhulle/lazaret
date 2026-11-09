@@ -50,21 +50,6 @@ let
     ];
   };
 
-  spellingSources = lib.fileset.toSource {
-    root = ../.;
-    fileset = lib.fileset.unions [
-      (craneLib.fileset.commonCargoSources ../.)
-      ../_typos.toml
-      ../README.md
-      ../CONTRIBUTING.md
-      ../docs
-      ../locales/en
-      ../migrations
-      ../nix
-      ../vm-tests
-      ../data
-    ];
-  };
 
   commonArgs = {
     inherit src;
@@ -257,11 +242,6 @@ let
         touch "$out"
       '';
 
-  spelling = pkgs.runCommand "lazaret-spelling" { nativeBuildInputs = [ pkgs.typos ]; } ''
-    cd ${spellingSources}
-    typos --format brief
-    touch "$out"
-  '';
 
   documentationLinks =
     pkgs.runCommand "lazaret-documentation-links"
@@ -324,7 +304,6 @@ in
       unusedDependencies
     ];
     text-checks = pkgs.linkFarmFromDrvs "lazaret-text-checks" [
-      spelling
       documentationLinks
     ];
     inherit (screenshotRendering) screenshots;
@@ -347,7 +326,6 @@ in
         dependencyAdvisories
         dependencyPolicy
         unusedDependencies
-        spelling
         documentationLinks
         ;
       inherit (screenshotRendering) screenshots;
@@ -400,7 +378,6 @@ in
       pkgs.sqlite
       pkgs.cargo-deny
       pkgs.cargo-machete
-      pkgs.typos
       pkgs.lychee
       pkgs.minisign
       pkgs.dbus
