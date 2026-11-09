@@ -368,18 +368,24 @@ impl AsyncComponent for ApplicationWindowShell {
                     page_navigation.emit(PageNavigationInput::EvidenceRefreshRequested);
                 }
             }
-            ApplicationWindowShellInput::QuitRequested
-            | ApplicationWindowShellInput::CloseAnswered(CloseAnswer::QuitChosen) => {
+            ApplicationWindowShellInput::QuitRequested => {
                 relm4::main_application().quit();
             }
-            ApplicationWindowShellInput::CloseAnswered(CloseAnswer::KeepRunningChosen) => {
-                root.set_visible(false);
+            ApplicationWindowShellInput::CloseAnswered(close_answer) => {
+                if let Some(remembered_action) = close_answer.remembered_close_action() {
+                    remembered_action.store_into(&self.stored_settings);
+                    self.close_action = remembered_action;
+                }
+                match close_answer {
+                    CloseAnswer::QuitChosen => relm4::main_application().quit(),
+                    CloseAnswer::KeepRunningChosen => root.set_visible(false),
+                    CloseAnswer::CloseCancelled => {}
+                }
             }
-            ApplicationWindowShellInput::CloseAnswered(CloseAnswer::CloseCancelled) => {}
             ApplicationWindowShellInput::WindowCloseRequested => match self.close_action {
                 CloseAction::QuitCompletely => relm4::main_application().quit(),
                 CloseAction::HideToTray => root.set_visible(false),
-                CloseAction::AskEachTime => present_close_confirmation(
+                CloseAction::AskOnNextClose => present_close_confirmation(
                     root,
                     sender.input_sender().clone(),
                     ApplicationWindowShellInput::CloseAnswered,

@@ -16,23 +16,23 @@ use crate::{
 pub enum CloseAction {
     QuitCompletely,
     HideToTray,
-    AskEachTime,
+    AskOnNextClose,
 }
 
 pub const CLOSE_ACTION_CHOICES: [CloseAction; 3] = [
     CloseAction::QuitCompletely,
     CloseAction::HideToTray,
-    CloseAction::AskEachTime,
+    CloseAction::AskOnNextClose,
 ];
 
-const SCHEMA_DEFAULT_CLOSE_ACTION: CloseAction = CloseAction::AskEachTime;
+const SCHEMA_DEFAULT_CLOSE_ACTION: CloseAction = CloseAction::AskOnNextClose;
 
 impl CloseAction {
     pub const fn stored_text(self) -> &'static str {
         match self {
             Self::QuitCompletely => "quit",
             Self::HideToTray => "minimize",
-            Self::AskEachTime => "ask",
+            Self::AskOnNextClose => "ask",
         }
     }
 
@@ -40,7 +40,7 @@ impl CloseAction {
         match self {
             Self::QuitCompletely => translated_messages::window::quit_completely(),
             Self::HideToTray => translated_messages::window::hide_tray(),
-            Self::AskEachTime => translated_messages::window::ask_each_time(),
+            Self::AskOnNextClose => translated_messages::window::ask_on_next_close(),
         }
     }
 
@@ -48,7 +48,7 @@ impl CloseAction {
         match self {
             Self::QuitCompletely => 0,
             Self::HideToTray => 1,
-            Self::AskEachTime => 2,
+            Self::AskOnNextClose => 2,
         }
     }
 
@@ -80,6 +80,16 @@ pub enum CloseAnswer {
     CloseCancelled,
     QuitChosen,
     KeepRunningChosen,
+}
+
+impl CloseAnswer {
+    pub const fn remembered_close_action(self) -> Option<CloseAction> {
+        match self {
+            Self::CloseCancelled => None,
+            Self::QuitChosen => Some(CloseAction::QuitCompletely),
+            Self::KeepRunningChosen => Some(CloseAction::HideToTray),
+        }
+    }
 }
 
 impl AlertChoice for CloseAnswer {
@@ -157,6 +167,19 @@ mod close_action_tests {
             CloseAction::from_choice_position(relm4::gtk::INVALID_LIST_POSITION),
             None
         );
+    }
+
+    #[test]
+    fn close_answers_remember_the_chosen_close_action() {
+        assert_eq!(
+            CloseAnswer::QuitChosen.remembered_close_action(),
+            Some(CloseAction::QuitCompletely)
+        );
+        assert_eq!(
+            CloseAnswer::KeepRunningChosen.remembered_close_action(),
+            Some(CloseAction::HideToTray)
+        );
+        assert_eq!(CloseAnswer::CloseCancelled.remembered_close_action(), None);
     }
 
     #[test]
