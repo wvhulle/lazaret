@@ -17,7 +17,7 @@ use crate::vm_journeys::{
         journey_failure::{JourneyFailure, ensure},
         journey_run::{JourneyRun, SAMPLE_HOME, SAMPLE_PASSWORD},
         lazaret_database::{SubmissionKey, SubmissionKind, SubmissionService, SubmissionStatus},
-        session_widgets::{button, in_alert, in_expanded_row, label_containing, row_titled},
+        session_widgets::{button, in_alert, label_containing, row_titled},
         system_commands::{
             as_root, journal_text, settle, succeed, unit_journal_lines_mentioning, wait_until,
         },
@@ -114,8 +114,9 @@ fn show_quarantine_entry(
     journey_run: &mut JourneyRun,
     path_fragment: &str,
     search_text: &str,
-) -> Result<String, JourneyFailure> {
+) -> Result<(), JourneyFailure> {
     show_page(ApplicationPage::Quarantine)?;
+    show_quarantine_list(journey_run)?;
     journey_run.press(&button(findings::refresh_tooltip()))?;
     if !journey_run.widgets.is_shown(&quarantine_search_field()) {
         journey_run.press(&WidgetTarget::toggle_button(findings::search_tooltip()))?;
@@ -126,12 +127,16 @@ fn show_quarantine_entry(
     let entry_title = journey_run
         .database
         .wait_for_quarantined_signature(path_fragment)?;
-    let trust_button = in_expanded_row(button(findings::trust_label()), entry_title.clone());
-    if !journey_run.widgets.is_shown(&trust_button) {
-        journey_run.press(&row_titled(entry_title.clone()))?;
+    journey_run.press(&row_titled(entry_title))?;
+    journey_run.await_shown(&button(findings::trust_label()))
+}
+
+fn show_quarantine_list(journey_run: &JourneyRun) -> Result<(), JourneyFailure> {
+    let back_button = button(findings::back_quarantine_tooltip());
+    if journey_run.widgets.is_shown(&back_button) {
+        journey_run.press(&back_button)?;
     }
-    journey_run.await_shown(&trust_button)?;
-    Ok(entry_title)
+    Ok(())
 }
 
 fn choose_menu_item_by_keyboard(
@@ -161,21 +166,13 @@ fn choose_menu_item_by_keyboard(
     )))
 }
 
-fn entry_button(button_label: String, entry_title: &str) -> WidgetTarget {
-    in_expanded_row(button(button_label), entry_title)
-}
-
 fn submit_quarantined_entry(
     journey_run: &JourneyRun,
-    entry_title: &str,
     target_label: String,
     confirm_heading: String,
     confirm_label: String,
 ) -> Result<(), JourneyFailure> {
-    journey_run.press(&entry_button(
-        findings::submit_quarantine_label(),
-        entry_title,
-    ))?;
+    journey_run.press(&button(findings::submit_quarantine_label()))?;
     journey_run.press(&in_alert(
         button(target_label),
         findings::choose_service_heading(),
@@ -490,10 +487,9 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
     journey_run.step(
         "uploading the invoice to MalwareBazaar names it by its hash and is never repeated",
         |journey_run| {
-            let eicar_title = show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
+            show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
             submit_quarantined_entry(
                 journey_run,
-                &eicar_title,
                 findings::malwarebazaar_sample_choice(),
                 widgets::upload_malwarebazaar_heading(),
                 widgets::upload_publicly_button(),
@@ -528,10 +524,9 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
                 SubmissionStatus::UploadAccepted,
                 Duration::from_secs(90),
             )?;
-            let eicar_title = show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
+            show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
             submit_quarantined_entry(
                 journey_run,
-                &eicar_title,
                 findings::malwarebazaar_sample_choice(),
                 widgets::upload_malwarebazaar_heading(),
                 widgets::upload_publicly_button(),

@@ -407,6 +407,16 @@ impl QuarantinePageState {
         }
     }
 
+    pub fn row_init(&self, entry_id: i64) -> Option<QuarantineRowInit> {
+        self.listed_entries()
+            .iter()
+            .find(|entry_record| entry_record.entry_id == entry_id)
+            .map(|entry_record| QuarantineRowInit {
+                entry_record: entry_record.clone(),
+                row_state: self.row_state(entry_id),
+            })
+    }
+
     pub fn matching_rows(&self, search_text: &str) -> Vec<QuarantineRowInit> {
         self.listed_entries()
             .iter()

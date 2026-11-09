@@ -16,7 +16,7 @@ use crate::vm_journeys::harness::{
     fixture_corpus::FixtureSample,
     journey_failure::{JourneyFailure, ensure},
     journey_run::{JourneyRun, SAMPLE_HOME, SAMPLE_PASSWORD},
-    session_widgets::{button, in_alert, in_expanded_row, in_row, label_containing, row_titled},
+    session_widgets::{button, in_alert, in_row, label_containing, row_titled},
     system_commands::{
         CommandOutcome, as_root, as_root_outcome, journal_text, root_file_text, root_path_exists,
         run_command, settle, succeed, wait_until, write_root_file,
@@ -252,29 +252,26 @@ fn quarantine_with_lazaret(
 fn open_quarantined_entry(
     journey_run: &mut JourneyRun,
     path_fragment: &str,
-) -> Result<String, JourneyFailure> {
+) -> Result<(), JourneyFailure> {
     show_page(ApplicationPage::Detections)?;
     show_page(ApplicationPage::Quarantine)?;
+    let back_button = button(findings::back_quarantine_tooltip());
+    if journey_run.widgets.is_shown(&back_button) {
+        journey_run.press(&back_button)?;
+    }
     let entry_title = journey_run
         .database
         .wait_for_quarantined_signature(path_fragment)?;
-    let trust_button = in_expanded_row(button(findings::trust_label()), entry_title.clone());
-    if !journey_run.widgets.is_shown(&trust_button) {
-        journey_run.press(&row_titled(entry_title.clone()))?;
-    }
-    journey_run.await_shown(&trust_button)?;
-    Ok(entry_title)
+    journey_run.press(&row_titled(entry_title))?;
+    journey_run.await_shown(&button(findings::trust_label()))
 }
 
 fn ask_to_trust_for_all_users(
     journey_run: &mut JourneyRun,
     path_fragment: &str,
 ) -> Result<(), JourneyFailure> {
-    let entry_title = open_quarantined_entry(journey_run, path_fragment)?;
-    journey_run.press(&in_expanded_row(
-        button(findings::trust_label()),
-        entry_title,
-    ))?;
+    open_quarantined_entry(journey_run, path_fragment)?;
+    journey_run.press(&button(findings::trust_label()))?;
     journey_run.press(&in_alert(
         button(widgets::trust_for_all_users_button()),
         widgets::trust_file_heading(),
@@ -472,11 +469,8 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         |journey_run| {
             FixtureSample::PayrollDocument.place_at(&promoted_candidate)?;
             quarantine_with_lazaret(journey_run, &promoted_candidate)?;
-            let entry_title = open_quarantined_entry(journey_run, "payroll")?;
-            journey_run.press(&in_expanded_row(
-                button(findings::trust_label()),
-                entry_title,
-            ))?;
+            open_quarantined_entry(journey_run, "payroll")?;
+            journey_run.press(&button(findings::trust_label()))?;
             journey_run.press(&in_alert(
                 button(widgets::trust_for_me_button()),
                 widgets::trust_file_heading(),

@@ -193,6 +193,7 @@ fn page_scenarios() -> Vec<PageScenario> {
                 shown("quarantine"),
                 point_and_click(WidgetTarget::list_item("Win.Trojan.Agent")),
                 frame(),
+                shown("quarantine-entry"),
             ]
             .concat(),
         },

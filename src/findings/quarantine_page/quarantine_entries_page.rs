@@ -7,6 +7,9 @@ use relm4::{
 
 use crate::{
     findings::quarantine_page::{
+        quarantine_entry_detail::{
+            QuarantineEntryDetail, QuarantineEntryDetailInput, QuarantineEntryDetailOutput,
+        },
         quarantine_entry_row::{
             QuarantineEntryRow, QuarantineEntryRowInput, QuarantineEntryRowOutput,
         },
@@ -149,12 +152,32 @@ pub struct QuarantineEntriesPageInit {
     pub activity_history: ActivityHistory,
 }
 
+const ENTRY_LIST_VIEW_NAME: &str = "entry-list";
+const OPENED_ENTRY_VIEW_NAME: &str = "opened-entry";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OpenedEntry {
+    EntryListShown,
+    EntryShown { entry_id: i64 },
+}
+
+impl OpenedEntry {
+    const fn shown_view_name(self) -> &'static str {
+        match self {
+            Self::EntryListShown => ENTRY_LIST_VIEW_NAME,
+            Self::EntryShown { .. } => OPENED_ENTRY_VIEW_NAME,
+        }
+    }
+}
+
 pub struct QuarantineEntriesPage {
     quarantine_vault: QuarantineVault,
     activity_history: ActivityHistory,
     page_state: QuarantinePageState,
     search_text: String,
     entry_rows: FactoryVecDeque<QuarantineEntryRow>,
+    opened_entry: OpenedEntry,
+    opened_entry_details: FactoryVecDeque<QuarantineEntryDetail>,
     search_mode_enabled: bool,
     toaster: Toaster,
 }
@@ -162,6 +185,8 @@ pub struct QuarantineEntriesPage {
 #[derive(Debug)]
 pub enum QuarantineEntriesPageInput {
     ReloadEntriesRequested,
+    EntryOpened { entry_id: i64 },
+    BackToListRequested,
     RestoreEntryRequested { entry_id: i64 },
     RestoreEntryConfirmed { entry_id: i64 },
     RestoreEntryCancelled { entry_id: i64 },
@@ -323,6 +348,43 @@ impl QuarantineEntriesPage {
                     )),
                 );
             });
+        self.opened_entry_details
+            .iter()
+            .enumerate()
+            .for_each(|(detail_position, entry_detail)| {
+                self.opened_entry_details.send(
+                    detail_position,
+                    QuarantineEntryDetailInput::RowStateChanged(Box::new(
+                        self.page_state.row_state(entry_detail.entry_id()),
+                    )),
+                );
+            });
+    }
+
+    fn show_opened_entry(&mut self) {
+        let opened_row_init = match self.opened_entry {
+            OpenedEntry::EntryListShown => None,
+            OpenedEntry::EntryShown { entry_id } => self.page_state.row_init(entry_id),
+        };
+        if opened_row_init.is_none() {
+            self.opened_entry = OpenedEntry::EntryListShown;
+        }
+        let mut detail_guard = self.opened_entry_details.guard();
+        detail_guard.clear();
+        if let Some(row_init) = opened_row_init {
+            detail_guard.push_back(row_init);
+        }
+    }
+
+    fn opened_entry_title(&self) -> String {
+        match self.opened_entry {
+            OpenedEntry::EntryListShown => self.entry_count_text(),
+            OpenedEntry::EntryShown { entry_id } => self
+                .page_state
+                .row_init(entry_id)
+                .map(|row_init| displayed_threat_name(&row_init.entry_record.threat_identity))
+                .unwrap_or_default(),
+        }
     }
 
     fn listing_failure_text(&self) -> String {
@@ -598,7 +660,16 @@ impl Component for QuarantineEntriesPage {
                     set_title_widget = &adw::WindowTitle {
                         set_title: &translated_messages::findings::quarantine_title(),
                         #[watch]
-                        set_subtitle: &model.entry_count_text(),
+                        set_subtitle: &model.opened_entry_title(),
+                    },
+
+                    pack_start = &gtk::Button {
+                        set_icon_name: "go-previous-symbolic",
+                        set_tooltip_text: Some(&translated_messages::findings::back_quarantine_tooltip()),
+                        update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::back_quarantine_tooltip())],
+                        #[watch]
+                        set_visible: model.opened_entry != OpenedEntry::EntryListShown,
+                        connect_clicked => QuarantineEntriesPageInput::BackToListRequested,
                     },
 
                     pack_end = &gtk::MenuButton {
@@ -674,13 +745,16 @@ impl Component for QuarantineEntriesPage {
                 },
 
                 #[wrap(Some)]
-                #[template]
-                set_content = &ClampedPage {
+                set_content = &gtk::Stack {
+                    set_transition_type: gtk::StackTransitionType::SlideLeftRight,
+
+                    #[template]
+                    add_named[Some(ENTRY_LIST_VIEW_NAME)] = &ClampedPage {
                     #[template_child]
                     page_content {
                         adw::PreferencesGroup {
                             set_title: &translated_messages::findings::quarantine_storage_title(),
-                            set_description: Some(&translated_messages::findings::detected_threats_isolated_description()),
+                            set_description: Some(&translated_messages::findings::quarantine_storage_description()),
 
                             adw::ActionRow {
                                 set_title: &translated_messages::findings::total_size_title(),
@@ -734,6 +808,19 @@ impl Component for QuarantineEntriesPage {
                         },
                     },
                 },
+
+                    #[template]
+                    add_named[Some(OPENED_ENTRY_VIEW_NAME)] = &ClampedPage {
+                        #[template_child]
+                        page_content {
+                            #[local_ref]
+                            opened_entry_box -> gtk::Box {},
+                        },
+                    },
+
+                    #[watch]
+                    set_visible_child_name: model.opened_entry.shown_view_name(),
+                },
             },
         }
     }
@@ -749,32 +836,39 @@ impl Component for QuarantineEntriesPage {
         let entry_rows = FactoryVecDeque::builder()
             .launch(gtk::ListBox::default())
             .forward(sender.input_sender(), |row_output| match row_output {
-                QuarantineEntryRowOutput::RestoreRequested { entry_id } => {
+                QuarantineEntryRowOutput::EntryOpened { entry_id } => {
+                    QuarantineEntriesPageInput::EntryOpened { entry_id }
+                }
+            });
+        let opened_entry_details = FactoryVecDeque::builder()
+            .launch(gtk::Box::new(gtk::Orientation::Vertical, 0))
+            .forward(sender.input_sender(), |detail_output| match detail_output {
+                QuarantineEntryDetailOutput::RestoreRequested { entry_id } => {
                     QuarantineEntriesPageInput::RestoreEntryRequested { entry_id }
                 }
-                QuarantineEntryRowOutput::DeletionRequested { entry_id } => {
+                QuarantineEntryDetailOutput::DeletionRequested { entry_id } => {
                     QuarantineEntriesPageInput::DeleteEntryRequested { entry_id }
                 }
-                QuarantineEntryRowOutput::ReputationCheckRequested {
+                QuarantineEntryDetailOutput::ReputationCheckRequested {
                     entry_id,
                     content_hash,
                 } => QuarantineEntriesPageInput::ReputationCheckRequested {
                     entry_id,
                     content_hash,
                 },
-                QuarantineEntryRowOutput::HashCopyRequested(file_hash) => {
+                QuarantineEntryDetailOutput::HashCopyRequested(file_hash) => {
                     QuarantineEntriesPageInput::HashCopyRequested(file_hash)
                 }
-                QuarantineEntryRowOutput::ReportLinkRequested(report_url) => {
+                QuarantineEntryDetailOutput::ReportLinkRequested(report_url) => {
                     QuarantineEntriesPageInput::ReportLinkRequested(report_url)
                 }
-                QuarantineEntryRowOutput::TrustRequested(trust_choice) => {
+                QuarantineEntryDetailOutput::TrustRequested(trust_choice) => {
                     QuarantineEntriesPageInput::TrustRequested(trust_choice)
                 }
-                QuarantineEntryRowOutput::FalsePositiveReportRequested(reported_detection) => {
+                QuarantineEntryDetailOutput::FalsePositiveReportRequested(reported_detection) => {
                     QuarantineEntriesPageInput::FalsePositiveReportRequested(reported_detection)
                 }
-                QuarantineEntryRowOutput::SubmissionRequested { entry_id } => {
+                QuarantineEntryDetailOutput::SubmissionRequested { entry_id } => {
                     QuarantineEntriesPageInput::SubmissionRequested { entry_id }
                 }
             });
@@ -784,11 +878,14 @@ impl Component for QuarantineEntriesPage {
             page_state: QuarantinePageState::new(),
             search_text: String::new(),
             entry_rows,
+            opened_entry: OpenedEntry::EntryListShown,
+            opened_entry_details,
             search_mode_enabled: false,
             toaster: Toaster::new(&root),
         };
         model.reload_entries(&sender);
         let entry_list = model.entry_rows.widget();
+        let opened_entry_box = model.opened_entry_details.widget();
         let placeholder_stack = &loading_placeholder_stack(
             &translated_messages::findings::loading_quarantine(),
             &empty_placeholder_row(&translated_messages::findings::quarantine_empty()),
@@ -915,6 +1012,15 @@ impl Component for QuarantineEntriesPage {
             QuarantineEntriesPageInput::ServiceAccessChanged(service_access) => {
                 self.page_state.record_service_access(service_access);
                 self.send_row_states();
+            }
+            QuarantineEntriesPageInput::EntryOpened { entry_id } => {
+                self.opened_entry = OpenedEntry::EntryShown { entry_id };
+                self.search_mode_enabled = false;
+                self.show_opened_entry();
+            }
+            QuarantineEntriesPageInput::BackToListRequested => {
+                self.opened_entry = OpenedEntry::EntryListShown;
+                self.show_opened_entry();
             }
             QuarantineEntriesPageInput::SearchTextChanged(search_text) => {
                 self.search_text = search_text;
@@ -1051,6 +1157,7 @@ impl Component for QuarantineEntriesPage {
                 log_failed_outcome("loading the quarantine failed", &load_outcome);
                 self.page_state.record_loaded_entries(load_outcome);
                 self.show_matching_entries();
+                self.show_opened_entry();
                 let _shell_closed = sender.output(QuarantineEntriesPageOutput::EntriesCounted(
                     self.page_state.listing().entry_count(),
                 ));
