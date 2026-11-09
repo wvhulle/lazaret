@@ -6,7 +6,7 @@ use std::{
 
 use relm4::gtk::gio::prelude::SettingsExt;
 
-use crate::{host_services::desktop::stored_settings::application_settings, translated_messages};
+use crate::host_services::desktop::stored_settings::application_settings;
 
 const VIRUSTOTAL_KEY_LENGTH: usize = 64;
 const ABUSE_CH_MINIMUM_KEY_LENGTH: usize = 16;
@@ -219,27 +219,6 @@ pub async fn delete_stored_api_key(
         .delete(&key_attributes(threat_intel_service))
         .await?;
     Ok(())
-}
-
-pub fn describe_key_failure(key_failure: &KeyStorageFailure) -> String {
-    match key_failure {
-        KeyStorageFailure::KeyFormatInvalid => translated_messages::host::key_format_invalid(),
-        KeyStorageFailure::StoredKeyUnreadable => {
-            translated_messages::host::stored_key_unreadable()
-        }
-        KeyStorageFailure::KeyringUnavailable(_keyring_failure) => {
-            translated_messages::host::keyring_unavailable()
-        }
-        KeyStorageFailure::KeyFileUnreadable { read_failure, .. } => {
-            translated_messages::host::key_file_unreadable(read_failure)
-        }
-        KeyStorageFailure::KeyFilePermissionDenied { .. } => {
-            translated_messages::host::key_file_permission_denied()
-        }
-        KeyStorageFailure::KeyFileContentInvalid { .. } => {
-            translated_messages::host::key_file_content_invalid()
-        }
-    }
 }
 
 #[cfg(test)]

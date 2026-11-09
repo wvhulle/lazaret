@@ -1,9 +1,12 @@
 use relm4::{Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk};
 
 use crate::{
-    host_services::threat_intel::service_key_storage::{
-        KeySource, KeyStorageFailure, ResolvedApiKey, ThreatIntelService, delete_stored_api_key,
-        describe_key_failure, key_source, masked_api_key, read_api_key, save_api_key,
+    host_services::threat_intel::{
+        service_access::{KeyProblem, ServiceAccess, read_service_access},
+        service_key_storage::{
+            KeySource, KeyStorageFailure, ThreatIntelService, delete_stored_api_key, key_source,
+            save_api_key,
+        },
     },
     translated_messages,
 };
@@ -47,38 +50,36 @@ const fn service_key_page_url(threat_intel_service: ThreatIntelService) -> &'sta
     }
 }
 
-fn describe_resolved_key(resolved_key: &ResolvedApiKey) -> String {
-    match resolved_key {
-        ResolvedApiKey::FromKeyFile(api_key) | ResolvedApiKey::FromKeyring(api_key) => {
-            masked_api_key(api_key)
+fn key_problem_text(key_problem: KeyProblem) -> String {
+    match key_problem {
+        KeyProblem::KeyFileNotPermitted => {
+            translated_messages::preferences::key_file_not_permitted()
         }
-        ResolvedApiKey::NotConfigured => translated_messages::preferences::not_configured(),
+        KeyProblem::KeyFileMissing => translated_messages::preferences::key_file_missing(),
+        KeyProblem::KeyFileUnreadable => translated_messages::preferences::key_file_unreadable(),
+        KeyProblem::KeyNotValid => translated_messages::preferences::key_not_valid(),
+        KeyProblem::KeyringUnavailable => translated_messages::preferences::keyring_unavailable(),
+        KeyProblem::StoredKeyUnreadable => {
+            translated_messages::preferences::stored_key_unreadable()
+        }
     }
 }
 
-enum SystemKeyFileStatus {
-    CheckingKeyFile,
-    KeyFileReadable { masked_key: String },
-    KeyFileFailed(KeyStorageFailure),
+enum KeyReading {
+    CheckingKey,
+    KeyRead(ServiceAccess),
 }
 
-impl SystemKeyFileStatus {
-    fn from_key_status(key_status: Result<ResolvedApiKey, KeyStorageFailure>) -> Self {
-        match key_status {
-            Ok(resolved_key) => Self::KeyFileReadable {
-                masked_key: describe_resolved_key(&resolved_key),
-            },
-            Err(key_failure) => Self::KeyFileFailed(key_failure),
-        }
-    }
+enum KeySaveOutcome {
+    NothingSaved,
+    SaveRefused(KeyProblem),
 }
 
 pub struct ServiceKeySection {
     threat_intel_service: ThreatIntelService,
     key_source: KeySource,
-    key_status_text: String,
-    system_key_file_status: SystemKeyFileStatus,
-    keyring_key_stored: bool,
+    key_reading: KeyReading,
+    key_save_outcome: KeySaveOutcome,
     entered_key_cleared: bool,
 }
 
@@ -96,15 +97,15 @@ pub enum ServiceKeySectionOutput {
 
 #[derive(Debug)]
 pub enum ServiceKeySectionCommand {
-    KeyStatusRead(Result<ResolvedApiKey, KeyStorageFailure>),
+    KeyAccessRead(ServiceAccess),
     KeyChanged(Result<(), KeyStorageFailure>),
 }
 
 impl ServiceKeySection {
-    fn refresh_key_status(&self, sender: &ComponentSender<Self>) {
+    fn refresh_key_access(&self, sender: &ComponentSender<Self>) {
         let threat_intel_service = self.threat_intel_service;
         sender.oneshot_command(async move {
-            ServiceKeySectionCommand::KeyStatusRead(read_api_key(threat_intel_service).await)
+            ServiceKeySectionCommand::KeyAccessRead(read_service_access(threat_intel_service).await)
         });
     }
 
@@ -112,30 +113,51 @@ impl ServiceKeySection {
         matches!(self.key_source, KeySource::SystemKeyFile { .. })
     }
 
-    fn system_key_file_text(&self) -> String {
+    fn key_file_path_text(&self) -> String {
         match &self.key_source {
-            KeySource::SystemKeyFile { key_file_path } => {
-                let shown_path = key_file_path.display();
-                match &self.system_key_file_status {
-                    SystemKeyFileStatus::CheckingKeyFile => {
-                        format!(
-                            "{shown_path}\n{}",
-                            translated_messages::preferences::checking_label()
-                        )
-                    }
-                    SystemKeyFileStatus::KeyFileReadable { masked_key } => {
-                        format!("{masked_key}\n{shown_path}")
-                    }
-                    SystemKeyFileStatus::KeyFileFailed(
-                        key_failure @ KeyStorageFailure::KeyFilePermissionDenied { .. },
-                    ) => format!("••••\n{shown_path}\n{}", describe_key_failure(key_failure)),
-                    SystemKeyFileStatus::KeyFileFailed(key_failure) => {
-                        format!("{shown_path}\n{}", describe_key_failure(key_failure))
-                    }
-                }
-            }
+            KeySource::SystemKeyFile { key_file_path } => key_file_path.display().to_string(),
             KeySource::UserKeyring => String::new(),
         }
+    }
+
+    const fn key_problem(&self) -> Option<KeyProblem> {
+        match (&self.key_save_outcome, &self.key_reading) {
+            (KeySaveOutcome::SaveRefused(key_problem), _)
+            | (
+                KeySaveOutcome::NothingSaved,
+                KeyReading::KeyRead(ServiceAccess::KeyBroken(key_problem)),
+            ) => Some(*key_problem),
+            (
+                KeySaveOutcome::NothingSaved,
+                KeyReading::CheckingKey
+                | KeyReading::KeyRead(ServiceAccess::KeyReady(_) | ServiceAccess::KeyMissing),
+            ) => None,
+        }
+    }
+
+    fn key_problem_banner_text(&self) -> String {
+        self.key_problem().map(key_problem_text).unwrap_or_default()
+    }
+
+    fn key_status_text(&self) -> String {
+        match &self.key_reading {
+            KeyReading::CheckingKey => translated_messages::preferences::checking_label(),
+            KeyReading::KeyRead(ServiceAccess::KeyReady(api_key)) => api_key.masked_text(),
+            KeyReading::KeyRead(ServiceAccess::KeyMissing) => {
+                translated_messages::preferences::not_configured()
+            }
+            KeyReading::KeyRead(ServiceAccess::KeyBroken(_)) => {
+                translated_messages::preferences::key_unreadable_status()
+            }
+        }
+    }
+
+    const fn keyring_key_stored(&self) -> bool {
+        matches!(self.key_source, KeySource::UserKeyring)
+            && matches!(
+                self.key_reading,
+                KeyReading::KeyRead(ServiceAccess::KeyReady(_))
+            )
     }
 }
 
@@ -152,26 +174,40 @@ impl Component for ServiceKeySection {
             set_description: Some(&service_description(model.threat_intel_service)),
 
             adw::ActionRow {
-                set_title: &translated_messages::preferences::set_system_configuration_title(),
                 set_use_markup: false,
-                set_subtitle_lines: 0,
-                set_visible: model.uses_system_key_file(),
+                add_css_class: "warning",
                 #[watch]
-                set_subtitle: &model.system_key_file_text(),
+                set_visible: model.key_problem().is_some(),
+                #[watch]
+                set_title: &model.key_problem_banner_text(),
+                add_prefix = &gtk::Image { set_icon_name: Some("dialog-warning-symbolic") },
+            },
+
+            adw::ActionRow {
+                set_title: &translated_messages::preferences::key_file_title(),
+                set_use_markup: false,
+                set_subtitle: &model.key_file_path_text(),
+                set_tooltip_text: Some(&translated_messages::preferences::set_system_configuration_title()),
+                set_visible: model.uses_system_key_file(),
                 add_prefix = &gtk::Image { set_icon_name: Some("changes-prevent-symbolic") },
+                add_suffix = &gtk::Label {
+                    add_css_class: "dim-label",
+                    #[watch]
+                    set_label: &model.key_status_text(),
+                },
             },
 
             adw::ActionRow {
                 set_title: &translated_messages::preferences::key_keyring_title(),
                 set_visible: !model.uses_system_key_file(),
                 #[watch]
-                set_subtitle: &model.key_status_text,
+                set_subtitle: &model.key_status_text(),
 
                 add_suffix = &gtk::Button {
                     set_label: &translated_messages::preferences::delete_key_label(),
                     set_valign: gtk::Align::Center,
                     #[watch]
-                    set_visible: model.keyring_key_stored,
+                    set_visible: model.keyring_key_stored(),
                     add_css_class: "flat",
                     connect_clicked => ServiceKeySectionInput::KeyDeletionRequested,
                 },
@@ -209,13 +245,12 @@ impl Component for ServiceKeySection {
         let model = Self {
             threat_intel_service,
             key_source: key_source(threat_intel_service),
-            key_status_text: translated_messages::preferences::checking_label(),
-            system_key_file_status: SystemKeyFileStatus::CheckingKeyFile,
-            keyring_key_stored: false,
+            key_reading: KeyReading::CheckingKey,
+            key_save_outcome: KeySaveOutcome::NothingSaved,
             entered_key_cleared: false,
         };
         let widgets = view_output!();
-        model.refresh_key_status(&sender);
+        model.refresh_key_access(&sender);
         ComponentParts { model, widgets }
     }
 
@@ -261,19 +296,15 @@ impl Component for ServiceKeySection {
     ) {
         self.entered_key_cleared = false;
         match group_command {
-            ServiceKeySectionCommand::KeyStatusRead(key_status) => {
-                self.keyring_key_stored = matches!(key_status, Ok(ResolvedApiKey::FromKeyring(_)));
-                self.key_status_text = match &key_status {
-                    Ok(resolved_key) => describe_resolved_key(resolved_key),
-                    Err(key_failure) => describe_key_failure(key_failure),
-                };
-                self.system_key_file_status = SystemKeyFileStatus::from_key_status(key_status);
+            ServiceKeySectionCommand::KeyAccessRead(service_access) => {
+                self.key_reading = KeyReading::KeyRead(service_access);
             }
             ServiceKeySectionCommand::KeyChanged(Err(key_failure)) => {
-                self.key_status_text = describe_key_failure(&key_failure);
+                self.key_save_outcome = KeySaveOutcome::SaveRefused(KeyProblem::from(&key_failure));
             }
             ServiceKeySectionCommand::KeyChanged(Ok(())) => {
-                self.refresh_key_status(&sender);
+                self.key_save_outcome = KeySaveOutcome::NothingSaved;
+                self.refresh_key_access(&sender);
                 let _page_closed = sender.output(ServiceKeySectionOutput::StoredKeyChanged);
             }
         }

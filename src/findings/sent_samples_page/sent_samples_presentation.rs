@@ -22,9 +22,8 @@ use crate::{
             remote_status_refresh::{RemoteRefreshFailure, RemoteRefreshSummary},
             submission_samples::shown_file_name,
         },
-        threat_intel::{
-            file_reputation_check::{describe_bazaar_failure, describe_virustotal_failure},
-            service_key_storage::describe_key_failure,
+        threat_intel::file_reputation_check::{
+            describe_bazaar_failure, describe_virustotal_failure,
         },
     },
     shared_widgets::{
@@ -287,10 +286,6 @@ pub fn empty_candidates_text(candidate_listing: &CandidateListing) -> String {
 
 fn refresh_failure_text(refresh_failure: &RemoteRefreshFailure) -> String {
     match refresh_failure {
-        RemoteRefreshFailure::KeyMissing { submission_service } => {
-            translated_messages::findings::key_missing_failure(service_name(*submission_service))
-        }
-        RemoteRefreshFailure::KeyUnreadable(key_failure) => describe_key_failure(key_failure),
         RemoteRefreshFailure::BazaarLookupFailed(bazaar_failure) => {
             describe_bazaar_failure(bazaar_failure)
         }
@@ -330,6 +325,7 @@ mod submissions_presentation_tests {
         clamav_scanner::scanner_output_parser::ThreatIdentity,
         protection_evidence::protection_evidence_fixtures::english_formatters,
         quarantine_vault::quarantine_entry_database::StoredDetectionDate,
+        threat_intel::malware_bazaar_client::MalwareBazaarFailure,
     };
 
     fn record_with(submission_state: SubmissionState) -> SubmissionRecord {
@@ -450,11 +446,11 @@ mod submissions_presentation_tests {
         assert_eq!(
             refresh_summary_text(&RemoteRefreshSummary {
                 updated_count: 2,
-                refresh_failures: vec![RemoteRefreshFailure::KeyMissing {
-                    submission_service: SubmissionService::VirusTotal,
-                }],
+                refresh_failures: vec![RemoteRefreshFailure::BazaarLookupFailed(
+                    MalwareBazaarFailure::UnexpectedStatus { status_code: 503 },
+                )],
             }),
-            "2 uploads have a new status. VirusTotal needs a key to check uploads"
+            "2 uploads have a new status. MalwareBazaar answered with status 503"
         );
     }
 }

@@ -57,7 +57,7 @@ use crate::{
             UnitActivity, UnitState, UnitTimestamp, probe_unit_state, probe_user_unit_state,
             service_unit_snapshot, timer_unit_snapshot,
         },
-        threat_intel::service_key_status::{LookupKeyStatuses, read_lookup_key_statuses},
+        threat_intel::service_access::{OnlineServiceAccess, read_online_service_access},
     },
     scans::scheduled_scans_page::{
         scan_schedule_settings::StoredScheduleSettings,
@@ -642,7 +642,7 @@ pub struct ProtectionEvidence {
     pub scheduled_scan_evidence: ScheduledScanEvidence,
     pub background_service_state: UnitState,
     pub process_attach_scope: ProcessAttachScope,
-    pub lookup_key_statuses: LookupKeyStatuses,
+    pub online_service_access: OnlineServiceAccess,
 }
 
 pub fn scan_targets_from_arguments(program_arguments: &[String]) -> Vec<String> {
@@ -1101,7 +1101,7 @@ pub async fn gather_protection_evidence(lazaret_schedule_enabled: bool) -> Prote
         scheduled_scan_evidence: inspect_scheduled_scan(lazaret_schedule_enabled).await,
         background_service_state: probe_user_unit_state(BACKGROUND_SERVICE_UNIT).await,
         process_attach_scope: inspect_process_attach_scope().await,
-        lookup_key_statuses: read_lookup_key_statuses().await,
+        online_service_access: read_online_service_access().await,
     }
 }
 

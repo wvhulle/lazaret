@@ -14,9 +14,8 @@ use crate::{
             submission_samples::SampleReadFailure,
             virustotal_sample_upload::VirusTotalUploadAttempt,
         },
-        threat_intel::{
-            file_reputation_check::{describe_bazaar_failure, describe_virustotal_failure},
-            service_key_storage::describe_key_failure,
+        threat_intel::file_reputation_check::{
+            describe_bazaar_failure, describe_virustotal_failure,
         },
     },
     shared_widgets::{
@@ -104,11 +103,8 @@ pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> Strin
         BazaarUploadAttempt::AlreadySubmitted(earlier_submission) => {
             earlier_submission_text(earlier_submission)
         }
-        BazaarUploadAttempt::KeyMissing => {
-            upload_not_sent(&translated_messages::widgets::add_abuse_ch_key())
-        }
-        BazaarUploadAttempt::KeyUnreadable(key_failure) => {
-            upload_not_sent(&describe_key_failure(key_failure))
+        BazaarUploadAttempt::KeyNotUsable => {
+            upload_not_sent(&translated_messages::widgets::bazaar_key_not_usable())
         }
         BazaarUploadAttempt::SampleUnreadable(read_failure) => {
             upload_not_sent(&sample_read_failure_text(read_failure))
@@ -156,11 +152,8 @@ pub fn virustotal_upload_attempt_text(upload_attempt: &VirusTotalUploadAttempt) 
                 file_report.detecting_engine_count,
             )
         }
-        VirusTotalUploadAttempt::KeyMissing => {
-            upload_not_sent(&translated_messages::widgets::add_virustotal_key_preferences())
-        }
-        VirusTotalUploadAttempt::KeyUnreadable(key_failure) => {
-            upload_not_sent(&describe_key_failure(key_failure))
+        VirusTotalUploadAttempt::KeyNotUsable => {
+            upload_not_sent(&translated_messages::widgets::virustotal_key_not_usable())
         }
         VirusTotalUploadAttempt::SampleUnreadable(read_failure) => {
             upload_not_sent(&sample_read_failure_text(read_failure))

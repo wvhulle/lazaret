@@ -74,7 +74,7 @@ With **Device Auto-Scan** turned on, Lazaret scans a removable or external drive
 
 When ClamAV detects a file in the background, Lazaret raises a desktop notification. For that it has to run in the background; the install guides explain how to start it with your session. Detections lists these detections, and each one opens a timeline of what happened to the file, from where you quarantine it, delete it or keep it. **Keep** only stops Lazaret asking: ClamAV still reports the file at the next scan, so trust it from Quarantine or a scan result if it is a false positive. The page also shows whether alerts can reach you, and whether other programs can attach to Lazaret.
 
-**Look Up** in an opened detection asks MalwareBazaar about the signature name, never the file, and shows the families and when they were first seen. Without an abuse.ch key it offers **Add Key…**, which opens Online Services in Preferences.
+**Look Up** in an opened detection asks MalwareBazaar about the signature name, never the file, and shows the families and when they were first seen. While the abuse.ch key is missing or unreadable, the button reads **Set Up…** instead and opens Online Services in Preferences.
 
 ## Quarantine
 
@@ -82,7 +82,7 @@ When ClamAV detects a file in the background, Lazaret raises a desktop notificat
 
 An interrupted move never loses the file. Quarantine lists every quarantined file. Expand an entry to check its reputation, restore it to where it came from, or delete it for good. **Clear Old Items** deletes files that have been in quarantine for more than 30 days. Before a file is restored, Lazaret checks it again with today's signatures and shows where it will go. After a signature update, and whenever you press **Check Again**, it checks every quarantined file and marks the ones that are no longer detected, so you can restore false positives once a signature update fixes them.
 
-The reputation check in an expanded entry sends only the file's SHA-256 hash to CIRCL hashlookup, MalwareBazaar and VirusTotal, and shows each answer in place. A service without a key offers **Add Key**. If no service knows the file and you think it is malware, **Submit…** sends it as a separate step; see [Sent Samples](#sent-samples).
+**Look Up** in an expanded entry sends only the file's SHA-256 hash to CIRCL hashlookup, MalwareBazaar and VirusTotal, and shows each answer in place. A service without a usable key is skipped and shows **No key** or **Key unreadable** with **Set Up…**. If no service knows the file and you think it is malware, **Submit…** sends it as a separate step; see [Sent Samples](#sent-samples).
 
 When you are sure a detection is wrong, trust the file instead of excluding its path: press **Trust…** on a quarantined file, or choose **Trust This File…** on a scan result. **Trust for Me** needs no password: Lazaret stops showing you a file with exactly this content in the scans you run, but ClamAV itself still detects it, so on-access scanning can still block it and other users still see it. A changed copy is always checked again. **Trust for All Users…** asks for your administrator password and tells ClamAV itself never to report the file, for anyone; it is not available in the Flatpak. **Ignore This Detection for Me…** hides a detection in every file, for you only, so prefer trusting the file when only one file is wrong. To get the detection fixed for everyone, press **Report…**, which sends the file, with your name and email address, to the ClamAV team.
 
@@ -129,4 +129,4 @@ The general preferences cover window behavior, starting in the background, deskt
 - **VirusTotal** gets a file's hash. It needs a VirusTotal key.
 - **ClamAV** (Cisco Talos) has no lookups; it only receives reports you confirm.
 
-Keys are stored in your keyring, or point Lazaret at key files as each install guide explains. A service without a key is simply off. **Add Key** on a lookup result, and the abuse.ch row on Signature Sources, open this page.
+Keys are stored in your keyring, or point Lazaret at key files as each install guide explains. A service without a usable key is off: its lookups are never sent, and its upload target can't be picked. **Set Up…** next to such a service, and the abuse.ch row on Signature Sources, open this page. When a key file can't be read, the service's group says why at the top, for example that your user has no permission to read it.

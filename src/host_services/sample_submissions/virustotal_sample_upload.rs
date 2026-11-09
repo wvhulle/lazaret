@@ -11,9 +11,8 @@ use crate::host_services::{
     quarantine_vault::quarantine_entry_database::QuarantineVault,
     sample_submissions::submission_samples::{SampleReadFailure, read_quarantined_sample},
     threat_intel::{
-        service_key_storage::{
-            KeyStorageFailure, ResolvedApiKey, ThreatIntelService, read_api_key,
-        },
+        service_access::read_service_access,
+        service_key_storage::ThreatIntelService,
         virustotal_api_client::{
             AnalysisProgress, FileReportLookup, MAXIMUM_DIRECT_UPLOAD_SIZE, VirusTotalClient,
             VirusTotalFailure, VirusTotalReport, VirusTotalUploadAnswer,
@@ -26,8 +25,7 @@ pub enum VirusTotalUploadAttempt {
     SubmissionRecorded(SubmissionRecord),
     AlreadySubmitted(SubmissionRecord),
     ReportAlreadyAvailable(VirusTotalReport),
-    KeyMissing,
-    KeyUnreadable(KeyStorageFailure),
+    KeyNotUsable,
     SampleUnreadable(SampleReadFailure),
     VirusTotalUnavailable(VirusTotalFailure),
     HistoryUnavailable(ActivityHistoryFailure),
@@ -86,14 +84,12 @@ pub fn virustotal_state_after_analysis(
 }
 
 pub async fn virustotal_client() -> Result<VirusTotalClient, VirusTotalUploadAttempt> {
-    match read_api_key(ThreatIntelService::VirusTotalService).await {
-        Ok(ResolvedApiKey::FromKeyFile(api_key) | ResolvedApiKey::FromKeyring(api_key)) => {
-            VirusTotalClient::with_api_key(api_key)
-                .map_err(VirusTotalUploadAttempt::VirusTotalUnavailable)
-        }
-        Ok(ResolvedApiKey::NotConfigured) => Err(VirusTotalUploadAttempt::KeyMissing),
-        Err(key_failure) => Err(VirusTotalUploadAttempt::KeyUnreadable(key_failure)),
-    }
+    let api_key = read_service_access(ThreatIntelService::VirusTotalService)
+        .await
+        .ready_key()
+        .map(|api_key| api_key.as_str().to_owned())
+        .ok_or(VirusTotalUploadAttempt::KeyNotUsable)?;
+    VirusTotalClient::with_api_key(api_key).map_err(VirusTotalUploadAttempt::VirusTotalUnavailable)
 }
 
 enum VirusTotalOutcome {

@@ -12,19 +12,13 @@ use crate::host_services::{
     },
     threat_intel::{
         malware_bazaar_client::MalwareBazaarFailure,
-        service_key_storage::{
-            KeyStorageFailure, ResolvedApiKey, ThreatIntelService, read_api_key,
-        },
+        service_access::{ApiKey, read_online_service_access},
         virustotal_api_client::{VirusTotalClient, VirusTotalFailure},
     },
 };
 
 #[derive(Debug)]
 pub enum RemoteRefreshFailure {
-    KeyMissing {
-        submission_service: SubmissionService,
-    },
-    KeyUnreadable(KeyStorageFailure),
     BazaarLookupFailed(MalwareBazaarFailure),
     VirusTotalLookupFailed(VirusTotalFailure),
     HistoryFailed(ActivityHistoryFailure),
@@ -76,34 +70,15 @@ pub const fn awaits_remote_service(submission_state: &SubmissionState) -> bool {
     )
 }
 
-async fn service_key(
-    threat_intel_service: ThreatIntelService,
-    submission_service: SubmissionService,
-) -> Result<String, RemoteRefreshFailure> {
-    match read_api_key(threat_intel_service).await {
-        Ok(ResolvedApiKey::FromKeyFile(api_key) | ResolvedApiKey::FromKeyring(api_key)) => {
-            Ok(api_key)
-        }
-        Ok(ResolvedApiKey::NotConfigured) => {
-            Err(RemoteRefreshFailure::KeyMissing { submission_service })
-        }
-        Err(key_failure) => Err(RemoteRefreshFailure::KeyUnreadable(key_failure)),
-    }
-}
-
 async fn refreshed_bazaar_records(
+    auth_key: &ApiKey,
     awaiting_records: &[&SubmissionRecord],
 ) -> Result<ServiceRefresh, RemoteRefreshFailure> {
-    let auth_key = service_key(
-        ThreatIntelService::AbuseChService,
-        SubmissionService::MalwareBazaar,
-    )
-    .await?;
     let mut service_refresh = ServiceRefresh::empty();
     for awaiting_record in awaiting_records {
         service_refresh.record_outcome(
             awaiting_record,
-            refreshed_bazaar_state(&auth_key, awaiting_record).await,
+            refreshed_bazaar_state(auth_key.as_str(), awaiting_record).await,
             RemoteRefreshFailure::BazaarLookupFailed,
         );
     }
@@ -111,16 +86,11 @@ async fn refreshed_bazaar_records(
 }
 
 async fn refreshed_virustotal_records(
+    api_key: &ApiKey,
     awaiting_records: &[&SubmissionRecord],
 ) -> Result<ServiceRefresh, RemoteRefreshFailure> {
-    let virustotal_client = VirusTotalClient::with_api_key(
-        service_key(
-            ThreatIntelService::VirusTotalService,
-            SubmissionService::VirusTotal,
-        )
-        .await?,
-    )
-    .map_err(RemoteRefreshFailure::VirusTotalLookupFailed)?;
+    let virustotal_client = VirusTotalClient::with_api_key(api_key.as_str().to_owned())
+        .map_err(RemoteRefreshFailure::VirusTotalLookupFailed)?;
     let mut service_refresh = ServiceRefresh::empty();
     for awaiting_record in awaiting_records {
         service_refresh.record_outcome(
@@ -162,17 +132,25 @@ pub async fn refresh_remote_statuses(activity_history: &ActivityHistory) -> Remo
     let bazaar_records = awaiting_records_of(&listed_submissions, SubmissionService::MalwareBazaar);
     let virustotal_records =
         awaiting_records_of(&listed_submissions, SubmissionService::VirusTotal);
-    let mut refresh_outcomes = Vec::new();
-    if !bazaar_records.is_empty() {
-        refresh_outcomes.push(refreshed_bazaar_records(&bazaar_records).await);
-    }
-    if !virustotal_records.is_empty() {
-        refresh_outcomes.push(refreshed_virustotal_records(&virustotal_records).await);
-    }
     let mut refresh_summary = RemoteRefreshSummary {
         updated_count: 0,
         refresh_failures: Vec::new(),
     };
+    if bazaar_records.is_empty() && virustotal_records.is_empty() {
+        return refresh_summary;
+    }
+    let service_access = read_online_service_access().await;
+    let mut refresh_outcomes = Vec::new();
+    if let Some(auth_key) = service_access.malware_bazaar_access.ready_key()
+        && !bazaar_records.is_empty()
+    {
+        refresh_outcomes.push(refreshed_bazaar_records(auth_key, &bazaar_records).await);
+    }
+    if let Some(api_key) = service_access.virustotal_access.ready_key()
+        && !virustotal_records.is_empty()
+    {
+        refresh_outcomes.push(refreshed_virustotal_records(api_key, &virustotal_records).await);
+    }
     for refresh_outcome in refresh_outcomes {
         match refresh_outcome {
             Ok(service_refresh) => {

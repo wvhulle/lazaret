@@ -21,7 +21,7 @@ use crate::{
             service_run_journal::ScanRunHistory,
         },
         systemd_bus::host_systemd_units::{UnitActivity, UnitState, UnitTimestamp},
-        threat_intel::service_key_status::{LookupKeyStatuses, ServiceKeyStatus},
+        threat_intel::service_access::{ApiKey, OnlineServiceAccess, ServiceAccess},
     },
 };
 
@@ -90,9 +90,9 @@ pub fn healthy_evidence() -> ProtectionEvidence {
         },
         background_service_state: UnitState::UnitLoaded(UnitActivity::UnitActive),
         process_attach_scope: ProcessAttachScope::AttachRestricted,
-        lookup_key_statuses: LookupKeyStatuses {
-            abuse_ch_key: ServiceKeyStatus::KeyConfigured,
-            virustotal_key: ServiceKeyStatus::KeyConfigured,
+        online_service_access: OnlineServiceAccess {
+            malware_bazaar_access: ServiceAccess::KeyReady(ApiKey::new("aB3".repeat(16))),
+            virustotal_access: ServiceAccess::KeyReady(ApiKey::new("a".repeat(64))),
         },
     }
 }

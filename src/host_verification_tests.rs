@@ -37,6 +37,7 @@ use crate::{
             },
         },
         quarantine_vault::quarantine_entry_database::QuarantineVault,
+        threat_intel::service_access::KnownServiceAccess,
     },
     scans::manual_scan_page::eicar_test_file::eicar_test_bytes,
 };
@@ -409,6 +410,7 @@ async fn host_background_detection_flows_from_journal_to_quarantine() {
         },
         DeletionPrompt::NotAsked,
         &SignatureLookupState::NotLookedUp,
+        &KnownServiceAccess::AccessNotReadYet,
         DistributionFamily::NixosFamily,
     );
     incident_steps.iter().for_each(|incident_step| {

@@ -1058,6 +1058,21 @@ impl Component for PageNavigation {
                     .emit(TrustedDetectionsPageInput::EvidenceGathered(
                         self.gathered_evidence.clone(),
                     ));
+                if let GatheredEvidence::Gathered {
+                    protection_evidence,
+                    ..
+                } = &self.gathered_evidence
+                {
+                    let online_service_access = protection_evidence.online_service_access.clone();
+                    self.quarantine_page
+                        .emit(QuarantineEntriesPageInput::ServiceAccessChanged(
+                            online_service_access.clone(),
+                        ));
+                    self.sent_samples_page
+                        .emit(SentSamplesPageInput::ServiceAccessChanged(
+                            online_service_access,
+                        ));
+                }
                 self.advance_evidence_refresh(EvidenceRefreshTrigger::GatheringFinished, &sender);
             }
             PageNavigationCommand::WatchedUnitChanged => {

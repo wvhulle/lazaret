@@ -41,7 +41,10 @@ use crate::{
         sample_submissions::clamav_report_review::{
             current_database_version, settle_clamav_reviews,
         },
-        threat_intel::file_reputation_check::{ReputationAnswers, check_hash_reputation},
+        threat_intel::{
+            file_reputation_check::{ReputationAnswers, check_hash_reputation},
+            service_access::{OnlineServiceAccess, read_online_service_access},
+        },
     },
     shared_widgets::{
         awaited_dialogs::{
@@ -178,6 +181,7 @@ pub enum QuarantineEntriesPageInput {
     FalsePositiveReportRequested(ClamavReportProposal),
     FalsePositiveReportConfirmed(ClamavReportRequest),
     SubmissionRequested { entry_id: i64 },
+    ServiceAccessChanged(OnlineServiceAccess),
 }
 
 #[derive(Debug)]
@@ -197,6 +201,7 @@ pub enum QuarantineEntriesPageCommand {
     },
     ReputationCheckFinished {
         entry_id: i64,
+        service_access: OnlineServiceAccess,
         reputation_answers: ReputationAnswers,
     },
     TrustChangeFinished(TrustOutcome),
@@ -313,9 +318,9 @@ impl QuarantineEntriesPage {
             .for_each(|(row_position, entry_row)| {
                 self.entry_rows.send(
                     row_position,
-                    QuarantineEntryRowInput::RowStateChanged(
+                    QuarantineEntryRowInput::RowStateChanged(Box::new(
                         self.page_state.row_state(entry_row.entry_id()),
-                    ),
+                    )),
                 );
             });
     }
@@ -895,11 +900,21 @@ impl Component for QuarantineEntriesPage {
                 }
                 self.send_row_states();
                 sender.oneshot_command(async move {
+                    let service_access = read_online_service_access().await;
                     QuarantineEntriesPageCommand::ReputationCheckFinished {
                         entry_id,
-                        reputation_answers: check_hash_reputation(content_hash).await,
+                        reputation_answers: check_hash_reputation(
+                            content_hash,
+                            service_access.clone(),
+                        )
+                        .await,
+                        service_access,
                     }
                 });
+            }
+            QuarantineEntriesPageInput::ServiceAccessChanged(service_access) => {
+                self.page_state.record_service_access(service_access);
+                self.send_row_states();
             }
             QuarantineEntriesPageInput::SearchTextChanged(search_text) => {
                 self.search_text = search_text;
@@ -986,12 +1001,15 @@ impl Component for QuarantineEntriesPage {
             }
             QuarantineEntriesPageCommand::ReputationCheckFinished {
                 entry_id,
+                service_access,
                 reputation_answers,
             } => {
+                self.page_state.record_service_access(service_access);
                 self.page_state
                     .record_reputation_answers(entry_id, reputation_answers);
                 self.send_row_states();
             }
+
             QuarantineEntriesPageCommand::RecheckFinished => {
                 let rechecked_contents = self.page_state.rechecked_contents();
                 let activity_history = self.activity_history.clone();

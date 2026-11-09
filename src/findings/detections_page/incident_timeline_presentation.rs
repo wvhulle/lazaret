@@ -13,9 +13,9 @@ use crate::{
             DetectionSources, DetectionState, ResolutionKind, StoredDetection,
         },
         threat_intel::{
-            file_reputation_check::malware_family_text,
+            file_reputation_check::{describe_bazaar_failure, malware_family_text},
             malware_bazaar_client::{KnownSampleLookup, MalwareBazaarFailure, SampleFirstSeen},
-            service_key_storage::{KeyStorageFailure, describe_key_failure},
+            service_access::{KnownServiceAccess, ServiceAccess},
         },
     },
     shared_widgets::step_timeline::timeline_step_contents::{
@@ -52,7 +52,7 @@ impl StepActionButton for IncidentStepAction {
             Self::LookUpIncidentSignature => {
                 translated_messages::findings::look_up_incident_signature()
             }
-            Self::OpenOnlineServices => translated_messages::findings::open_online_services(),
+            Self::OpenOnlineServices => translated_messages::findings::set_up_lookup_button(),
             Self::SubmitIncidentSample => translated_messages::findings::submit_incident_sample(),
         }
     }
@@ -83,8 +83,6 @@ pub struct DisplayedDetection {
 pub enum SignatureLookupState {
     NotLookedUp,
     LookingUp,
-    KeyMissing,
-    KeyUnreadable(KeyStorageFailure),
     LookupFinished(KnownSampleLookup),
     BazaarLookupFailed(MalwareBazaarFailure),
 }
@@ -311,39 +309,12 @@ fn false_positive_snippet(
     }
 }
 
-fn describe_bazaar_lookup_failure(bazaar_failure: &MalwareBazaarFailure) -> String {
-    match bazaar_failure {
-        MalwareBazaarFailure::RequestFailed(request_failure) => {
-            translated_messages::findings::request_failed(request_failure)
-        }
-        MalwareBazaarFailure::AnswerUnreadable => {
-            translated_messages::findings::answer_unreadable()
-        }
-        MalwareBazaarFailure::KeyRefused => translated_messages::findings::key_refused(),
-        MalwareBazaarFailure::QueryRefused { query_status } => {
-            translated_messages::findings::query_refused(query_status)
-        }
-        MalwareBazaarFailure::RequestLimitReached => {
-            translated_messages::findings::request_limit_reached()
-        }
-        MalwareBazaarFailure::UnexpectedStatus { status_code } => {
-            translated_messages::findings::unexpected_status(status_code)
-        }
-    }
-}
-
 fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
     match lookup_state {
         SignatureLookupState::NotLookedUp => None,
         SignatureLookupState::LookingUp => Some(translated_messages::findings::looking_up()),
-        SignatureLookupState::KeyMissing => {
-            Some(translated_messages::findings::key_missing_lookup())
-        }
-        SignatureLookupState::KeyUnreadable(key_failure) => {
-            Some(sanitize_scanner_line(&describe_key_failure(key_failure)))
-        }
         SignatureLookupState::BazaarLookupFailed(bazaar_failure) => Some(sanitize_scanner_line(
-            &describe_bazaar_lookup_failure(bazaar_failure),
+            &describe_bazaar_failure(bazaar_failure),
         )),
         SignatureLookupState::LookupFinished(KnownSampleLookup::NoKnownSamples) => {
             Some(translated_messages::findings::no_known_samples_match())
@@ -377,26 +348,28 @@ fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
     }
 }
 
-fn lookup_choices(lookup_state: &SignatureLookupState) -> Vec<StepChoiceRow<IncidentStepAction>> {
-    let signature_lookup = StepChoiceRow {
+fn bazaar_status_text(
+    lookup_state: &SignatureLookupState,
+    service_access: &KnownServiceAccess,
+) -> Option<String> {
+    match service_access.malware_bazaar_blocker() {
+        Some(ServiceAccess::KeyMissing) => Some(translated_messages::findings::bazaar_no_key()),
+        Some(ServiceAccess::KeyBroken(_) | ServiceAccess::KeyReady(_)) => {
+            Some(translated_messages::findings::bazaar_key_unreadable())
+        }
+        None => lookup_summary_text(lookup_state),
+    }
+}
+
+fn lookup_choices(service_access: &KnownServiceAccess) -> Vec<StepChoiceRow<IncidentStepAction>> {
+    vec![StepChoiceRow {
         choice_description: translated_messages::findings::ask_malwarebazaar_signature_description(
         ),
-        chosen_action: IncidentStepAction::LookUpIncidentSignature,
-    };
-    match lookup_state {
-        SignatureLookupState::KeyMissing => vec![
-            signature_lookup,
-            StepChoiceRow {
-                choice_description: translated_messages::findings::key_missing_choices(),
-                chosen_action: IncidentStepAction::OpenOnlineServices,
-            },
-        ],
-        SignatureLookupState::NotLookedUp
-        | SignatureLookupState::LookingUp
-        | SignatureLookupState::KeyUnreadable(_)
-        | SignatureLookupState::LookupFinished(_)
-        | SignatureLookupState::BazaarLookupFailed(_) => vec![signature_lookup],
-    }
+        chosen_action: match service_access.malware_bazaar_blocker() {
+            Some(_unusable_access) => IncidentStepAction::OpenOnlineServices,
+            None => IncidentStepAction::LookUpIncidentSignature,
+        },
+    }]
 }
 
 fn decision_choices(
@@ -443,6 +416,7 @@ fn review_step(
     displayed_detection: &DisplayedDetection,
     deletion_prompt: DeletionPrompt,
     lookup_state: &SignatureLookupState,
+    service_access: &KnownServiceAccess,
     distribution_family: DistributionFamily,
 ) -> IncidentStep {
     let stored_detection = &displayed_detection.stored_detection;
@@ -475,9 +449,9 @@ fn review_step(
         SettledStep {
             choice_rows: decision_choices(deletion_prompt, displayed_detection.file_state)
                 .into_iter()
-                .chain(lookup_choices(lookup_state))
+                .chain(lookup_choices(service_access))
                 .collect(),
-            evidence_rows: lookup_summary_text(lookup_state)
+            evidence_rows: bazaar_status_text(lookup_state, service_access)
                 .map(|lookup_summary| {
                     evidence_row(
                         translated_messages::findings::malwarebazaar_label(),
@@ -550,6 +524,7 @@ pub fn incident_timeline(
     displayed_detection: &DisplayedDetection,
     deletion_prompt: DeletionPrompt,
     lookup_state: &SignatureLookupState,
+    service_access: &KnownServiceAccess,
     distribution_family: DistributionFamily,
 ) -> Vec<IncidentStep> {
     vec![
@@ -559,6 +534,7 @@ pub fn incident_timeline(
             displayed_detection,
             deletion_prompt,
             lookup_state,
+            service_access,
             distribution_family,
         ),
         resolved_step(displayed_detection),
@@ -571,7 +547,10 @@ mod incident_timeline_presentation_tests {
 
     use super::*;
     use crate::{
-        host_services::threat_intel::malware_bazaar_client::MalwareFamily,
+        host_services::threat_intel::{
+            malware_bazaar_client::MalwareFamily,
+            service_access::{ApiKey, KeyProblem, OnlineServiceAccess},
+        },
         shared_widgets::step_timeline::timeline_step_contents::{
             ButtonStyle, StepNodeState, StepPhase,
         },
@@ -608,6 +587,7 @@ mod incident_timeline_presentation_tests {
             displayed_detection,
             deletion_prompt,
             &SignatureLookupState::NotLookedUp,
+            &KnownServiceAccess::AccessNotReadYet,
             DistributionFamily::NixosFamily,
         )
         .remove(REVIEW_POSITION);
@@ -657,6 +637,7 @@ mod incident_timeline_presentation_tests {
             &blocked_detection(),
             DeletionPrompt::NotAsked,
             &SignatureLookupState::NotLookedUp,
+            &KnownServiceAccess::AccessNotReadYet,
             DistributionFamily::NixosFamily,
         );
         assert_eq!(
@@ -708,6 +689,7 @@ mod incident_timeline_presentation_tests {
             &displayed_detection,
             DeletionPrompt::NotAsked,
             &SignatureLookupState::NotLookedUp,
+            &KnownServiceAccess::AccessNotReadYet,
             DistributionFamily::NixosFamily,
         );
         assert_eq!(
@@ -788,6 +770,7 @@ mod incident_timeline_presentation_tests {
             &displayed_detection,
             DeletionPrompt::NotAsked,
             &SignatureLookupState::NotLookedUp,
+            &KnownServiceAccess::AccessNotReadYet,
             DistributionFamily::NixosFamily,
         );
         assert!(
@@ -847,23 +830,46 @@ mod incident_timeline_presentation_tests {
     }
 
     #[test]
-    fn the_only_lookup_sends_the_signature_name() {
-        let lookup_actions = |lookup_state| {
-            lookup_choices(lookup_state)
+    fn an_unusable_key_swaps_look_up_for_set_up() {
+        let chosen_actions = |service_access: &KnownServiceAccess| {
+            lookup_choices(service_access)
                 .into_iter()
                 .map(|choice_row| choice_row.chosen_action)
                 .collect::<Vec<_>>()
         };
+        let access_with_bazaar = |malware_bazaar_access| {
+            KnownServiceAccess::AccessRead(OnlineServiceAccess {
+                malware_bazaar_access,
+                virustotal_access: ServiceAccess::KeyMissing,
+            })
+        };
         assert_eq!(
-            lookup_actions(&SignatureLookupState::NotLookedUp),
+            chosen_actions(&KnownServiceAccess::AccessNotReadYet),
             vec![IncidentStepAction::LookUpIncidentSignature]
         );
         assert_eq!(
-            lookup_actions(&SignatureLookupState::KeyMissing),
-            vec![
-                IncidentStepAction::LookUpIncidentSignature,
-                IncidentStepAction::OpenOnlineServices
-            ]
+            chosen_actions(&access_with_bazaar(ServiceAccess::KeyReady(ApiKey::new(
+                "a".repeat(16)
+            )))),
+            vec![IncidentStepAction::LookUpIncidentSignature]
+        );
+        let broken_access =
+            access_with_bazaar(ServiceAccess::KeyBroken(KeyProblem::KeyFileNotPermitted));
+        assert_eq!(
+            chosen_actions(&broken_access),
+            vec![IncidentStepAction::OpenOnlineServices]
+        );
+        assert_eq!(
+            bazaar_status_text(&SignatureLookupState::NotLookedUp, &broken_access).as_deref(),
+            Some("Key unreadable")
+        );
+        assert_eq!(
+            bazaar_status_text(
+                &SignatureLookupState::NotLookedUp,
+                &access_with_bazaar(ServiceAccess::KeyMissing)
+            )
+            .as_deref(),
+            Some("No key")
         );
     }
 

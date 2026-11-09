@@ -147,10 +147,10 @@ impl Component for SignatureSourcesPage {
 
                     add = &adw::PreferencesGroup {
                         set_title: &translated_messages::signatures::abuse_ch_key_title(),
+                        set_description: Some(&translated_messages::signatures::abuse_ch_key_uses()),
 
                         adw::ActionRow {
                             set_title: &translated_messages::signatures::abuse_ch_auth_title(),
-                            set_subtitle_lines: 0,
                             set_use_markup: false,
                             #[watch]
                             set_subtitle: &abuse_ch_key_subtitle(&model.gathered_evidence),

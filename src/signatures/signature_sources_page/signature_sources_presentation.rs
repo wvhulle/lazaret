@@ -1,5 +1,6 @@
 use crate::{
     application_window::protection_evidence_refresh::GatheredEvidence,
+    host_services::threat_intel::service_access::ServiceAccess,
     signatures::signature_sources_page::source_check_results::{
         AuditCheck, AuditStatus, overall_check_status,
     },
@@ -28,81 +29,76 @@ impl SourceChecks {
     }
 }
 
-fn abuse_ch_key_purpose_text() -> String {
-    translated_messages::signatures::abuse_ch_key_purpose()
+fn gathered_abuse_ch_access(gathered_evidence: &GatheredEvidence) -> Option<&ServiceAccess> {
+    match gathered_evidence {
+        GatheredEvidence::NotGatheredYet => None,
+        GatheredEvidence::Gathered {
+            protection_evidence,
+            ..
+        } => Some(
+            &protection_evidence
+                .online_service_access
+                .malware_bazaar_access,
+        ),
+    }
 }
 
 pub fn abuse_ch_key_subtitle(gathered_evidence: &GatheredEvidence) -> String {
-    let key_status_text = match gathered_evidence {
-        GatheredEvidence::NotGatheredYet => translated_messages::signatures::checking_api_key(),
-        GatheredEvidence::Gathered {
-            protection_evidence,
-            ..
-        } => protection_evidence
-            .lookup_key_statuses
-            .abuse_ch_key
-            .status_text(),
-    };
-    format!("{}\n{key_status_text}", abuse_ch_key_purpose_text())
+    match gathered_abuse_ch_access(gathered_evidence) {
+        None => translated_messages::signatures::checking_api_key(),
+        Some(ServiceAccess::KeyReady(api_key)) => api_key.masked_text(),
+        Some(ServiceAccess::KeyMissing) => translated_messages::signatures::abuse_ch_no_key(),
+        Some(ServiceAccess::KeyBroken(_key_problem)) => {
+            translated_messages::signatures::abuse_ch_key_unreadable()
+        }
+    }
 }
 
-pub const fn abuse_ch_key_needs_attention(gathered_evidence: &GatheredEvidence) -> bool {
-    match gathered_evidence {
-        GatheredEvidence::NotGatheredYet => false,
-        GatheredEvidence::Gathered {
-            protection_evidence,
-            ..
-        } => protection_evidence
-            .lookup_key_statuses
-            .abuse_ch_key
-            .needs_attention(),
-    }
+pub fn abuse_ch_key_needs_attention(gathered_evidence: &GatheredEvidence) -> bool {
+    gathered_abuse_ch_access(gathered_evidence)
+        .is_some_and(|abuse_ch_access| !abuse_ch_access.is_usable())
 }
 
 #[cfg(test)]
 mod signature_sources_presentation_tests {
     use super::*;
     use crate::host_services::{
-        protection_evidence::{
-            host_protection_evidence::ProtectionEvidence,
-            protection_evidence_fixtures::{REFERENCE_MOMENT, healthy_evidence},
-        },
-        threat_intel::service_key_status::{LookupKeyStatuses, ServiceKeyStatus},
+        protection_evidence::protection_evidence_fixtures::{REFERENCE_MOMENT, healthy_evidence},
+        threat_intel::service_access::{ApiKey, KeyProblem},
     };
 
-    fn gathered_with_abuse_ch_key(abuse_ch_key: ServiceKeyStatus) -> GatheredEvidence {
+    fn gathered_with_abuse_ch_access(abuse_ch_access: ServiceAccess) -> GatheredEvidence {
         GatheredEvidence::Gathered {
-            protection_evidence: Box::new(ProtectionEvidence {
-                lookup_key_statuses: LookupKeyStatuses {
-                    abuse_ch_key,
-                    virustotal_key: ServiceKeyStatus::KeyMissing,
-                },
-                ..healthy_evidence()
+            protection_evidence: Box::new({
+                let mut protection_evidence = healthy_evidence();
+                protection_evidence
+                    .online_service_access
+                    .malware_bazaar_access = abuse_ch_access;
+                protection_evidence
             }),
             gathered_at: REFERENCE_MOMENT,
         }
     }
 
     #[test]
-    fn the_abuse_ch_key_row_reads_like_the_online_services_preferences() {
-        let configured = gathered_with_abuse_ch_key(ServiceKeyStatus::KeyConfigured);
-        assert!(abuse_ch_key_subtitle(&configured).ends_with("\nAPI key configured"));
-        assert!(!abuse_ch_key_needs_attention(&configured));
-        let missing = gathered_with_abuse_ch_key(ServiceKeyStatus::KeyMissing);
-        assert!(abuse_ch_key_subtitle(&missing).ends_with("\nNo API key, so this service is off"));
-        assert!(!abuse_ch_key_needs_attention(&missing));
-        let unreadable = gathered_with_abuse_ch_key(ServiceKeyStatus::KeyUnreadable {
-            failure_text: "permission denied".to_owned(),
-        });
-        assert!(
-            abuse_ch_key_subtitle(&unreadable)
-                .ends_with("\nThe API key can't be read: permission denied")
-        );
-        assert!(abuse_ch_key_needs_attention(&unreadable));
-        assert!(
-            abuse_ch_key_subtitle(&GatheredEvidence::NotGatheredYet)
-                .ends_with("\nChecking the API key…")
-        );
+    fn the_abuse_ch_key_row_shows_a_short_status_and_flags_unusable_keys() {
+        let ready = gathered_with_abuse_ch_access(ServiceAccess::KeyReady(ApiKey::new(format!(
+            "{}cafe",
+            "a".repeat(16)
+        ))));
+        assert_eq!(abuse_ch_key_subtitle(&ready), "••••cafe");
+        assert!(!abuse_ch_key_needs_attention(&ready));
+        let missing = gathered_with_abuse_ch_access(ServiceAccess::KeyMissing);
+        assert_eq!(abuse_ch_key_subtitle(&missing), "No key");
+        assert!(abuse_ch_key_needs_attention(&missing));
+        let broken = gathered_with_abuse_ch_access(ServiceAccess::KeyBroken(
+            KeyProblem::KeyFileNotPermitted,
+        ));
+        assert_eq!(abuse_ch_key_subtitle(&broken), "Key unreadable");
+        assert!(abuse_ch_key_needs_attention(&broken));
+        assert!(!abuse_ch_key_needs_attention(
+            &GatheredEvidence::NotGatheredYet
+        ));
     }
 
     #[test]

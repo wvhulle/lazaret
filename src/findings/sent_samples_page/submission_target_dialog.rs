@@ -1,6 +1,7 @@
 use relm4::{Sender, adw, adw::prelude::*, gtk};
 
 use crate::{
+    application_window::application_actions::ONLINE_SERVICES_ACTION_NAME,
     findings::sent_samples_page::{
         sent_samples_presentation::target_choice_label, sent_samples_state::OfferedTarget,
         uploads_in_flight::UploadActivity,
@@ -15,6 +16,7 @@ use crate::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TargetDialogChoice {
     TargetPicked(SubmissionTarget),
+    KeySetUpChosen,
     TargetDismissed,
 }
 
@@ -24,6 +26,7 @@ impl AlertChoice for TargetDialogChoice {
         Self::TargetPicked(SubmissionTarget::ClamavMissedMalware),
         Self::TargetPicked(SubmissionTarget::MalwareBazaarSample),
         Self::TargetPicked(SubmissionTarget::VirusTotalSample),
+        Self::KeySetUpChosen,
     ];
     const DISMISSING_CHOICE: Self = Self::TargetDismissed;
 
@@ -33,6 +36,7 @@ impl AlertChoice for TargetDialogChoice {
             Self::TargetPicked(SubmissionTarget::ClamavMissedMalware) => "clamav-missed-malware",
             Self::TargetPicked(SubmissionTarget::MalwareBazaarSample) => "malware-bazaar",
             Self::TargetPicked(SubmissionTarget::VirusTotalSample) => "virustotal",
+            Self::KeySetUpChosen => "set-up-keys",
             Self::TargetDismissed => "cancel",
         }
     }
@@ -43,6 +47,7 @@ pub struct TargetChoiceRequest {
     pub entry_id: i64,
     pub file_name: String,
     pub offered_targets: Vec<OfferedTarget>,
+    pub targets_needing_key: Vec<SubmissionTarget>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -79,13 +84,27 @@ pub fn present_target_choice<Message: 'static>(
                 target_choice,
                 &target_choice_label(offered_target.submission_target),
             );
-            match offered_target.upload_activity {
-                UploadActivity::UploadIdle => {}
-                UploadActivity::UploadRunning => {
+            let needs_key = choice_request
+                .targets_needing_key
+                .contains(&offered_target.submission_target);
+            match (offered_target.upload_activity, needs_key) {
+                (UploadActivity::UploadIdle, false) => {}
+                (UploadActivity::UploadRunning, _) | (UploadActivity::UploadIdle, true) => {
                     target_dialog.set_response_enabled(target_choice.response_id(), false);
                 }
             }
         });
+    if choice_request.offered_targets.iter().any(|offered_target| {
+        choice_request
+            .targets_needing_key
+            .contains(&offered_target.submission_target)
+    }) {
+        add_alert_choice(
+            &target_dialog,
+            TargetDialogChoice::KeySetUpChosen,
+            &translated_messages::findings::set_up_keys_response(),
+        );
+    }
     target_dialog.set_default_response(Some(TargetDialogChoice::TargetDismissed.response_id()));
     let entry_id = choice_request.entry_id;
     deliver_local_outcome(
@@ -97,6 +116,10 @@ pub fn present_target_choice<Message: 'static>(
                     entry_id,
                     submission_target,
                 }))
+            }
+            TargetDialogChoice::KeySetUpChosen => {
+                relm4::main_application().activate_action(ONLINE_SERVICES_ACTION_NAME, None);
+                None
             }
             TargetDialogChoice::TargetDismissed => None,
         },

@@ -52,7 +52,9 @@ use crate::{
         },
         threat_intel::{
             malware_bazaar_client::look_up_signature,
-            service_key_storage::{ResolvedApiKey, ThreatIntelService, read_api_key},
+            service_access::{
+                KnownServiceAccess, OnlineServiceAccess, ServiceAccess, read_online_service_access,
+            },
         },
     },
     shared_widgets::{
@@ -87,6 +89,7 @@ pub struct BackgroundDetectionsPage {
     alert_rows: FactoryVecDeque<TimelineStepRow<AlertStepAction>>,
     evidence_refresh: EvidenceRefresh,
     gathered_evidence: GatheredEvidence,
+    service_access: KnownServiceAccess,
     toaster: Toaster,
     _journal_follow: RunningStream,
 }
@@ -137,6 +140,7 @@ pub enum BackgroundDetectionsPageCommand {
     },
     SignatureLookupFinished {
         detection_id: i64,
+        service_access: OnlineServiceAccess,
         lookup_state: SignatureLookupState,
     },
 }
@@ -367,16 +371,16 @@ async fn loaded_detections_command(
     }
 }
 
-async fn signature_lookup_state(signature_name: &str) -> SignatureLookupState {
-    match read_api_key(ThreatIntelService::AbuseChService).await {
-        Ok(ResolvedApiKey::NotConfigured) => SignatureLookupState::KeyMissing,
-        Err(key_failure) => SignatureLookupState::KeyUnreadable(key_failure),
-        Ok(ResolvedApiKey::FromKeyFile(auth_key) | ResolvedApiKey::FromKeyring(auth_key)) => {
-            match look_up_signature(&auth_key, signature_name).await {
-                Ok(signature_lookup) => SignatureLookupState::LookupFinished(signature_lookup),
-                Err(lookup_failure) => SignatureLookupState::BazaarLookupFailed(lookup_failure),
-            }
-        }
+async fn signature_lookup_state(
+    malware_bazaar_access: &ServiceAccess,
+    signature_name: &str,
+) -> SignatureLookupState {
+    let Some(auth_key) = malware_bazaar_access.ready_key() else {
+        return SignatureLookupState::NotLookedUp;
+    };
+    match look_up_signature(auth_key.as_str(), signature_name).await {
+        Ok(signature_lookup) => SignatureLookupState::LookupFinished(signature_lookup),
+        Err(lookup_failure) => SignatureLookupState::BazaarLookupFailed(lookup_failure),
     }
 }
 
@@ -530,6 +534,7 @@ impl BackgroundDetectionsPage {
                     displayed_detection,
                     *deletion_prompt,
                     signature_lookup,
+                    &self.service_access,
                     self.distribution_family,
                 )
             })
@@ -637,9 +642,15 @@ impl BackgroundDetectionsPage {
             .with_signature_lookup(detection_id, SignatureLookupState::LookingUp);
         self.replace_incident_view(next_view);
         sender.oneshot_command(async move {
+            let service_access = read_online_service_access().await;
             BackgroundDetectionsPageCommand::SignatureLookupFinished {
                 detection_id,
-                lookup_state: signature_lookup_state(&stored_detection.signature_name).await,
+                lookup_state: signature_lookup_state(
+                    &service_access.malware_bazaar_access,
+                    &stored_detection.signature_name,
+                )
+                .await,
+                service_access,
             }
         });
     }
@@ -807,6 +818,7 @@ impl Component for BackgroundDetectionsPage {
                 ),
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
+            service_access: KnownServiceAccess::AccessNotReadYet,
             toaster: Toaster::new(&root),
             _journal_follow: run_stream(
                 &sender,
@@ -858,6 +870,19 @@ impl Component for BackgroundDetectionsPage {
                 self.evidence_refresh = evidence_refresh;
             }
             BackgroundDetectionsPageInput::EvidenceGathered(gathered_evidence) => {
+                if let GatheredEvidence::Gathered {
+                    protection_evidence,
+                    ..
+                } = &gathered_evidence
+                {
+                    let gathered_access = KnownServiceAccess::AccessRead(
+                        protection_evidence.online_service_access.clone(),
+                    );
+                    if gathered_access != self.service_access {
+                        self.service_access = gathered_access;
+                        self.show_incident_view();
+                    }
+                }
                 self.gathered_evidence = gathered_evidence;
                 self.show_alert_steps();
             }
@@ -932,8 +957,10 @@ impl Component for BackgroundDetectionsPage {
             }
             BackgroundDetectionsPageCommand::SignatureLookupFinished {
                 detection_id,
+                service_access,
                 lookup_state,
             } => {
+                self.service_access = KnownServiceAccess::AccessRead(service_access);
                 let next_view = self
                     .taken_incident_view()
                     .with_signature_lookup(detection_id, lookup_state);

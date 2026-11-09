@@ -56,6 +56,7 @@ use crate::{
             submission_samples::{SampleReadFailure, SubmissionSample, shown_file_name},
             virustotal_sample_upload::{VirusTotalUploadAttempt, upload_to_virustotal},
         },
+        threat_intel::service_access::{KnownServiceAccess, OnlineServiceAccess},
     },
     shared_widgets::{
         awaited_dialogs::{ChosenSubmissionFile, chosen_file_to_submit, deliver_local_outcome},
@@ -92,6 +93,7 @@ pub struct SentSamplesPage {
     candidate_listing: CandidateListing,
     submission_filters: SubmissionFilters,
     remote_refresh: RemoteRefreshRun,
+    service_access: KnownServiceAccess,
     uploads_in_flight: UploadsInFlight,
     submitted_rows: FactoryVecDeque<SubmittedEntryRow>,
     candidate_rows: FactoryVecDeque<QuarantinedCandidateRow>,
@@ -114,6 +116,7 @@ pub enum SentSamplesPageInput {
     MissedMalwareFileChosen(PathBuf),
     MissedMalwareFileUnavailable(String),
     RemoteEntryRequested(String),
+    ServiceAccessChanged(OnlineServiceAccess),
 }
 
 #[derive(Debug)]
@@ -280,6 +283,20 @@ impl SentSamplesPage {
             });
     }
 
+    fn targets_needing_key(&self) -> Vec<SubmissionTarget> {
+        [
+            self.service_access
+                .malware_bazaar_blocker()
+                .map(|_unusable_access| SubmissionTarget::MalwareBazaarSample),
+            self.service_access
+                .virustotal_blocker()
+                .map(|_unusable_access| SubmissionTarget::VirusTotalSample),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
     const fn remote_refresh_running(&self) -> bool {
         matches!(self.remote_refresh, RemoteRefreshRun::RefreshRunning { .. })
     }
@@ -309,6 +326,7 @@ impl SentSamplesPage {
                 entry_id: entry_record.entry_id,
                 file_name: shown_file_name(&entry_record.original_path),
                 offered_targets: entry_targets,
+                targets_needing_key: self.targets_needing_key(),
             },
             sender.input_sender().clone(),
             SentSamplesPageInput::TargetChosen,
@@ -628,6 +646,7 @@ impl Component for SentSamplesPage {
             candidate_listing: CandidateListing::CandidatesLoading,
             submission_filters: SubmissionFilters::SHOW_EVERYTHING,
             remote_refresh: RemoteRefreshRun::RefreshIdle,
+            service_access: KnownServiceAccess::AccessNotReadYet,
             uploads_in_flight: UploadsInFlight::default(),
             submitted_rows: FactoryVecDeque::builder()
                 .launch(gtk::ListBox::default())
@@ -667,6 +686,9 @@ impl Component for SentSamplesPage {
             SentSamplesPageInput::PageShown => {
                 self.reload_submissions(&sender);
                 self.reload_candidates(&sender);
+            }
+            SentSamplesPageInput::ServiceAccessChanged(service_access) => {
+                self.service_access = KnownServiceAccess::AccessRead(service_access);
             }
             SentSamplesPageInput::SubmissionsChanged => self.reload_submissions(&sender),
             SentSamplesPageInput::QuarantineEntriesChanged => self.reload_candidates(&sender),

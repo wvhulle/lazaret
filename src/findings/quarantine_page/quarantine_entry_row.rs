@@ -22,7 +22,10 @@ use crate::{
             quarantine_entry_database::{QuarantineEntryRecord, StoredDetectionDate},
             quarantine_file_moves::RecordedPayloadHash,
         },
-        threat_intel::file_reputation_check::{ReputationAnswers, SourceAnswer},
+        threat_intel::{
+            file_reputation_check::{KeyedSourceAnswer, ReputationAnswers, SourceAnswer},
+            service_access::{KnownServiceAccess, ServiceAccess},
+        },
     },
     shared_widgets::submission_confirm_dialog::ClamavReportProposal,
     translated_messages,
@@ -58,7 +61,7 @@ pub enum QuarantineEntryRowInput {
     TrustFileRequested,
     FalsePositiveReportRequested,
     SubmissionRequested,
-    RowStateChanged(EntryRowState),
+    RowStateChanged(Box<EntryRowState>),
 }
 
 #[derive(Debug)]
@@ -136,42 +139,91 @@ impl QuarantineEntryRow {
         }
     }
 
-    fn source_answer_text(&self, chosen_source: fn(&ReputationAnswers) -> &SourceAnswer) -> String {
+    fn source_answer_text(&self, answered_text: fn(&ReputationAnswers) -> String) -> String {
         match &self.row_state.row_reputation {
             RowReputation::NotChecked => translated_messages::findings::not_checked(),
             RowReputation::CheckingReputation => translated_messages::findings::checking_label(),
             RowReputation::ReputationChecked(reputation_answers) => {
-                chosen_source(reputation_answers).displayed_text()
+                answered_text(reputation_answers)
             }
         }
     }
 
-    fn source_needs_key(&self, chosen_source: fn(&ReputationAnswers) -> &SourceAnswer) -> bool {
-        self.checked_answers()
-            .is_some_and(|reputation_answers| chosen_source(reputation_answers).needs_key())
+    fn keyed_source_text(
+        &self,
+        source_blocker: fn(&KnownServiceAccess) -> Option<&ServiceAccess>,
+        keyed_source: fn(&ReputationAnswers) -> &KeyedSourceAnswer,
+    ) -> String {
+        match source_blocker(&self.row_state.service_access) {
+            Some(ServiceAccess::KeyMissing) => translated_messages::findings::reputation_no_key(),
+            Some(ServiceAccess::KeyBroken(_) | ServiceAccess::KeyReady(_)) => {
+                translated_messages::findings::reputation_key_unreadable()
+            }
+            None => match &self.row_state.row_reputation {
+                RowReputation::NotChecked => translated_messages::findings::not_checked(),
+                RowReputation::CheckingReputation => {
+                    translated_messages::findings::checking_label()
+                }
+                RowReputation::ReputationChecked(reputation_answers) => {
+                    match keyed_source(reputation_answers) {
+                        KeyedSourceAnswer::KeyedAnswer(source_answer) => {
+                            source_answer.displayed_text()
+                        }
+                        KeyedSourceAnswer::SkippedWithoutKey => {
+                            translated_messages::findings::not_checked()
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+    fn keyed_source_blocked(
+        &self,
+        source_blocker: fn(&KnownServiceAccess) -> Option<&ServiceAccess>,
+    ) -> bool {
+        source_blocker(&self.row_state.service_access).is_some()
+    }
+
+    fn keyed_source_styles(
+        &self,
+        source_blocker: fn(&KnownServiceAccess) -> Option<&ServiceAccess>,
+    ) -> &'static [&'static str] {
+        if self.keyed_source_blocked(source_blocker) {
+            &[]
+        } else {
+            &["property"]
+        }
     }
 
     fn virustotal_report_url(&self) -> Option<&str> {
+        if self.keyed_source_blocked(KnownServiceAccess::virustotal_blocker) {
+            return None;
+        }
         self.checked_answers().and_then(|reputation_answers| {
             match &reputation_answers.virustotal_answer {
-                SourceAnswer::AnsweredWithReport { report_url, .. } => Some(report_url.as_str()),
-                SourceAnswer::NeedsKey
-                | SourceAnswer::Answered { .. }
-                | SourceAnswer::Failed(_) => None,
+                KeyedSourceAnswer::KeyedAnswer(SourceAnswer::AnsweredWithReport {
+                    report_url,
+                    ..
+                }) => Some(report_url.as_str()),
+                KeyedSourceAnswer::KeyedAnswer(
+                    SourceAnswer::Answered { .. } | SourceAnswer::Failed(_),
+                )
+                | KeyedSourceAnswer::SkippedWithoutKey => None,
             }
         })
     }
 }
 
-const fn circl_source(reputation_answers: &ReputationAnswers) -> &SourceAnswer {
-    &reputation_answers.circl_answer
+fn circl_answer_text(reputation_answers: &ReputationAnswers) -> String {
+    reputation_answers.circl_answer.displayed_text()
 }
 
-const fn bazaar_source(reputation_answers: &ReputationAnswers) -> &SourceAnswer {
+const fn bazaar_source(reputation_answers: &ReputationAnswers) -> &KeyedSourceAnswer {
     &reputation_answers.bazaar_answer
 }
 
-const fn virustotal_source(reputation_answers: &ReputationAnswers) -> &SourceAnswer {
+const fn virustotal_source(reputation_answers: &ReputationAnswers) -> &KeyedSourceAnswer {
     &reputation_answers.virustotal_answer
 }
 
@@ -254,7 +306,7 @@ impl FactoryComponent for QuarantineEntryRow {
                 set_subtitle_lines: 0,
 
                 add_suffix = &gtk::Button {
-                    set_label: &translated_messages::findings::check_label(),
+                    set_label: &translated_messages::findings::look_up_reputation_button(),
                     set_valign: gtk::Align::Center,
                     #[watch]
                     set_sensitive: self.known_sha256_hex().is_some() && !self.reputation_check_running(),
@@ -264,31 +316,35 @@ impl FactoryComponent for QuarantineEntryRow {
 
             add_row = &source_row("CIRCL hashlookup") -> adw::ActionRow {
                 #[watch]
-                set_subtitle: &self.source_answer_text(circl_source),
+                set_subtitle: &self.source_answer_text(circl_answer_text),
             },
 
             add_row = &source_row("MalwareBazaar") -> adw::ActionRow {
                 #[watch]
-                set_subtitle: &self.source_answer_text(bazaar_source),
+                set_subtitle: &self.keyed_source_text(KnownServiceAccess::malware_bazaar_blocker, bazaar_source),
+                #[watch]
+                set_css_classes: self.keyed_source_styles(KnownServiceAccess::malware_bazaar_blocker),
 
                 add_suffix = &gtk::Button {
-                    set_label: &translated_messages::findings::add_key_label(),
+                    set_label: &translated_messages::findings::set_up_source_button(),
                     set_valign: gtk::Align::Center,
                     #[watch]
-                    set_visible: self.source_needs_key(bazaar_source),
+                    set_visible: self.keyed_source_blocked(KnownServiceAccess::malware_bazaar_blocker),
                     set_action_name: Some(ONLINE_SERVICES_ACTION),
                 },
             },
 
             add_row = &source_row("VirusTotal") -> adw::ActionRow {
                 #[watch]
-                set_subtitle: &self.source_answer_text(virustotal_source),
+                set_subtitle: &self.keyed_source_text(KnownServiceAccess::virustotal_blocker, virustotal_source),
+                #[watch]
+                set_css_classes: self.keyed_source_styles(KnownServiceAccess::virustotal_blocker),
 
                 add_suffix = &gtk::Button {
-                    set_label: &translated_messages::findings::add_key_label(),
+                    set_label: &translated_messages::findings::set_up_source_button(),
                     set_valign: gtk::Align::Center,
                     #[watch]
-                    set_visible: self.source_needs_key(virustotal_source),
+                    set_visible: self.keyed_source_blocked(KnownServiceAccess::virustotal_blocker),
                     set_action_name: Some(ONLINE_SERVICES_ACTION),
                 },
 
@@ -405,7 +461,7 @@ impl FactoryComponent for QuarantineEntryRow {
                 });
             }
             QuarantineEntryRowInput::RowStateChanged(row_state) => {
-                self.row_state = row_state;
+                self.row_state = *row_state;
             }
             QuarantineEntryRowInput::FalsePositiveReportRequested => {
                 let Some(reported_detection) =

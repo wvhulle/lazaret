@@ -9,7 +9,10 @@ use crate::{
             quarantine_file_moves::{QuarantineMoveFailure, RecordedPayloadHash},
         },
         sample_submissions::clamav_report_review::RecheckedContent,
-        threat_intel::file_reputation_check::ReputationAnswers,
+        threat_intel::{
+            file_reputation_check::ReputationAnswers,
+            service_access::{KnownServiceAccess, OnlineServiceAccess},
+        },
     },
     shared_widgets::{
         component_streams::RunningStream,
@@ -88,6 +91,7 @@ pub enum RowActivity {
 pub struct EntryRowState {
     pub recheck_state: RowRecheckState,
     pub row_reputation: RowReputation,
+    pub service_access: KnownServiceAccess,
     pub row_activity: RowActivity,
 }
 
@@ -140,6 +144,7 @@ pub struct QuarantinePageState {
     listing: QuarantineListing,
     recheck_states: HashMap<i64, RowRecheckState>,
     row_reputations: HashMap<i64, RowReputation>,
+    service_access: KnownServiceAccess,
     entry_operations: BTreeMap<i64, EntryOperationState>,
     recheck_run: RecheckRun,
 }
@@ -150,6 +155,7 @@ impl QuarantinePageState {
             listing: QuarantineListing::ListingLoading,
             recheck_states: HashMap::new(),
             row_reputations: HashMap::new(),
+            service_access: KnownServiceAccess::AccessNotReadYet,
             entry_operations: BTreeMap::new(),
             recheck_run: RecheckRun::RecheckIdle,
         }
@@ -377,6 +383,10 @@ impl QuarantinePageState {
         }
     }
 
+    pub fn record_service_access(&mut self, service_access: OnlineServiceAccess) {
+        self.service_access = KnownServiceAccess::AccessRead(service_access);
+    }
+
     pub fn row_state(&self, entry_id: i64) -> EntryRowState {
         EntryRowState {
             recheck_state: self
@@ -389,6 +399,7 @@ impl QuarantinePageState {
                 .get(&entry_id)
                 .cloned()
                 .unwrap_or(RowReputation::NotChecked),
+            service_access: self.service_access.clone(),
             row_activity: match self.running_operation(entry_id) {
                 Some(_running_kind) => RowActivity::OperationInProgress,
                 None => RowActivity::ActionsAvailable,
@@ -419,7 +430,7 @@ mod quarantine_page_state_tests {
             quarantine_entry_database::StoredDetectionDate,
             quarantine_file_moves::RecordedPayloadHash,
         },
-        threat_intel::file_reputation_check::SourceAnswer,
+        threat_intel::file_reputation_check::{KeyedSourceAnswer, SourceAnswer},
     };
 
     fn quarantined_entry(entry_id: i64) -> QuarantineEntryRecord {
@@ -449,11 +460,13 @@ mod quarantine_page_state_tests {
 
     fn checked_answers() -> ReputationAnswers {
         ReputationAnswers {
-            circl_answer: SourceAnswer::NeedsKey,
-            bazaar_answer: SourceAnswer::NeedsKey,
-            virustotal_answer: SourceAnswer::Answered {
-                verdict_text: "Unknown to VirusTotal".to_owned(),
+            circl_answer: SourceAnswer::Answered {
+                verdict_text: "Not in the known-files database".to_owned(),
             },
+            bazaar_answer: KeyedSourceAnswer::SkippedWithoutKey,
+            virustotal_answer: KeyedSourceAnswer::KeyedAnswer(SourceAnswer::Answered {
+                verdict_text: "Unknown to VirusTotal".to_owned(),
+            }),
         }
     }
 
@@ -614,8 +627,11 @@ mod quarantine_page_state_tests {
                     ..
                 },
                 ..
-            }] if reputation_answers.virustotal_answer.displayed_text() == "Unknown to VirusTotal"
-                && reputation_answers.circl_answer.needs_key()
+            }] if matches!(
+                &reputation_answers.virustotal_answer,
+                KeyedSourceAnswer::KeyedAnswer(virustotal_answer)
+                    if virustotal_answer.displayed_text() == "Unknown to VirusTotal"
+            ) && matches!(reputation_answers.bazaar_answer, KeyedSourceAnswer::SkippedWithoutKey)
         ));
     }
 

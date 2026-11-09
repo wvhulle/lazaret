@@ -18,9 +18,8 @@ use crate::host_services::{
             BazaarSampleUpload, BazaarUploadAnswer, KnownSampleLookup, MalwareBazaarFailure,
             bazaar_signature_tag, look_up_file_hash, upload_sample,
         },
-        service_key_storage::{
-            KeyStorageFailure, ResolvedApiKey, ThreatIntelService, read_api_key,
-        },
+        service_access::read_service_access,
+        service_key_storage::ThreatIntelService,
     },
 };
 
@@ -30,8 +29,7 @@ const UNWANTED_PROGRAM_PREFIX: &str = "PUA.";
 pub enum BazaarUploadAttempt {
     SubmissionRecorded(SubmissionRecord),
     AlreadySubmitted(SubmissionRecord),
-    KeyMissing,
-    KeyUnreadable(KeyStorageFailure),
+    KeyNotUsable,
     SampleUnreadable(SampleReadFailure),
     NotDetectedByClamav,
     UnwantedProgramOnly,
@@ -89,13 +87,11 @@ pub fn bazaar_state_after_upload(upload_answer: BazaarUploadAnswer) -> Submissio
 }
 
 pub async fn abuse_ch_key() -> Result<String, BazaarUploadAttempt> {
-    match read_api_key(ThreatIntelService::AbuseChService).await {
-        Ok(ResolvedApiKey::FromKeyFile(api_key) | ResolvedApiKey::FromKeyring(api_key)) => {
-            Ok(api_key)
-        }
-        Ok(ResolvedApiKey::NotConfigured) => Err(BazaarUploadAttempt::KeyMissing),
-        Err(key_failure) => Err(BazaarUploadAttempt::KeyUnreadable(key_failure)),
-    }
+    read_service_access(ThreatIntelService::AbuseChService)
+        .await
+        .ready_key()
+        .map(|auth_key| auth_key.as_str().to_owned())
+        .ok_or(BazaarUploadAttempt::KeyNotUsable)
 }
 
 async fn bazaar_outcome_state(

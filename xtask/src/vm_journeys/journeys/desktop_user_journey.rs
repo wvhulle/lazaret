@@ -21,7 +21,7 @@ use crate::vm_journeys::{
         system_commands::{
             as_root, journal_text, settle, succeed, unit_journal_lines_mentioning, wait_until,
         },
-        ui_messages::{findings, text_before_placeholder, widgets},
+        ui_messages::{findings, host, text_before_placeholder, widgets},
     },
     remote_nodes::{
         fake_internet::{
@@ -333,7 +333,7 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
                 .apply()?;
             journey_run.press(&button(findings::look_up_incident_signature()))?;
             journey_run.await_shown(&label_containing(text_before_placeholder(
-                findings::request_failed,
+                host::request_failed_bazaar,
             )))?;
             FakeInternetScenario::default().apply()?;
             journey_run.press(&button(findings::look_up_incident_signature()))?;
