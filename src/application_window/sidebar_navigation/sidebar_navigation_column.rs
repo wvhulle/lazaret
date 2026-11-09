@@ -13,6 +13,7 @@ use crate::{
             sidebar_entry_row::SidebarEntryRow,
         },
     },
+    shared_widgets::named_menu_items::NamedMenuItems,
     translated_messages,
 };
 
@@ -89,7 +90,7 @@ impl Component for SidebarNavigationColumn {
                     pack_end = &gtk::MenuButton {
                         set_icon_name: "open-menu-symbolic",
                         set_tooltip_text: Some(&translated_messages::window::menu_tooltip()),
-                        set_menu_model: Some(&primary_menu()),
+                        set_named_menu_model: &primary_menu(),
                         set_primary: true,
                     },
                 },

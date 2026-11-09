@@ -21,7 +21,7 @@ use crate::{
         quarantine_vault::quarantine_file_moves::QuarantineMoveFailure,
     },
     shared_widgets::{
-        quarantine_failure_text::describe_quarantine_failure,
+        named_menu_items::NamedMenuItems, quarantine_failure_text::describe_quarantine_failure,
         submission_confirm_dialog::ClamavReportProposal,
     },
     translated_messages,
@@ -294,7 +294,7 @@ impl FactoryComponent for DetectedThreatRow {
         row_actions.register_for_widget(&widgets.threat_action_row);
         widgets
             .threat_actions_button
-            .set_menu_model(Some(&threat_actions_menu(&self.detected_threat)));
+            .set_named_menu_model(&threat_actions_menu(&self.detected_threat));
         widgets
     }
 

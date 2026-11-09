@@ -7,6 +7,7 @@ pub mod host_read_failure_text;
 pub mod journal_follow_failure_text;
 pub mod listed_spin_row;
 pub mod loading_indicators;
+pub mod named_menu_items;
 pub mod page_widget_templates;
 pub mod quarantine_failure_text;
 pub mod scan_runs;

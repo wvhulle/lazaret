@@ -64,6 +64,7 @@ use crate::{
         loading_indicators::{
             BUSY_PAGE_NAME, IDLE_PAGE_NAME, busy_page_name, empty_placeholder_row,
         },
+        named_menu_items::NamedMenuItems,
         submission_confirm_dialog::{
             ClamavReportProposal, SampleUploadProposal, UploadService,
             present_clamav_report_confirmation, present_sample_upload_confirmation,
@@ -593,7 +594,7 @@ impl Component for SentSamplesPage {
                         set_description: Some(&translated_messages::findings::lazaret_sent_became_description()),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::MenuButton {
-                            set_menu_model: Some(&submission_filter_menu()),
+                            set_named_menu_model: &submission_filter_menu(),
                             set_always_show_arrow: true,
                             set_valign: gtk::Align::Center,
                             set_tooltip_text: Some(&translated_messages::findings::filter_sent_samples_tooltip()),
