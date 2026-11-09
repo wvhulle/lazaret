@@ -637,10 +637,18 @@ findings-delete-quarantined-file = ¿Eliminar el archivo en cuarentena?
 findings-file-permanently-deleted = El archivo se eliminará permanentemente.
 findings-quarantine-title = Cuarentena
 findings-more-tooltip = Más
+findings-check-all-again-label = Comprobar todo de nuevo
+findings-count-still-detected-after-recheck =
+    { $count ->
+        [one] { $count } archivo se sigue detectando.
+       *[other] { $count } archivos se siguen detectando.
+    }
+findings-count-not-rechecked =
+    { $count ->
+        [one] { $count } archivo no se pudo comprobar.
+       *[other] { $count } archivos no se pudieron comprobar.
+    }
 findings-clear-old-items-label = Borrar elementos antiguos…
-findings-check-again-label = Comprobar de nuevo
-findings-scan-every-quarantined-tooltip = Analizar todos los archivos en cuarentena con las firmas actuales
-findings-refresh-tooltip = Actualizar
 findings-search-tooltip = Buscar
 findings-search-threat-name-placeholder = Buscar por nombre de amenaza o ruta
 findings-quarantine-storage-title = Almacenamiento de cuarentena
@@ -659,7 +667,6 @@ findings-quarantine-cannot-read-title = No se puede leer la cuarentena
 findings-loading-quarantine = Cargando la cuarentena…
 findings-quarantine-empty = La cuarentena está vacía
 findings-hash-copied-clipboard = Hash copiado al portapapeles
-findings-every-quarantined-file-still = Todos los archivos en cuarentena se siguen detectando o no se pudieron comprobar
 findings-count-quarantined-file-no =
     { $count ->
         [one] { $count } archivo en cuarentena ya no se detecta. Compruébelo antes de restaurarlo.

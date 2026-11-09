@@ -117,7 +117,6 @@ fn show_quarantine_entry(
 ) -> Result<(), JourneyFailure> {
     show_page(ApplicationPage::Quarantine)?;
     show_quarantine_list(journey_run)?;
-    journey_run.press(&button(findings::refresh_tooltip()))?;
     if !journey_run.widgets.is_shown(&quarantine_search_field()) {
         journey_run.press(&WidgetTarget::toggle_button(findings::search_tooltip()))?;
     }

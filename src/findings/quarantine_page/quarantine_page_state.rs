@@ -67,6 +67,13 @@ impl QuarantineListing {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RecheckTally {
+    pub no_longer_detected_count: usize,
+    pub still_detected_count: usize,
+    pub unchecked_count: usize,
+}
+
 #[derive(Clone, Debug)]
 pub enum RowRecheckState {
     NotRechecked,
@@ -317,20 +324,40 @@ impl QuarantinePageState {
         Ok(())
     }
 
-    pub fn finish_recheck_run(&mut self) -> usize {
+    pub fn finish_recheck_run(&mut self) -> RecheckTally {
         let finished_run = std::mem::replace(&mut self.recheck_run, RecheckRun::RecheckIdle);
         match finished_run {
-            RecheckRun::RecheckIdle => 0,
+            RecheckRun::RecheckIdle => RecheckTally::default(),
             RecheckRun::RecheckRunning { rechecked_ids, .. } => rechecked_ids
                 .iter()
                 .filter(|entry_id| self.listing.lists_entry(**entry_id))
-                .filter(|entry_id| {
-                    matches!(
-                        self.recheck_states.get(entry_id),
-                        Some(RowRecheckState::Rechecked(ContentVerdict::NoLongerDetected))
-                    )
-                })
-                .count(),
+                .fold(
+                    RecheckTally::default(),
+                    |running_tally, entry_id| match self.recheck_states.get(entry_id) {
+                        Some(RowRecheckState::Rechecked(ContentVerdict::NoLongerDetected)) => {
+                            RecheckTally {
+                                no_longer_detected_count: running_tally.no_longer_detected_count
+                                    + 1,
+                                ..running_tally
+                            }
+                        }
+                        Some(RowRecheckState::Rechecked(ContentVerdict::StillDetected {
+                            ..
+                        })) => RecheckTally {
+                            still_detected_count: running_tally.still_detected_count + 1,
+                            ..running_tally
+                        },
+                        Some(
+                            RowRecheckState::Rechecked(ContentVerdict::VerdictUnavailable(_))
+                            | RowRecheckState::Rechecking
+                            | RowRecheckState::NotRechecked,
+                        )
+                        | None => RecheckTally {
+                            unchecked_count: running_tally.unchecked_count + 1,
+                            ..running_tally
+                        },
+                    },
+                ),
         }
     }
 
@@ -490,7 +517,7 @@ mod quarantine_page_state_tests {
         verdict_ids.iter().for_each(|entry_id| {
             page_state.record_recheck_verdict(*entry_id, ContentVerdict::NoLongerDetected);
         });
-        page_state.finish_recheck_run()
+        page_state.finish_recheck_run().no_longer_detected_count
     }
 
     #[test]
@@ -612,7 +639,37 @@ mod quarantine_page_state_tests {
             },
         );
         page_state.record_loaded_entries(Ok(vec![quarantined_entry(1)]));
-        assert_eq!(page_state.finish_recheck_run(), 0);
+        assert_eq!(
+            page_state.finish_recheck_run(),
+            RecheckTally {
+                no_longer_detected_count: 0,
+                still_detected_count: 1,
+                unchecked_count: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn a_recheck_tells_still_detected_apart_from_unchecked() {
+        let mut page_state = state_listing(&[1, 2, 3]);
+        page_state
+            .start_recheck_run(|_rechecked_ids| RunningStream::already_stopped())
+            .expect("recheck run starts");
+        page_state.record_recheck_verdict(
+            1,
+            ContentVerdict::StillDetected {
+                detection_name: Some("Eicar-Test-Signature".to_owned()),
+            },
+        );
+        page_state.record_recheck_verdict(2, ContentVerdict::NoLongerDetected);
+        assert_eq!(
+            page_state.finish_recheck_run(),
+            RecheckTally {
+                no_longer_detected_count: 1,
+                still_detected_count: 1,
+                unchecked_count: 1,
+            }
+        );
     }
 
     #[test]

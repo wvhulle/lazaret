@@ -15,6 +15,7 @@ use crate::{
         },
         quarantine_page_state::{
             EntryOperationKind, QuarantineEntryCount, QuarantineListing, QuarantinePageState,
+            RecheckTally,
         },
     },
     host_services::{
@@ -328,6 +329,37 @@ fn restore_destination_note(entry_record: &QuarantineEntryRecord) -> Option<Stri
     .then(translated_messages::findings::location_outside_home_folder)
 }
 
+fn recheck_tally_text(recheck_tally: RecheckTally) -> String {
+    [
+        (recheck_tally.no_longer_detected_count > 0).then(|| {
+            translated_messages::findings::count_quarantined_file_no(
+                recheck_tally.no_longer_detected_count,
+            )
+        }),
+        (recheck_tally.still_detected_count > 0).then(|| {
+            translated_messages::findings::count_still_detected_after_recheck(
+                recheck_tally.still_detected_count,
+            )
+        }),
+        (recheck_tally.unchecked_count > 0).then(|| {
+            translated_messages::findings::count_not_rechecked(recheck_tally.unchecked_count)
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+fn close_enclosing_popover(clicked_button: &gtk::Button) {
+    if let Some(enclosing_popover) = clicked_button
+        .ancestor(gtk::Popover::static_type())
+        .and_downcast::<gtk::Popover>()
+    {
+        enclosing_popover.popdown();
+    }
+}
+
 fn plain_text_toast(toast_text: &str) -> adw::Toast {
     adw::Toast::builder()
         .title(toast_text)
@@ -639,6 +671,8 @@ impl Component for QuarantineEntriesPage {
 
     view! {
         adw::ToastOverlay {
+            connect_map => QuarantineEntriesPageInput::ReloadEntriesRequested,
+
             add_controller = gtk::ShortcutController {
                 set_scope: gtk::ShortcutScope::Managed,
                 add_shortcut: gtk::Shortcut::new(
@@ -676,45 +710,44 @@ impl Component for QuarantineEntriesPage {
                         set_icon_name: "view-more-symbolic",
                         set_tooltip_text: Some(&translated_messages::findings::more_tooltip()),
                         update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::more_tooltip())],
+                        #[watch]
+                        set_visible: model.opened_entry == OpenedEntry::EntryListShown,
                         #[wrap(Some)]
                         set_popover = &gtk::Popover {
-                            gtk::Button {
-                                set_label: &translated_messages::findings::clear_old_items_label(),
-                                add_css_class: "flat",
-                                #[watch]
-                                set_sensitive: !model.old_entries().is_empty(),
-                                connect_clicked[sender] => move |clicked_button| {
-                                    if let Some(enclosing_popover) = clicked_button
-                                        .ancestor(gtk::Popover::static_type())
-                                        .and_downcast::<gtk::Popover>()
-                                    {
-                                        enclosing_popover.popdown();
-                                    }
-                                    sender.input(QuarantineEntriesPageInput::ClearOldEntriesRequested);
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Vertical,
+
+                                gtk::Button {
+                                    set_label: &translated_messages::findings::check_all_again_label(),
+                                    add_css_class: "flat",
+                                    #[watch]
+                                    set_sensitive: !model.page_state.recheck_running()
+                                        && !model.page_state.listed_entries().is_empty(),
+                                    connect_clicked[sender] => move |clicked_button| {
+                                        close_enclosing_popover(clicked_button);
+                                        sender.input(QuarantineEntriesPageInput::RecheckAllRequested);
+                                    },
+                                },
+
+                                gtk::Button {
+                                    set_label: &translated_messages::findings::clear_old_items_label(),
+                                    add_css_class: "flat",
+                                    #[watch]
+                                    set_sensitive: !model.old_entries().is_empty(),
+                                    connect_clicked[sender] => move |clicked_button| {
+                                        close_enclosing_popover(clicked_button);
+                                        sender.input(QuarantineEntriesPageInput::ClearOldEntriesRequested);
+                                    },
                                 },
                             },
                         },
                     },
 
-                    pack_end = &gtk::Button {
-                        set_label: &translated_messages::findings::check_again_label(),
-                        set_tooltip_text: Some(&translated_messages::findings::scan_every_quarantined_tooltip()),
-                        #[watch]
-                        set_sensitive: !model.page_state.recheck_running()
-                            && !model.page_state.listed_entries().is_empty(),
-                        connect_clicked => QuarantineEntriesPageInput::RecheckAllRequested,
-                    },
-
-                    pack_end = &gtk::Button {
-                        set_icon_name: "view-refresh-symbolic",
-                        set_tooltip_text: Some(&translated_messages::findings::refresh_tooltip()),
-                        update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::refresh_tooltip())],
-                        connect_clicked => QuarantineEntriesPageInput::ReloadEntriesRequested,
-                    },
-
                     pack_end = &gtk::ToggleButton {
                         set_icon_name: "system-search-symbolic",
                         set_tooltip_text: Some(&translated_messages::findings::search_tooltip()),
+                        #[watch]
+                        set_visible: model.opened_entry == OpenedEntry::EntryListShown,
                         #[watch]
                         #[block_signal(search_toggle_handler)]
                         set_active: model.search_mode_enabled,
@@ -916,7 +949,8 @@ impl Component for QuarantineEntriesPage {
                 );
             }
             QuarantineEntriesPageInput::SearchModeToggled(search_mode_enabled) => {
-                self.search_mode_enabled = search_mode_enabled;
+                self.search_mode_enabled =
+                    search_mode_enabled && self.opened_entry == OpenedEntry::EntryListShown;
             }
             QuarantineEntriesPageInput::TrustRequested(trust_choice) => {
                 present_trust_confirmation(
@@ -1129,13 +1163,9 @@ impl Component for QuarantineEntriesPage {
                         .await,
                     )
                 });
-                let cleared_count = self.page_state.finish_recheck_run();
+                let recheck_tally = self.page_state.finish_recheck_run();
                 self.toaster
-                    .add_toast(plain_text_toast(&if cleared_count == 0 {
-                        translated_messages::findings::every_quarantined_file_still()
-                    } else {
-                        translated_messages::findings::count_quarantined_file_no(cleared_count)
-                    }));
+                    .add_toast(plain_text_toast(&recheck_tally_text(recheck_tally)));
             }
             QuarantineEntriesPageCommand::ClamavReviewsSettled(Ok(0)) => {}
             QuarantineEntriesPageCommand::ClamavReviewsSettled(Ok(settled_count)) => {

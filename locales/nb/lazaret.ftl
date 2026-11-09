@@ -637,10 +637,18 @@ findings-delete-quarantined-file = Vil du slette filen i karantene?
 findings-file-permanently-deleted = Filen blir slettet for godt.
 findings-quarantine-title = Sett i karantene
 findings-more-tooltip = Mer
+findings-check-all-again-label = Sjekk alle på nytt
+findings-count-still-detected-after-recheck =
+    { $count ->
+        [one] { $count } fil blir fortsatt oppdaget.
+       *[other] { $count } filer blir fortsatt oppdaget.
+    }
+findings-count-not-rechecked =
+    { $count ->
+        [one] { $count } fil kunne ikke sjekkes.
+       *[other] { $count } filer kunne ikke sjekkes.
+    }
 findings-clear-old-items-label = Tøm gamle elementer …
-findings-check-again-label = Sjekk på nytt
-findings-scan-every-quarantined-tooltip = Skann hver fil i karantene med de gjeldende signaturene
-findings-refresh-tooltip = Oppdater
 findings-search-tooltip = Søk
 findings-search-threat-name-placeholder = Søk etter trusselnavn eller bane
 findings-quarantine-storage-title = Karantenelager
@@ -659,7 +667,6 @@ findings-quarantine-cannot-read-title = Karantenen kan ikke leses
 findings-loading-quarantine = Laster inn karantene …
 findings-quarantine-empty = Karantenen er tom
 findings-hash-copied-clipboard = Hash kopiert til utklippstavlen
-findings-every-quarantined-file-still = Hver fil i karantene oppdages fortsatt eller kunne ikke sjekkes
 findings-count-quarantined-file-no =
     { $count ->
         [one] { $count } fil i karantene oppdages ikke lenger. Sjekk den før du gjenoppretter den.

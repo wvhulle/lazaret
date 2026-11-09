@@ -637,10 +637,18 @@ findings-delete-quarantined-file = Törli a karanténba helyezett fájlt?
 findings-file-permanently-deleted = A fájl véglegesen törlődik.
 findings-quarantine-title = Karanténba helyezés
 findings-more-tooltip = Továbbiak
+findings-check-all-again-label = Összes újraellenőrzése
+findings-count-still-detected-after-recheck =
+    { $count ->
+        [one] { $count } fájl továbbra is észlelhető.
+       *[other] { $count } fájl továbbra is észlelhető.
+    }
+findings-count-not-rechecked =
+    { $count ->
+        [one] { $count } fájlt nem sikerült ellenőrizni.
+       *[other] { $count } fájlt nem sikerült ellenőrizni.
+    }
 findings-clear-old-items-label = Régi elemek törlése…
-findings-check-again-label = Ellenőrzés újra
-findings-scan-every-quarantined-tooltip = Minden karanténba helyezett fájl vizsgálata a jelenlegi aláírásokkal
-findings-refresh-tooltip = Frissítés
 findings-search-tooltip = Keresés
 findings-search-threat-name-placeholder = Keresés fenyegetésnév vagy elérési út alapján
 findings-quarantine-storage-title = Karanténtároló
@@ -659,7 +667,6 @@ findings-quarantine-cannot-read-title = A karantén nem olvasható
 findings-loading-quarantine = Karantén betöltése…
 findings-quarantine-empty = A karantén üres
 findings-hash-copied-clipboard = A kivonat a vágólapra másolva
-findings-every-quarantined-file-still = Minden karanténba helyezett fájl továbbra is észlelhető, vagy nem sikerült ellenőrizni
 findings-count-quarantined-file-no =
     { $count ->
         [one] { $count } karanténba helyezett fájl már nem észlelhető. Visszaállítás előtt ellenőrizze.
