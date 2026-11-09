@@ -157,9 +157,11 @@ mod screenshot_fixtures_tests {
         });
         assert!(fixture_sql.contains("CREATE TABLE activity_entries"));
         assert!(fixture_sql.contains("CREATE TABLE file_contents"));
+        let latest_migration = LAZARET_MIGRATIONS.last().expect("at least one migration");
         assert!(fixture_sql.contains(&format!(
-            "PRAGMA user_version = {};\nRELEASE \"0001_baseline\";\n",
-            LAZARET_MIGRATIONS.len()
+            "PRAGMA user_version = {};\nRELEASE {};\n",
+            LAZARET_MIGRATIONS.len(),
+            sql_identifier(latest_migration.migration_name)
         )));
         assert!(!fixture_sql.contains("@PAYLOAD_PATH@"));
     }
