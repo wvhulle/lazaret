@@ -154,11 +154,11 @@ impl Component for PreferencesDialog {
                 set_name: Some(ONLINE_SERVICES_PAGE_NAME),
                 set_title: &translated_messages::preferences::online_services_title(),
                 set_icon_name: Some("network-server-symbolic"),
-                set_description: &translated_messages::preferences::services_tell_more_description(),
+                set_description: &translated_messages::preferences::online_services_summary(),
 
                 adw::PreferencesGroup {
                     set_title: "CIRCL hashlookup",
-                    set_description: Some(&translated_messages::preferences::lookups_send_file_description()),
+                    set_description: Some(&translated_messages::preferences::circl_receives_summary()),
                 },
 
                 #[local_ref]
@@ -169,7 +169,7 @@ impl Component for PreferencesDialog {
 
                 adw::PreferencesGroup {
                     set_title: "ClamAV (Cisco Talos)",
-                    set_description: Some(&translated_messages::preferences::no_lookups_report_description()),
+                    set_description: Some(&translated_messages::preferences::talos_receives_summary()),
                 },
             },
 

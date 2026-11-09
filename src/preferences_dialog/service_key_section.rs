@@ -24,10 +24,10 @@ fn service_group_title(threat_intel_service: ThreatIntelService) -> &'static str
 fn service_description(threat_intel_service: ThreatIntelService) -> String {
     match threat_intel_service {
         ThreatIntelService::VirusTotalService => {
-            translated_messages::preferences::lookups_send_virustotal_file()
+            translated_messages::preferences::virustotal_receives_summary()
         }
         ThreatIntelService::AbuseChService => {
-            translated_messages::preferences::malwarebazaar_lookups_send_detection()
+            translated_messages::preferences::malwarebazaar_receives_summary()
         }
     }
 }
@@ -47,6 +47,25 @@ const fn service_key_page_url(threat_intel_service: ThreatIntelService) -> &'sta
     match threat_intel_service {
         ThreatIntelService::VirusTotalService => VIRUSTOTAL_KEY_PAGE_URL,
         ThreatIntelService::AbuseChService => ABUSE_CH_KEY_PAGE_URL,
+    }
+}
+
+fn key_problem_hint(key_problem: KeyProblem) -> String {
+    match key_problem {
+        KeyProblem::KeyFileNotPermitted => {
+            translated_messages::preferences::key_file_not_permitted_hint()
+        }
+        KeyProblem::KeyFileMissing => translated_messages::preferences::key_file_missing_hint(),
+        KeyProblem::KeyFileUnreadable => {
+            translated_messages::preferences::key_file_unreadable_hint()
+        }
+        KeyProblem::KeyNotValid => translated_messages::preferences::key_not_valid_hint(),
+        KeyProblem::KeyringUnavailable => {
+            translated_messages::preferences::keyring_unavailable_hint()
+        }
+        KeyProblem::StoredKeyUnreadable => {
+            translated_messages::preferences::stored_key_unreadable_hint()
+        }
     }
 }
 
@@ -139,6 +158,10 @@ impl ServiceKeySection {
         self.key_problem().map(key_problem_text).unwrap_or_default()
     }
 
+    fn key_problem_hint_text(&self) -> String {
+        self.key_problem().map(key_problem_hint).unwrap_or_default()
+    }
+
     fn key_status_text(&self) -> String {
         match &self.key_reading {
             KeyReading::CheckingKey => translated_messages::preferences::checking_label(),
@@ -178,8 +201,11 @@ impl Component for ServiceKeySection {
                 add_css_class: "warning",
                 #[watch]
                 set_visible: model.key_problem().is_some(),
+                set_subtitle_lines: 0,
                 #[watch]
                 set_title: &model.key_problem_banner_text(),
+                #[watch]
+                set_subtitle: &model.key_problem_hint_text(),
                 add_prefix = &gtk::Image { set_icon_name: Some("dialog-warning-symbolic") },
             },
 
@@ -192,6 +218,8 @@ impl Component for ServiceKeySection {
                 add_prefix = &gtk::Image { set_icon_name: Some("changes-prevent-symbolic") },
                 add_suffix = &gtk::Label {
                     add_css_class: "dim-label",
+                    #[watch]
+                    set_visible: model.key_problem().is_none(),
                     #[watch]
                     set_label: &model.key_status_text(),
                 },
