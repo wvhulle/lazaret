@@ -8,7 +8,7 @@ use crate::{
         },
     },
     shared_widgets::{
-        engine_settings::config_setting_row::size_unit_labels, listed_spin_row::listed_spin_row,
+        listed_spin_row::listed_spin_row, setting_row::setting_row_widget::size_unit_labels,
     },
     translated_messages,
 };
@@ -108,7 +108,8 @@ impl ConfigLineCopyDialog {
             TypedSettingValue::SizeValue(_)
             | TypedSettingValue::BooleanValue(_)
             | TypedSettingValue::PathValue(_)
-            | TypedSettingValue::TextValue(_) => (0.0, SIZE_COUNT_CEILING),
+            | TypedSettingValue::TextValue(_)
+            | TypedSettingValue::ChoiceValue { .. } => (0.0, SIZE_COUNT_CEILING),
         }
     }
 
@@ -279,7 +280,9 @@ impl SimpleComponent for ConfigLineCopyDialog {
         let widgets = view_output!();
         let focused_editor: gtk::Widget = match model.editor_draft {
             TypedSettingValue::BooleanValue(_) => widgets.switch_editor.clone().upcast(),
-            TypedSettingValue::PathValue(_) | TypedSettingValue::TextValue(_) => widgets
+            TypedSettingValue::PathValue(_)
+            | TypedSettingValue::TextValue(_)
+            | TypedSettingValue::ChoiceValue { .. } => widgets
                 .text_editor
                 .delegate()
                 .map_or_else(|| widgets.text_editor.clone().upcast(), Cast::upcast),

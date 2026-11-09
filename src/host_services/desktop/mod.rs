@@ -6,6 +6,8 @@ pub mod file_manager_actions;
 pub mod file_process_lock;
 pub mod flatpak_sandbox;
 pub mod locale_formatting;
+pub mod preference_keys;
+pub mod preference_sources;
 pub mod running_instance_forwarding;
 pub mod stored_settings;
 pub mod stored_settings_watch;

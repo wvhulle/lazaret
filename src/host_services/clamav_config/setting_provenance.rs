@@ -3,7 +3,11 @@ use std::{fs, path::Path};
 use clamd_configuration::PROTECTED_SETTING_NAMES;
 
 use crate::{
-    host_services::clamav_admin_service::live_settings_client::OverrideSetting, translated_messages,
+    host_services::clamav_admin_service::live_settings_client::OverrideSetting,
+    shared_widgets::setting_row::setting_row_state::{
+        ClamavSource, CopyOnlyReason, FileEntry, RootOwnedConfigFile, RuntimeRoute,
+    },
+    translated_messages,
 };
 
 const NIX_STORE_PREFIX: &str = "/nix/store/";
@@ -36,6 +40,64 @@ pub fn setting_lock_for_key(setting_key: &str) -> SettingLock {
         SettingLock::NeverChangedHere
     } else {
         SettingLock::ChangedThroughSnippet
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeTuningState<'tuning> {
+    TuningAvailable {
+        tunable_settings: &'tuning [String],
+        active_overrides: &'tuning [OverrideSetting],
+    },
+    TuningMissing(CopyOnlyReason),
+}
+
+pub fn clamav_source(
+    setting_key: &str,
+    config_file: RootOwnedConfigFile,
+    file_entry: FileEntry,
+    tuning_state: RuntimeTuningState<'_>,
+) -> ClamavSource {
+    if setting_lock_for_key(setting_key) == SettingLock::NeverChangedHere {
+        return ClamavSource::ProtectedSetting { config_file };
+    }
+    match tuning_state {
+        RuntimeTuningState::TuningMissing(copy_only_reason) => ClamavSource::RootOwnedFile {
+            config_file,
+            file_entry,
+            runtime_route: RuntimeRoute::CopyLineOnly(copy_only_reason),
+        },
+        RuntimeTuningState::TuningAvailable {
+            tunable_settings,
+            active_overrides,
+        } => {
+            let key_overrides = active_overrides
+                .iter()
+                .filter(|active_override| active_override.setting_key == setting_key)
+                .collect::<Vec<_>>();
+            match key_overrides.first() {
+                Some(first_override) => ClamavSource::SetViaAdminService {
+                    config_file,
+                    override_lifetime: first_override.override_lifetime,
+                    override_values: key_overrides
+                        .iter()
+                        .map(|key_override| key_override.setting_value.clone())
+                        .collect(),
+                },
+                None => ClamavSource::RootOwnedFile {
+                    config_file,
+                    file_entry,
+                    runtime_route: if tunable_settings
+                        .iter()
+                        .any(|tunable_key| tunable_key == setting_key)
+                    {
+                        RuntimeRoute::ChangeableWithPassword
+                    } else {
+                        RuntimeRoute::CopyLineOnly(CopyOnlyReason::OutsideAllowlist)
+                    },
+                },
+            }
+        }
     }
 }
 
@@ -131,35 +193,6 @@ pub fn managed_config_description(config_file_owner: ConfigFileOwner, config_pat
         }
         ConfigFileOwner::SystemPackage => translated_messages::host::system_package(config_path),
     }
-}
-
-pub fn drift_snippet_text(
-    active_overrides: &[OverrideSetting],
-    config_kind: ClamavConfigKind,
-    config_file_owner: ConfigFileOwner,
-) -> String {
-    let mut override_keys = active_overrides
-        .iter()
-        .map(|active_override| active_override.setting_key.as_str())
-        .collect::<Vec<_>>();
-    override_keys.dedup();
-    override_keys
-        .iter()
-        .map(|override_key| {
-            let override_values = active_overrides
-                .iter()
-                .filter(|active_override| active_override.setting_key == *override_key)
-                .map(|active_override| active_override.setting_value.clone())
-                .collect::<Vec<_>>();
-            change_snippet(
-                config_file_owner,
-                config_kind,
-                override_key,
-                &override_values,
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 pub fn values_with_edit(
@@ -313,25 +346,73 @@ mod setting_provenance_tests {
         );
     }
 
+    fn nixos_clamd_file() -> RootOwnedConfigFile {
+        RootOwnedConfigFile {
+            file_owner: ConfigFileOwner::NixOsConfiguration,
+            config_path: "/etc/clamav/clamd.conf".to_owned(),
+        }
+    }
+
+    fn source_with_tuning(setting_key: &str, tuning_state: RuntimeTuningState<'_>) -> ClamavSource {
+        clamav_source(
+            setting_key,
+            nixos_clamd_file(),
+            FileEntry::WrittenInFile,
+            tuning_state,
+        )
+    }
+
     #[test]
-    fn drift_snippets_group_repeated_override_keys() {
-        let override_of = |setting_key: &str, setting_value: &str| OverrideSetting {
-            setting_key: setting_key.to_owned(),
-            setting_value: setting_value.to_owned(),
+    fn each_clamd_setting_gets_the_source_that_decides_its_value() {
+        let tunable_settings = vec!["DetectPUA".to_owned(), "MaxThreads".to_owned()];
+        let active_overrides = vec![OverrideSetting {
+            setting_key: "MaxThreads".to_owned(),
+            setting_value: "8".to_owned(),
             override_lifetime: OverrideLifetime::Permanent,
+        }];
+        let available_tuning = RuntimeTuningState::TuningAvailable {
+            tunable_settings: &tunable_settings,
+            active_overrides: &active_overrides,
         };
-        let active_overrides = vec![
-            override_of("OnAccessIncludePath", "/home"),
-            override_of("OnAccessIncludePath", "/srv"),
-            override_of("MaxThreads", "8"),
-        ];
         assert_eq!(
-            drift_snippet_text(
-                &active_overrides,
-                ClamavConfigKind::ClamdDaemonConfig,
-                ConfigFileOwner::SystemPackage,
-            ),
-            "OnAccessIncludePath /home\nOnAccessIncludePath /srv\nMaxThreads 8"
+            source_with_tuning("VirusEvent", available_tuning),
+            ClamavSource::ProtectedSetting {
+                config_file: nixos_clamd_file()
+            }
         );
+        assert_eq!(
+            source_with_tuning("MaxThreads", available_tuning),
+            ClamavSource::SetViaAdminService {
+                config_file: nixos_clamd_file(),
+                override_lifetime: OverrideLifetime::Permanent,
+                override_values: vec!["8".to_owned()],
+            }
+        );
+        assert!(matches!(
+            source_with_tuning("DetectPUA", available_tuning),
+            ClamavSource::RootOwnedFile {
+                runtime_route: RuntimeRoute::ChangeableWithPassword,
+                ..
+            }
+        ));
+        assert!(matches!(
+            source_with_tuning("MaxScanSize", available_tuning),
+            ClamavSource::RootOwnedFile {
+                runtime_route: RuntimeRoute::CopyLineOnly(CopyOnlyReason::OutsideAllowlist),
+                ..
+            }
+        ));
+        assert!(matches!(
+            source_with_tuning(
+                "DetectPUA",
+                RuntimeTuningState::TuningMissing(CopyOnlyReason::AdminServiceNotInstalled)
+            ),
+            ClamavSource::RootOwnedFile {
+                runtime_route: RuntimeRoute::CopyLineOnly(
+                    CopyOnlyReason::AdminServiceNotInstalled
+                ),
+                ..
+            }
+        ));
     }
 }

@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use gtk_scene_capture::accessible_widget_lookup::{NameMatch, WidgetRole, WidgetTarget};
+use gtk_scene_capture::accessible_widget_lookup::{WidgetRole, WidgetTarget};
 
 use crate::vm_journeys::harness::{
     desktop_environment::{
@@ -601,13 +601,10 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
     )?;
 
     journey_run.step(
-        "settings the system owns are locked and copy a snippet",
+        "settings the system owns name their source in their row",
         |journey_run| {
             show_page(ApplicationPage::ScanEngine)?;
-            journey_run.await_shown(
-                &WidgetTarget::new(WidgetRole::Image, widgets::administrator_not_copy())
-                    .matching_names(NameMatch::ContainedName),
-            )?;
+            journey_run.await_shown(&label_containing(widgets::source_nixos_tag()))?;
             take_screenshot("scanner_engine_settings");
             Ok(())
         },
@@ -715,24 +712,29 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
     )?;
 
     journey_run.step(
-        "the Scanner Engine settings offer to unlock allowed settings",
+        "each Scanner Engine setting shows where its value comes from",
         |journey_run| {
             wait_for_lazaret_service()?;
             show_scan_engine_page(journey_run)?;
-            journey_run.await_shown(&label_containing(widgets::live_tunable_config(
-                MERGED_CONFIG,
-            )))?;
-            take_screenshot("scanner_engine_locked");
-            journey_run.await_shown(&WidgetTarget::toggle_button(widgets::unlock_label()))
+            journey_run.await_shown(&label_containing(widgets::source_nixos_tag()))?;
+            take_screenshot("scanner_engine_sources");
+            Ok(())
         },
     )?;
 
     journey_run.step(
-        "while locked, Copy configuration line only copies the line",
+        "a setting the system doesn't allow offers only its configuration line",
         |journey_run| {
             let merged_before_copy = merged_config()?;
             let overrides_before_copy = stored_overrides()?;
-            journey_run.press(&in_row(button(MAX_THREADS), MAX_THREADS))?;
+            journey_run.press(&row_titled(widgets::heuristic_detections()))?;
+            journey_run.await_shown(&label_containing(
+                widgets::route_outside_allowlist_explanation(),
+            ))?;
+            journey_run.press(&in_expanded_row(
+                button(widgets::copy_configuration_line_button()),
+                widgets::heuristic_detections(),
+            ))?;
             journey_run.await_shown(&label_containing(
                 widgets::nothing_applied_choose_description(),
             ))?;
@@ -741,36 +743,34 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
                 &label_containing(widgets::change_snippet_copied()),
                 SHORT_WAIT,
             )?;
-            take_screenshot("locked_copy");
+            take_screenshot("copy_only_setting");
             ensure(merged_config()? == merged_before_copy, || {
-                "a locked copy changed clamd".to_owned()
+                "copying a line changed clamd".to_owned()
             })?;
             ensure(stored_overrides()? == overrides_before_copy, || {
-                "a locked copy changed the stored changes".to_owned()
+                "copying a line changed the stored changes".to_owned()
             })
         },
     )?;
 
     journey_run.step(
-        "unlocking exposes the allowed settings to assistive technology",
+        "allowed settings are editable without unlocking anything",
         |journey_run| {
             show_scan_engine_page(journey_run)?;
-            journey_run.press(&WidgetTarget::toggle_button(widgets::unlock_label()))?;
-            journey_run.await_shown(&WidgetTarget::toggle_button(widgets::lock_label()))?;
-            take_screenshot("preferences_unlocked");
             journey_run
                 .widgets
                 .describe_ancestry_of_named(MAX_THREADS)
                 .iter()
                 .for_each(|ancestry_line| eprintln!("ancestry: {ancestry_line}"));
             journey_run.expect_behaviour(
-                "an unlocked setting can be reached by its name",
+                "an allowed setting can be reached by its name",
                 |journey_run| {
                     journey_run
                         .widgets
                         .await_shown_within(&max_threads_editor(), Duration::from_secs(15))
                 },
             );
+            take_screenshot("allowed_setting_editable");
             Ok(())
         },
     )?;
@@ -811,6 +811,33 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
                 journey_run.press(&in_alert(
                     button(widgets::cancel_engine()),
                     widgets::change_setting(),
+                ))
+            },
+        )?;
+
+        journey_run.step(
+            "the changed row shows its runtime change and reverts it in place",
+            |journey_run| {
+                show_scan_engine_page(journey_run)?;
+                journey_run.await_shown(&in_expanded_row(
+                    label_containing(widgets::source_runtime_nixos_explanation()),
+                    MAX_THREADS,
+                ))?;
+                take_screenshot("runtime_change_in_row");
+                journey_run.press(&in_expanded_row(
+                    button(widgets::revert_change_button()),
+                    MAX_THREADS,
+                ))?;
+                answer_password_prompt(SAMPLE_PASSWORD)?;
+                wait_until(
+                    "MaxThreads 4 back in the merged configuration",
+                    LONG_WAIT,
+                    || Ok(merged_config()?.contains("MaxThreads 4")),
+                )?;
+                wait_for_clamd()?;
+                journey_run.await_shown(&in_row(
+                    label_containing(widgets::source_nixos_tag()),
+                    MAX_THREADS,
                 ))
             },
         )?;

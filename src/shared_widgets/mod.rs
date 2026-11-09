@@ -14,6 +14,7 @@ pub mod scan_runs;
 pub mod scanner_exit_text;
 pub mod scanner_start_failure_text;
 pub mod service_log;
+pub mod setting_row;
 pub mod step_timeline;
 pub mod submission_confirm_dialog;
 pub mod submission_outcome_text;

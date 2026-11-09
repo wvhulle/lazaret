@@ -105,6 +105,10 @@ pub enum TypedSettingValue {
     SizeValue(SizeAmount),
     PathValue(String),
     TextValue(String),
+    ChoiceValue {
+        chosen_position: u32,
+        choice_labels: Vec<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -116,6 +120,7 @@ pub enum SettingParseFailure {
     NotASize,
     PathNotAbsolute,
     EmptyText,
+    NotAClockTime,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -124,18 +129,13 @@ pub enum WriteRefusal {
     UnsafeCharacters,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DraftApplyTiming {
-    AppliedOnEveryEdit,
-    AppliedOnRequest,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DraftEdit {
     SwitchSet(SwitchPosition),
     NumberSet(u64),
     SizeUnitSet(SizeUnit),
     TextSet(String),
+    ChoiceSet(u32),
 }
 impl TypedSettingValue {
     pub fn config_value_text(&self) -> String {
@@ -144,21 +144,19 @@ impl TypedSettingValue {
             Self::CountValue { count_value, .. } => count_value.to_string(),
             Self::SizeValue(size_amount) => size_amount.config_text(),
             Self::PathValue(draft_text) | Self::TextValue(draft_text) => draft_text.clone(),
+            Self::ChoiceValue {
+                chosen_position,
+                choice_labels,
+            } => usize::try_from(*chosen_position)
+                .ok()
+                .and_then(|choice_index| choice_labels.get(choice_index))
+                .cloned()
+                .unwrap_or_default(),
         }
     }
 
     pub fn writable_value(&self, setting_key: &str) -> Result<String, WriteRefusal> {
         writable_setting_value(setting_key, &self.config_value_text())
-    }
-
-    pub const fn apply_timing(&self) -> DraftApplyTiming {
-        match self {
-            Self::BooleanValue(_) => DraftApplyTiming::AppliedOnEveryEdit,
-            Self::CountValue { .. }
-            | Self::SizeValue(_)
-            | Self::PathValue(_)
-            | Self::TextValue(_) => DraftApplyTiming::AppliedOnRequest,
-        }
     }
 
     pub fn with_draft_edit(self, draft_edit: DraftEdit) -> Self {
@@ -191,20 +189,43 @@ impl TypedSettingValue {
             (Self::PathValue(_), DraftEdit::TextSet(draft_text)) => Self::PathValue(draft_text),
             (Self::TextValue(_), DraftEdit::TextSet(draft_text)) => Self::TextValue(draft_text),
             (
+                Self::ChoiceValue { choice_labels, .. },
+                DraftEdit::ChoiceSet(chosen_position),
+            ) => Self::ChoiceValue {
+                chosen_position,
+                choice_labels,
+            },
+            (
                 unchanged_draft @ Self::BooleanValue(_),
-                DraftEdit::NumberSet(_) | DraftEdit::SizeUnitSet(_) | DraftEdit::TextSet(_),
+                DraftEdit::NumberSet(_)
+                | DraftEdit::SizeUnitSet(_)
+                | DraftEdit::TextSet(_)
+                | DraftEdit::ChoiceSet(_),
             )
             | (
                 unchanged_draft @ Self::CountValue { .. },
-                DraftEdit::SwitchSet(_) | DraftEdit::SizeUnitSet(_) | DraftEdit::TextSet(_),
+                DraftEdit::SwitchSet(_)
+                | DraftEdit::SizeUnitSet(_)
+                | DraftEdit::TextSet(_)
+                | DraftEdit::ChoiceSet(_),
             )
             | (
                 unchanged_draft @ Self::SizeValue(_),
-                DraftEdit::SwitchSet(_) | DraftEdit::TextSet(_),
+                DraftEdit::SwitchSet(_) | DraftEdit::TextSet(_) | DraftEdit::ChoiceSet(_),
             )
             | (
                 unchanged_draft @ (Self::PathValue(_) | Self::TextValue(_)),
-                DraftEdit::SwitchSet(_) | DraftEdit::NumberSet(_) | DraftEdit::SizeUnitSet(_),
+                DraftEdit::SwitchSet(_)
+                | DraftEdit::NumberSet(_)
+                | DraftEdit::SizeUnitSet(_)
+                | DraftEdit::ChoiceSet(_),
+            )
+            | (
+                unchanged_draft @ Self::ChoiceValue { .. },
+                DraftEdit::SwitchSet(_)
+                | DraftEdit::NumberSet(_)
+                | DraftEdit::SizeUnitSet(_)
+                | DraftEdit::TextSet(_),
             ) => unchanged_draft,
         }
     }
@@ -215,7 +236,8 @@ impl TypedSettingValue {
             Self::CountValue { .. }
             | Self::SizeValue(_)
             | Self::PathValue(_)
-            | Self::TextValue(_) => None,
+            | Self::TextValue(_)
+            | Self::ChoiceValue { .. } => None,
         }
     }
 
@@ -223,7 +245,10 @@ impl TypedSettingValue {
         match self {
             Self::CountValue { count_value, .. } => Some(*count_value),
             Self::SizeValue(size_amount) => Some(size_amount.unit_count),
-            Self::BooleanValue(_) | Self::PathValue(_) | Self::TextValue(_) => None,
+            Self::BooleanValue(_)
+            | Self::PathValue(_)
+            | Self::TextValue(_)
+            | Self::ChoiceValue { .. } => None,
         }
     }
 
@@ -233,14 +258,31 @@ impl TypedSettingValue {
             Self::BooleanValue(_)
             | Self::CountValue { .. }
             | Self::PathValue(_)
-            | Self::TextValue(_) => None,
+            | Self::TextValue(_)
+            | Self::ChoiceValue { .. } => None,
         }
     }
 
     pub fn shown_text(&self) -> Option<&str> {
         match self {
             Self::PathValue(draft_text) | Self::TextValue(draft_text) => Some(draft_text),
-            Self::BooleanValue(_) | Self::CountValue { .. } | Self::SizeValue(_) => None,
+            Self::BooleanValue(_)
+            | Self::CountValue { .. }
+            | Self::SizeValue(_)
+            | Self::ChoiceValue { .. } => None,
+        }
+    }
+
+    pub const fn shown_choice_position(&self) -> Option<u32> {
+        match self {
+            Self::ChoiceValue {
+                chosen_position, ..
+            } => Some(*chosen_position),
+            Self::BooleanValue(_)
+            | Self::CountValue { .. }
+            | Self::SizeValue(_)
+            | Self::PathValue(_)
+            | Self::TextValue(_) => None,
         }
     }
 }
