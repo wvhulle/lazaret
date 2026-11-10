@@ -21,7 +21,7 @@ use crate::vm_journeys::{
         system_commands::{
             as_root, journal_text, settle, succeed, unit_journal_lines_mentioning, wait_until,
         },
-        ui_messages::{findings, host, text_before_placeholder, widgets},
+        ui_messages::{MessageCatalog, findings, host, text_before_placeholder, widgets},
     },
     remote_nodes::{
         fake_internet::{
@@ -118,7 +118,9 @@ fn show_quarantine_entry(
     show_page(ApplicationPage::Quarantine)?;
     show_quarantine_list(journey_run)?;
     if !journey_run.widgets.is_shown(&quarantine_search_field()) {
-        journey_run.press(&WidgetTarget::toggle_button(findings::search_tooltip()))?;
+        journey_run.press(&WidgetTarget::toggle_button(findings::search_tooltip(
+            &MessageCatalog::source_language(),
+        )))?;
     }
     journey_run
         .widgets
@@ -127,11 +129,15 @@ fn show_quarantine_entry(
         .database
         .wait_for_quarantined_signature(path_fragment)?;
     journey_run.press(&row_titled(entry_title))?;
-    journey_run.await_shown(&button(findings::trust_label()))
+    journey_run.await_shown(&button(findings::trust_label(
+        &MessageCatalog::source_language(),
+    )))
 }
 
 fn show_quarantine_list(journey_run: &JourneyRun) -> Result<(), JourneyFailure> {
-    let back_button = button(findings::back_quarantine_tooltip());
+    let back_button = button(findings::back_quarantine_tooltip(
+        &MessageCatalog::source_language(),
+    ));
     if journey_run.widgets.is_shown(&back_button) {
         journey_run.press(&back_button)?;
     }
@@ -146,7 +152,9 @@ fn choose_menu_item_by_keyboard(
     for extra_down_presses in 0..2 {
         if extra_down_presses > 0 {
             send_keys(&[KeyInput::Escape])?;
-            journey_run.press(&button(widgets::more_actions_tooltip()))?;
+            journey_run.press(&button(widgets::more_actions_tooltip(
+                &MessageCatalog::source_language(),
+            )))?;
         }
         settle(Duration::from_secs(1));
         let down_presses = vec![KeyInput::Down; item_position + extra_down_presses];
@@ -171,10 +179,12 @@ fn submit_quarantined_entry(
     confirm_heading: String,
     confirm_label: String,
 ) -> Result<(), JourneyFailure> {
-    journey_run.press(&button(findings::submit_quarantine_label()))?;
+    journey_run.press(&button(findings::submit_quarantine_label(
+        &MessageCatalog::source_language(),
+    )))?;
     journey_run.press(&in_alert(
         button(target_label),
-        findings::choose_service_heading(),
+        findings::choose_service_heading(&MessageCatalog::source_language()),
     ))?;
     journey_run.press(&in_alert(button(confirm_label), confirm_heading))
 }
@@ -183,12 +193,16 @@ fn quarantine_scan_results(
     journey_run: &JourneyRun,
     threat_count: u32,
 ) -> Result<(), JourneyFailure> {
-    journey_run
-        .widgets
-        .press_within(&button(widgets::quarantine_all(threat_count)), LONG_WAIT)?;
+    journey_run.widgets.press_within(
+        &button(widgets::quarantine_all(
+            &MessageCatalog::source_language(),
+            threat_count,
+        )),
+        LONG_WAIT,
+    )?;
     journey_run.press(&in_alert(
-        button(widgets::quarantine_label()),
-        widgets::move_quarantine(),
+        button(widgets::quarantine_label(&MessageCatalog::source_language())),
+        widgets::move_quarantine(&MessageCatalog::source_language()),
     ))
 }
 
@@ -287,7 +301,12 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
         |journey_run| {
             FixtureSample::EicarInvoice.place_at(&blocked_file)?;
             wait_until_blocked(&blocked_file)?;
-            let blocked_heading = text_before_placeholder(findings::malware_blocked_signature);
+            let blocked_heading = text_before_placeholder(|signature_name| {
+                findings::malware_blocked_signature(
+                    &MessageCatalog::source_language(),
+                    signature_name,
+                )
+            });
             let matching = wait_for_notification(&blocked_file)?;
             ensure(matching.len() == 1, || {
                 format!("expected one notification, got {}", matching.len())
@@ -327,12 +346,18 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             FakeInternetScenario::default()
                 .with_network(NetworkCondition::RefusedConnections)
                 .apply()?;
-            journey_run.press(&button(findings::look_up_incident_signature()))?;
+            journey_run.press(&button(findings::look_up_incident_signature(
+                &MessageCatalog::source_language(),
+            )))?;
             journey_run.await_shown(&label_containing(text_before_placeholder(
-                host::request_failed_bazaar,
+                |request_text| {
+                    host::request_failed_bazaar(&MessageCatalog::source_language(), request_text)
+                },
             )))?;
             FakeInternetScenario::default().apply()?;
-            journey_run.press(&button(findings::look_up_incident_signature()))?;
+            journey_run.press(&button(findings::look_up_incident_signature(
+                &MessageCatalog::source_language(),
+            )))?;
             let lookup_request = wait_for_first_request(FakeRoute::BazaarGetClamavinfo)?;
             ensure(
                 lookup_request
@@ -360,7 +385,9 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
     journey_run.step(
         "quarantining from the timeline neutralises the file",
         |journey_run| {
-            journey_run.press(&button(findings::quarantine_incident()))?;
+            journey_run.press(&button(findings::quarantine_incident(
+                &MessageCatalog::source_language(),
+            )))?;
             wait_until_missing(&blocked_file)?;
             wait_until("the detection resolved as quarantined", SHORT_WAIT, || {
                 Ok(journey_run
@@ -392,7 +419,7 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
     journey_run.step("the tray action opens the Detections page", |journey_run| {
         activate_application_action(ApplicationAction::OpenDetections)?;
         journey_run.await_shown(&label_containing(
-            findings::access_scanning_scheduled_scans(),
+            findings::access_scanning_scheduled_scans(&MessageCatalog::source_language()),
         ))
     })?;
 
@@ -405,11 +432,15 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             wait_until_blocked(&deleted_file)?;
             wait_for_notification(&deleted_file)?;
             journey_run.press(&row_titled("throwaway.exe"))?;
-            journey_run.press(&button(findings::ask_incident_deletion()))?;
+            journey_run.press(&button(findings::ask_incident_deletion(
+                &MessageCatalog::source_language(),
+            )))?;
             ensure(Path::new(&deleted_file).exists(), || {
                 "the first choice already deleted the file".to_owned()
             })?;
-            journey_run.press(&button(findings::delete_incident_file()))?;
+            journey_run.press(&button(findings::delete_incident_file(
+                &MessageCatalog::source_language(),
+            )))?;
             wait_until_missing(&deleted_file)?;
             wait_for_notification_withdrawn(&deleted_file)?;
             wait_for_tray_status(TrayStatus::Active)
@@ -489,9 +520,9 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
             submit_quarantined_entry(
                 journey_run,
-                findings::malwarebazaar_sample_choice(),
-                widgets::upload_malwarebazaar_heading(),
-                widgets::upload_publicly_button(),
+                findings::malwarebazaar_sample_choice(&MessageCatalog::source_language()),
+                widgets::upload_malwarebazaar_heading(&MessageCatalog::source_language()),
+                widgets::upload_publicly_button(&MessageCatalog::source_language()),
             )?;
             let upload_request = wait_for_first_request(FakeRoute::BazaarUpload)?;
             let uploaded_file = upload_request.uploaded_file("file").ok_or_else(|| {
@@ -526,9 +557,9 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             show_quarantine_entry(journey_run, "invoice.pdf.exe", "invoice")?;
             submit_quarantined_entry(
                 journey_run,
-                findings::malwarebazaar_sample_choice(),
-                widgets::upload_malwarebazaar_heading(),
-                widgets::upload_publicly_button(),
+                findings::malwarebazaar_sample_choice(&MessageCatalog::source_language()),
+                widgets::upload_malwarebazaar_heading(&MessageCatalog::source_language()),
+                widgets::upload_publicly_button(&MessageCatalog::source_language()),
             )?;
             request_count_stays(FakeRoute::BazaarUpload, 1)
         },
@@ -540,19 +571,27 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             let menu_sample = journey_paths.document("menu/payroll-macro.docm");
             FixtureSample::PayrollDocument.place_at(&menu_sample)?;
             scan_with_lazaret(&[&menu_sample])?;
-            journey_run
-                .widgets
-                .await_shown_within(&button(widgets::quarantine_all(1)), LONG_WAIT)?;
-            journey_run.press(&button(widgets::more_actions_tooltip()))?;
-            let threat_actions_menu =
-                WidgetTarget::new(WidgetRole::Menu, widgets::more_actions_tooltip());
+            journey_run.widgets.await_shown_within(
+                &button(widgets::quarantine_all(
+                    &MessageCatalog::source_language(),
+                    1,
+                )),
+                LONG_WAIT,
+            )?;
+            journey_run.press(&button(widgets::more_actions_tooltip(
+                &MessageCatalog::source_language(),
+            )))?;
+            let threat_actions_menu = WidgetTarget::new(
+                WidgetRole::Menu,
+                widgets::more_actions_tooltip(&MessageCatalog::source_language()),
+            );
             journey_run.expect_behaviour(
                 "the threat menu items have accessible names",
                 |journey_run| {
                     journey_run.widgets.await_shown_within(
                         &WidgetTarget::new(
                             WidgetRole::MenuItem,
-                            widgets::ignore_detection_for_me(),
+                            widgets::ignore_detection_for_me(&MessageCatalog::source_language()),
                         )
                         .inside(threat_actions_menu.clone()),
                         Duration::from_secs(5),
@@ -565,7 +604,9 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
                     choose_menu_item_by_keyboard(
                         journey_run,
                         IGNORE_DETECTION_MENU_POSITION,
-                        &WidgetTarget::alert(widgets::ignore_detection_heading()),
+                        &WidgetTarget::alert(widgets::ignore_detection_heading(
+                            &MessageCatalog::source_language(),
+                        )),
                     )
                 },
             );
@@ -660,7 +701,10 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             wait_until_blocked(&missed_while_closed)?;
             settle(Duration::from_secs(2));
             succeed("systemctl", &["--user", "start", "lazaret.service"])?;
-            wait_for_notification(&findings::count_detection_not_running(1))?;
+            wait_for_notification(&findings::count_detection_not_running(
+                &MessageCatalog::source_language(),
+                1,
+            ))?;
             ensure(
                 notifications_mentioning(&missed_while_closed)?.is_empty(),
                 || "alerted individually about a missed file".to_owned(),

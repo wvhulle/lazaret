@@ -21,7 +21,7 @@ use crate::vm_journeys::harness::{
         CommandOutcome, as_root, as_root_outcome, journal_text, root_file_text, root_path_exists,
         run_command, settle, succeed, wait_until, write_root_file,
     },
-    ui_messages::{findings, scans, text_before_placeholder, widgets},
+    ui_messages::{MessageCatalog, findings, scans, text_before_placeholder, widgets},
 };
 
 const SCAN_UNIT: &str = "clamdscan.service";
@@ -235,12 +235,16 @@ fn quarantine_with_lazaret(
     file_path: &str,
 ) -> Result<(), JourneyFailure> {
     scan_with_lazaret(&[file_path])?;
-    journey_run
-        .widgets
-        .press_within(&button(widgets::quarantine_all(1)), LONG_WAIT)?;
+    journey_run.widgets.press_within(
+        &button(widgets::quarantine_all(
+            &MessageCatalog::source_language(),
+            1,
+        )),
+        LONG_WAIT,
+    )?;
     journey_run.press(&in_alert(
-        button(widgets::quarantine_label()),
-        widgets::move_quarantine(),
+        button(widgets::quarantine_label(&MessageCatalog::source_language())),
+        widgets::move_quarantine(&MessageCatalog::source_language()),
     ))?;
     wait_until(
         &format!("{file_path} moving to quarantine"),
@@ -255,7 +259,9 @@ fn open_quarantined_entry(
 ) -> Result<(), JourneyFailure> {
     show_page(ApplicationPage::Detections)?;
     show_page(ApplicationPage::Quarantine)?;
-    let back_button = button(findings::back_quarantine_tooltip());
+    let back_button = button(findings::back_quarantine_tooltip(
+        &MessageCatalog::source_language(),
+    ));
     if journey_run.widgets.is_shown(&back_button) {
         journey_run.press(&back_button)?;
     }
@@ -263,7 +269,9 @@ fn open_quarantined_entry(
         .database
         .wait_for_quarantined_signature(path_fragment)?;
     journey_run.press(&row_titled(entry_title))?;
-    journey_run.await_shown(&button(findings::trust_label()))
+    journey_run.await_shown(&button(findings::trust_label(
+        &MessageCatalog::source_language(),
+    )))
 }
 
 fn ask_to_trust_for_all_users(
@@ -271,10 +279,14 @@ fn ask_to_trust_for_all_users(
     path_fragment: &str,
 ) -> Result<(), JourneyFailure> {
     open_quarantined_entry(journey_run, path_fragment)?;
-    journey_run.press(&button(findings::trust_label()))?;
+    journey_run.press(&button(findings::trust_label(
+        &MessageCatalog::source_language(),
+    )))?;
     journey_run.press(&in_alert(
-        button(widgets::trust_for_all_users_button()),
-        widgets::trust_file_heading(),
+        button(widgets::trust_for_all_users_button(
+            &MessageCatalog::source_language(),
+        )),
+        widgets::trust_file_heading(&MessageCatalog::source_language()),
     ))
 }
 
@@ -302,7 +314,9 @@ fn edit_max_threads(journey_run: &JourneyRun, new_value: u32) -> Result<(), Jour
         KeyInput::Enter,
     ])?;
     journey_run
-        .await_shown(&WidgetTarget::alert(widgets::change_setting()))
+        .await_shown(&WidgetTarget::alert(widgets::change_setting(
+            &MessageCatalog::source_language(),
+        )))
         .inspect_err(|_missing_confirmation| {
             eprintln!(
                 "MaxThreads editor without a confirmation: {}",
@@ -366,12 +380,14 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         "reporting an ignored detection again needs the password and shrinks the list",
         |journey_run| {
             journey_run.press(&in_row(
-                button(findings::remove_tooltip()),
+                button(findings::remove_tooltip(&MessageCatalog::source_language())),
                 IGNORED_SIGNATURE,
             ))?;
             journey_run.press(&in_alert(
-                button(widgets::report_again_button()),
-                widgets::report_detection_again_heading(),
+                button(widgets::report_again_button(
+                    &MessageCatalog::source_language(),
+                )),
+                widgets::report_detection_again_heading(&MessageCatalog::source_language()),
             ))?;
             answer_password_prompt(SAMPLE_PASSWORD)?;
             wait_until("the ignored detection leaving the list", SHORT_WAIT, || {
@@ -447,12 +463,14 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         "removing the trust for all users reports the file again and drops the empty list",
         |journey_run| {
             journey_run.press(&in_row(
-                button(findings::remove_tooltip()),
+                button(findings::remove_tooltip(&MessageCatalog::source_language())),
                 eicar_sha256.clone(),
             ))?;
             journey_run.press(&in_alert(
-                button(widgets::stop_trusting_button()),
-                widgets::stop_trusting_file_heading(),
+                button(widgets::stop_trusting_button(
+                    &MessageCatalog::source_language(),
+                )),
+                widgets::stop_trusting_file_heading(&MessageCatalog::source_language()),
             ))?;
             answer_password_prompt(SAMPLE_PASSWORD)?;
             wait_until(
@@ -470,22 +488,30 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
             FixtureSample::PayrollDocument.place_at(&promoted_candidate)?;
             quarantine_with_lazaret(journey_run, &promoted_candidate)?;
             open_quarantined_entry(journey_run, "payroll")?;
-            journey_run.press(&button(findings::trust_label()))?;
+            journey_run.press(&button(findings::trust_label(
+                &MessageCatalog::source_language(),
+            )))?;
             journey_run.press(&in_alert(
-                button(widgets::trust_for_me_button()),
-                widgets::trust_file_heading(),
+                button(widgets::trust_for_me_button(
+                    &MessageCatalog::source_language(),
+                )),
+                widgets::trust_file_heading(&MessageCatalog::source_language()),
             ))?;
             wait_until("the document trusted for me", SHORT_WAIT, || {
                 journey_run.database.is_trusted_content(&document_sha256)
             })?;
             show_page(ApplicationPage::TrustedDetections)?;
             journey_run.press(&in_row(
-                button(findings::trust_for_all_users_tooltip()),
+                button(findings::trust_for_all_users_tooltip(
+                    &MessageCatalog::source_language(),
+                )),
                 document_sha256.clone(),
             ))?;
             journey_run.press(&in_alert(
-                button(widgets::trust_for_all_users_button()),
-                widgets::trust_file_heading(),
+                button(widgets::trust_for_all_users_button(
+                    &MessageCatalog::source_language(),
+                )),
+                widgets::trust_file_heading(&MessageCatalog::source_language()),
             ))?;
             answer_password_prompt(SAMPLE_PASSWORD)?;
             wait_until("the promoted hash line", SHORT_WAIT, || {
@@ -506,7 +532,9 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
                 SCANNED_FILE,
             ])?;
             show_page(ApplicationPage::ScheduledScans)?;
-            journey_run.press(&button(scans::run_now_label()))?;
+            journey_run.press(&button(scans::run_now_label(
+                &MessageCatalog::source_language(),
+            )))?;
             answer_password_prompt(SAMPLE_PASSWORD)?;
             wait_until("the system scan finding the file", LONG_WAIT, || {
                 Ok(journal_text(&["-u", SCAN_UNIT])?
@@ -539,11 +567,15 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         "finding malware is not shown as a scanner failure",
         |journey_run| {
             take_screenshot("scan_finished_toast");
-            journey_run.await_shown(&label_containing(scans::found_malware()))?;
+            journey_run.await_shown(&label_containing(scans::found_malware(
+                &MessageCatalog::source_language(),
+            )))?;
             ensure(
                 !journey_run
                     .widgets
-                    .is_shown(&label_containing(scans::not_finish_cleanly())),
+                    .is_shown(&label_containing(scans::not_finish_cleanly(
+                        &MessageCatalog::source_language(),
+                    ))),
                 || "a found threat was shown as an unclean scan".to_owned(),
             )
         },
@@ -562,18 +594,28 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
             ensure(detection.detection_sources == "scheduled_scan", || {
                 format!("wrong source: {detection:?}")
             })?;
-            wait_for_notification(&text_before_placeholder(findings::malware_found_signature))?;
+            wait_for_notification(&text_before_placeholder(|signature_name| {
+                findings::malware_found_signature(
+                    &MessageCatalog::source_language(),
+                    signature_name,
+                )
+            }))?;
             ensure(
-                notifications_mentioning(&text_before_placeholder(
-                    findings::malware_blocked_signature,
-                ))?
+                notifications_mentioning(&text_before_placeholder(|signature_name| {
+                    findings::malware_blocked_signature(
+                        &MessageCatalog::source_language(),
+                        signature_name,
+                    )
+                }))?
                 .is_empty(),
                 || "a scanned file was called blocked".to_owned(),
             )?;
             ensure(
                 !journey_run
                     .widgets
-                    .is_shown(&label_containing(scans::last_scan_ended_error())),
+                    .is_shown(&label_containing(scans::last_scan_ended_error(
+                        &MessageCatalog::source_language(),
+                    ))),
                 || "a found threat was shown as a failed scan".to_owned(),
             )
         },
@@ -584,15 +626,23 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         |journey_run| {
             show_page(ApplicationPage::ScheduledScans)?;
             journey_run.await_shown(&label_containing(text_before_placeholder(
-                scans::system_already_runs_scheduled,
+                |schedule_text| {
+                    scans::system_already_runs_scheduled(
+                        &MessageCatalog::source_language(),
+                        schedule_text,
+                    )
+                },
             )))?;
             let _locked_toggle = journey_run.widgets.press_within(
-                &WidgetTarget::label(scans::enable_scheduled_scans_title()),
+                &WidgetTarget::label(scans::enable_scheduled_scans_title(
+                    &MessageCatalog::source_language(),
+                )),
                 Duration::from_secs(5),
             );
-            let _locked_apply = journey_run
-                .widgets
-                .press_within(&button(scans::apply_label()), Duration::from_secs(5));
+            let _locked_apply = journey_run.widgets.press_within(
+                &button(scans::apply_label(&MessageCatalog::source_language())),
+                Duration::from_secs(5),
+            );
             ensure(
                 !Path::new(&format!("{SAMPLE_HOME}/{SCHEDULE_TIMER}")).exists(),
                 || "Lazaret wrote a second schedule".to_owned(),
@@ -604,7 +654,9 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         "settings the system owns name their source in their row",
         |journey_run| {
             show_page(ApplicationPage::ScanEngine)?;
-            journey_run.await_shown(&label_containing(widgets::source_nixos_tag()))?;
+            journey_run.await_shown(&label_containing(widgets::source_nixos_tag(
+                &MessageCatalog::source_language(),
+            )))?;
             take_screenshot("scanner_engine_settings");
             Ok(())
         },
@@ -614,7 +666,9 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         show_page(ApplicationPage::SignatureSources)?;
         journey_run.widgets.await_shown_within(
             &label_containing(
-                crate::vm_journeys::harness::ui_messages::window::signature_sources(),
+                crate::vm_journeys::harness::ui_messages::window::signature_sources(
+                    &MessageCatalog::source_language(),
+                ),
             ),
             SHORT_WAIT,
         )
@@ -716,7 +770,9 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         |journey_run| {
             wait_for_lazaret_service()?;
             show_scan_engine_page(journey_run)?;
-            journey_run.await_shown(&label_containing(widgets::source_nixos_tag()))?;
+            journey_run.await_shown(&label_containing(widgets::source_nixos_tag(
+                &MessageCatalog::source_language(),
+            )))?;
             take_screenshot("scanner_engine_sources");
             Ok(())
         },
@@ -727,20 +783,28 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
         |journey_run| {
             let merged_before_copy = merged_config()?;
             let overrides_before_copy = stored_overrides()?;
-            journey_run.press(&row_titled(widgets::heuristic_detections()))?;
+            journey_run.press(&row_titled(widgets::heuristic_detections(
+                &MessageCatalog::source_language(),
+            )))?;
             journey_run.await_shown(&label_containing(
-                widgets::route_outside_allowlist_explanation(),
+                widgets::route_outside_allowlist_explanation(&MessageCatalog::source_language()),
             ))?;
             journey_run.press(&in_expanded_row(
-                button(widgets::copy_configuration_line_button()),
-                widgets::heuristic_detections(),
+                button(widgets::copy_configuration_line_button(
+                    &MessageCatalog::source_language(),
+                )),
+                widgets::heuristic_detections(&MessageCatalog::source_language()),
             ))?;
             journey_run.await_shown(&label_containing(
-                widgets::nothing_applied_choose_description(),
+                widgets::nothing_applied_choose_description(&MessageCatalog::source_language()),
             ))?;
-            journey_run.press(&button(widgets::copy_line_label()))?;
+            journey_run.press(&button(widgets::copy_line_label(
+                &MessageCatalog::source_language(),
+            )))?;
             journey_run.widgets.await_shown_within(
-                &label_containing(widgets::change_snippet_copied()),
+                &label_containing(widgets::change_snippet_copied(
+                    &MessageCatalog::source_language(),
+                )),
                 SHORT_WAIT,
             )?;
             take_screenshot("copy_only_setting");
@@ -782,8 +846,8 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
                 edit_max_threads(journey_run, 8)?;
                 take_screenshot("confirm_change");
                 journey_run.press(&in_alert(
-                    button(widgets::apply_label()),
-                    widgets::change_setting(),
+                    button(widgets::apply_label(&MessageCatalog::source_language())),
+                    widgets::change_setting(&MessageCatalog::source_language()),
                 ))?;
                 answer_password_prompt(SAMPLE_PASSWORD)?;
                 wait_until(
@@ -802,6 +866,7 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
                 edit_max_threads(journey_run, 10)?;
                 journey_run.await_shown(&label_containing(
                     crate::vm_journeys::harness::ui_messages::host::key_now_current_new(
+                        &MessageCatalog::source_language(),
                         MAX_THREADS,
                         8,
                         10,
@@ -809,8 +874,8 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
                 ))?;
                 take_screenshot("confirm_second_change");
                 journey_run.press(&in_alert(
-                    button(widgets::cancel_engine()),
-                    widgets::change_setting(),
+                    button(widgets::cancel_engine(&MessageCatalog::source_language())),
+                    widgets::change_setting(&MessageCatalog::source_language()),
                 ))
             },
         )?;
@@ -820,12 +885,16 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
             |journey_run| {
                 show_scan_engine_page(journey_run)?;
                 journey_run.await_shown(&in_expanded_row(
-                    label_containing(widgets::source_runtime_nixos_explanation()),
+                    label_containing(widgets::source_runtime_nixos_explanation(
+                        &MessageCatalog::source_language(),
+                    )),
                     MAX_THREADS,
                 ))?;
                 take_screenshot("runtime_change_in_row");
                 journey_run.press(&in_expanded_row(
-                    button(widgets::revert_change_button()),
+                    button(widgets::revert_change_button(
+                        &MessageCatalog::source_language(),
+                    )),
                     MAX_THREADS,
                 ))?;
                 answer_password_prompt(SAMPLE_PASSWORD)?;
@@ -836,7 +905,7 @@ pub fn run_administrator_journey() -> Result<(), JourneyFailure> {
                 )?;
                 wait_for_clamd()?;
                 journey_run.await_shown(&in_row(
-                    label_containing(widgets::source_nixos_tag()),
+                    label_containing(widgets::source_nixos_tag(&MessageCatalog::source_language())),
                     MAX_THREADS,
                 ))
             },
