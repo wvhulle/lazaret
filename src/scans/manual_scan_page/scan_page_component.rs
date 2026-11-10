@@ -30,6 +30,7 @@ use crate::{
         },
         desktop::{
             failure_journal_log::log_failure_to_journal,
+            flatpak_sandbox::SandboxKind,
             stored_settings::{application_settings, scanner_backend_preference},
         },
         quarantine_vault::quarantine_entry_database::QuarantineVault,
@@ -95,6 +96,7 @@ enum ScannerBackendView {
 }
 
 pub struct ScanPageInit {
+    pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub activity_history: ActivityHistory,
     pub profile_store: ScanProfileStore,
@@ -129,6 +131,7 @@ const fn shows_page_notice(page_notice: &ScanPageNotice) -> bool {
 }
 
 pub struct ScanPage {
+    sandbox_kind: SandboxKind,
     activity_history: ActivityHistory,
     profile_store: ScanProfileStore,
     profile_choice: ScanProfileChoice,
@@ -468,11 +471,13 @@ impl ScanPage {
         temporary_scan_target: TemporaryScanTarget,
         sender: &ComponentSender<Self>,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         self.page_notice = ScanPageNotice::NoNoticeShown;
         let scan_run_number = self.next_scan_run_number;
         self.next_scan_run_number = scan_run_number.following_run();
         self.found_threat_rows.guard().clear();
         let running_scan = start_scan_run(
+            sandbox_kind,
             sender,
             ScanRunRequest {
                 scan_run_number,
@@ -790,6 +795,7 @@ impl Component for ScanPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let sandbox_kind = page_init.sandbox_kind;
         let scan_target_rows = FactoryVecDeque::builder()
             .launch(gtk::ListBox::default())
             .forward(sender.input_sender(), |row_output| match row_output {
@@ -808,9 +814,10 @@ impl Component for ScanPage {
         root.add_controller(drop_target);
         let startup_backend_preference = scanner_backend_preference(&application_settings());
         sender.oneshot_command(async move {
-            match ScannerProgramPaths::locate_trusted_programs_in_background().await {
+            match ScannerProgramPaths::locate_trusted_programs_in_background(sandbox_kind).await {
                 Ok(scanner_programs) => ScanPageCommand::ScannerBackendDetected {
                     scanner_backend: choose_scanner_backend(
+                        sandbox_kind,
                         startup_backend_preference,
                         &scanner_programs,
                     )
@@ -821,6 +828,7 @@ impl Component for ScanPage {
             }
         });
         let model = Self {
+            sandbox_kind,
             profile_store: page_init.profile_store,
             profile_choice: ScanProfileChoice::without_profiles(),
             profile_manager_view: ProfileManagerView::ManagerClosed,
@@ -834,6 +842,7 @@ impl Component for ScanPage {
                 .detach(),
             scan_results_section: ScanResultsSection::builder()
                 .launch(ScanResultsSectionInit {
+                    sandbox_kind,
                     quarantine_vault: page_init.quarantine_vault,
                     dismiss_label: translated_messages::scans::new_scan_button(),
                 })

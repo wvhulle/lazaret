@@ -8,6 +8,7 @@ use crate::host_services::{
         },
     },
     clamav_scanner::content_verdict::ContentVerdict,
+    desktop::flatpak_sandbox::SandboxKind,
     protection_evidence::clamav_engine_evidence::newest_disk_signature_version,
 };
 
@@ -59,8 +60,8 @@ pub fn review_after_recheck(
     }
 }
 
-pub async fn current_database_version() -> SignatureDatabaseVersion {
-    match spawn_blocking(newest_disk_signature_version).await {
+pub async fn current_database_version(sandbox_kind: SandboxKind) -> SignatureDatabaseVersion {
+    match spawn_blocking(move || newest_disk_signature_version(sandbox_kind)).await {
         Ok(Some(version_number)) => SignatureDatabaseVersion::DailyVersion { version_number },
         Ok(None) | Err(_) => SignatureDatabaseVersion::VersionUnreadable,
     }

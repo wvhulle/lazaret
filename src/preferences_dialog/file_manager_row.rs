@@ -11,7 +11,7 @@ use crate::{
             FileManagerKind, file_manager_action_installed, install_file_manager_action,
             remove_file_manager_action,
         },
-        flatpak_sandbox::host_user_data_directory,
+        flatpak_sandbox::{SandboxKind, host_user_data_directory},
     },
     scans::scheduled_scans_page::scan_schedule_units::current_launcher_words,
     translated_messages,
@@ -57,7 +57,13 @@ pub enum IntegrationChangeOutcome {
     },
 }
 
+pub struct FileManagerRowInit {
+    pub file_manager: FileManagerKind,
+    pub sandbox_kind: SandboxKind,
+}
+
 pub struct FileManagerRow {
+    sandbox_kind: SandboxKind,
     file_manager: FileManagerKind,
     data_directory: PathBuf,
     integration_state: IntegrationState,
@@ -148,11 +154,12 @@ fn describe_integration_failure(integration_state: &IntegrationState) -> String 
 }
 
 fn install_integration(
+    sandbox_kind: SandboxKind,
     file_manager: FileManagerKind,
     data_directory: &Path,
 ) -> Result<(), IntegrationChangeFailure> {
     let launcher_words =
-        current_launcher_words().map_err(IntegrationChangeFailure::LauncherNotFound)?;
+        current_launcher_words(sandbox_kind).map_err(IntegrationChangeFailure::LauncherNotFound)?;
     install_file_manager_action(file_manager, data_directory, &launcher_words)
         .map_err(IntegrationChangeFailure::ActionUnwritable)
 }
@@ -186,6 +193,7 @@ impl FileManagerRow {
         target_presence: IntegrationPresence,
         sender: &FactorySender<Self>,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         if !accepts_integration_toggles(&self.integration_state) {
             return;
         }
@@ -195,7 +203,7 @@ impl FileManagerRow {
         sender.oneshot_command(async move {
             let change_attempt = match target_presence {
                 IntegrationPresence::ActionInstalled => {
-                    install_integration(file_manager, &data_directory)
+                    install_integration(sandbox_kind, file_manager, &data_directory)
                 }
                 IntegrationPresence::ActionAbsent => {
                     remove_integration(file_manager, &data_directory)
@@ -213,7 +221,7 @@ impl FileManagerRow {
 
 #[relm4::factory(pub)]
 impl FactoryComponent for FileManagerRow {
-    type Init = FileManagerKind;
+    type Init = FileManagerRowInit;
     type Input = FileManagerRowInput;
     type Output = ();
     type CommandOutput = FileManagerRowCommand;
@@ -240,12 +248,16 @@ impl FactoryComponent for FileManagerRow {
     }
 
     fn init_model(
-        file_manager: Self::Init,
+        FileManagerRowInit {
+            file_manager,
+            sandbox_kind,
+        }: Self::Init,
         _row_index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
-        let data_directory = host_user_data_directory();
+        let data_directory = host_user_data_directory(sandbox_kind);
         Self {
+            sandbox_kind,
             integration_state: settled_integration(read_integration_presence(
                 file_manager,
                 &data_directory,

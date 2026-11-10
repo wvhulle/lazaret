@@ -3,8 +3,9 @@ use std::ffi::OsString;
 use clamd_configuration::override_reports::clamav_default_texts;
 use tokio::task::{JoinError, spawn_blocking};
 
-use crate::host_services::clamav_config::clamav_host_config::{
-    ConfigSetting, HostConfigView, read_clamd_config,
+use crate::host_services::{
+    clamav_config::clamav_host_config::{ConfigSetting, HostConfigView, read_clamd_config},
+    desktop::flatpak_sandbox::SandboxKind,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -93,8 +94,8 @@ pub fn clamscan_detection_arguments(config_settings: &[ConfigSetting]) -> Vec<Os
         .collect()
 }
 
-pub fn host_clamscan_detection_arguments() -> Vec<OsString> {
-    match read_clamd_config() {
+pub fn host_clamscan_detection_arguments(sandbox_kind: SandboxKind) -> Vec<OsString> {
+    match read_clamd_config(sandbox_kind) {
         HostConfigView::ConfigFound {
             config_settings, ..
         } => clamscan_detection_arguments(&config_settings),
@@ -108,9 +109,10 @@ pub enum DetectionSettingsFailure {
     ReadingTaskInterrupted(#[from] JoinError),
 }
 
-pub async fn read_host_clamscan_detection_arguments()
--> Result<Vec<OsString>, DetectionSettingsFailure> {
-    Ok(spawn_blocking(host_clamscan_detection_arguments).await?)
+pub async fn read_host_clamscan_detection_arguments(
+    sandbox_kind: SandboxKind,
+) -> Result<Vec<OsString>, DetectionSettingsFailure> {
+    Ok(spawn_blocking(move || host_clamscan_detection_arguments(sandbox_kind)).await?)
 }
 
 #[cfg(test)]

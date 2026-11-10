@@ -45,7 +45,7 @@ use crate::host_services::{
         },
         user_trusted_threats::UserTrustedThreat,
     },
-    desktop::flatpak_sandbox::scanner_visible_path,
+    desktop::flatpak_sandbox::{SandboxKind, scanner_visible_path},
 };
 
 const OUTPUT_LIMIT: usize = 64 * 1024 * 1024;
@@ -537,6 +537,7 @@ fn write_private_file_list(
 }
 
 fn prepare_clamd_phases(
+    sandbox_kind: SandboxKind,
     scan_request: &ScanRequest,
     enumerated_files: EnumeratedScanFiles,
 ) -> Result<PreparedScanTarget, ScanTargetFailure> {
@@ -547,7 +548,7 @@ fn prepare_clamd_phases(
         .partition(|file_path| requires_clamd_standard_input(file_path));
     let listed_paths = listed_paths
         .iter()
-        .map(|listed_path| scanner_visible_path(listed_path))
+        .map(|listed_path| scanner_visible_path(sandbox_kind, listed_path))
         .collect::<Vec<_>>();
     let file_list_phase = if listed_paths.is_empty() {
         None
@@ -586,12 +587,15 @@ fn prepare_standalone_phase(
 }
 
 fn prepare_scan_target(
+    sandbox_kind: SandboxKind,
     target_path: &Path,
     scan_request: &ScanRequest,
     enumerated_files: EnumeratedScanFiles,
 ) -> Result<PreparedScanTarget, ScanTargetFailure> {
     match scan_request.scanner_backend {
-        ScannerBackend::ClamdDaemon => prepare_clamd_phases(scan_request, enumerated_files),
+        ScannerBackend::ClamdDaemon => {
+            prepare_clamd_phases(sandbox_kind, scan_request, enumerated_files)
+        }
         ScannerBackend::StandaloneClamscan => {
             Ok(prepare_standalone_phase(target_path, enumerated_files))
         }
@@ -618,6 +622,7 @@ fn target_walk_steps(
 }
 
 fn target_preparation_steps(
+    sandbox_kind: SandboxKind,
     target_path: PathBuf,
     scan_request: Arc<ScanRequest>,
 ) -> impl Iterator<Item = TargetPreparationStep> {
@@ -629,7 +634,7 @@ fn target_preparation_steps(
             .then_some(TargetPreparationStep::WalkProgressed(enumeration_progress)),
         WalkStep::WalkCompleted(walk_outcome) => Some(TargetPreparationStep::TargetPrepared(
             walk_outcome.and_then(|enumerated_files| {
-                prepare_scan_target(&target_path, &scan_request, enumerated_files)
+                prepare_scan_target(sandbox_kind, &target_path, &scan_request, enumerated_files)
             }),
         )),
     })
@@ -668,6 +673,7 @@ fn create_scanner_work_directory(scan_request: &ScanRequest) -> io::Result<tempf
 }
 
 fn prepare_phase_parts(
+    sandbox_kind: SandboxKind,
     scanner_phase_plan: ScannerPhasePlan,
     scan_request: &ScanRequest,
 ) -> Result<StartedPhaseParts, ScanStartFailure> {
@@ -678,6 +684,7 @@ fn prepare_phase_parts(
                 .map_err(ScanStartFailure::ScannerWorkDirectoryUnavailable)?;
             StartedPhaseParts {
                 scanner_command: build_scanner_command(
+                    sandbox_kind,
                     scanner_programs,
                     ScannerInvocation::StandaloneTarget {
                         target_path: &target_path,
@@ -700,6 +707,7 @@ fn prepare_phase_parts(
             listed_paths,
         } => StartedPhaseParts {
             scanner_command: build_scanner_command(
+                sandbox_kind,
                 scanner_programs,
                 ScannerInvocation::ClamdFileList {
                     file_list_path: file_list.path(),
@@ -715,6 +723,7 @@ fn prepare_phase_parts(
         },
         ScannerPhasePlan::ClamdStandardInput { input_path } => StartedPhaseParts {
             scanner_command: build_scanner_command(
+                sandbox_kind,
                 scanner_programs,
                 ScannerInvocation::ClamdStandardInput {
                     scan_input_file: open_standard_input_file(&input_path)?,
@@ -732,6 +741,7 @@ fn prepare_phase_parts(
 }
 
 fn start_scanner_phase(
+    sandbox_kind: SandboxKind,
     scanner_phase_plan: ScannerPhasePlan,
     scan_request: &ScanRequest,
 ) -> Result<impl Stream<Item = ScanProgressEvent> + Send + 'static + use<>, ScanStartFailure> {
@@ -739,7 +749,7 @@ fn start_scanner_phase(
         scanner_command,
         phase_transcript,
         retained_files,
-    } = prepare_phase_parts(scanner_phase_plan, scan_request)?;
+    } = prepare_phase_parts(sandbox_kind, scanner_phase_plan, scan_request)?;
     Ok(scanner_process_events(scanner_command, retained_files)?
         .scan(phase_transcript, |phase_transcript, process_event| {
             ready(Some(phase_transcript.absorb_process_event(process_event)))
@@ -767,10 +777,11 @@ fn new_phase_transcript(
 }
 
 fn scanner_phase_events(
+    sandbox_kind: SandboxKind,
     scanner_phase_plan: ScannerPhasePlan,
     scan_request: &ScanRequest,
 ) -> impl Stream<Item = ScanProgressEvent> + Send + 'static + use<> {
-    match start_scanner_phase(scanner_phase_plan, scan_request) {
+    match start_scanner_phase(sandbox_kind, scanner_phase_plan, scan_request) {
         Ok(phase_events) => Either::Left(phase_events),
         Err(ScanStartFailure::ScanInputUnavailable {
             input_path,
@@ -787,6 +798,7 @@ fn scanner_phase_events(
 }
 
 fn prepared_target_events(
+    sandbox_kind: SandboxKind,
     prepared_target: Result<PreparedScanTarget, ScanTargetFailure>,
     scan_request: Arc<ScanRequest>,
 ) -> impl Stream<Item = ScanProgressEvent> + Send + 'static {
@@ -798,7 +810,9 @@ fn prepared_target_events(
                 excluded_entry_count: prepared_target.excluded_entry_count,
             }))
             .chain(stream::iter(prepared_target.scanner_phase_plans).flat_map(
-                move |scanner_phase_plan| scanner_phase_events(scanner_phase_plan, &scan_request),
+                move |scanner_phase_plan| {
+                    scanner_phase_events(sandbox_kind, scanner_phase_plan, &scan_request)
+                },
             )),
         ),
         Err(target_failure) => Either::Right(stream::once(ready(
@@ -808,13 +822,14 @@ fn prepared_target_events(
 }
 
 fn target_progress_events(
+    sandbox_kind: SandboxKind,
     target_path: PathBuf,
     scan_request: Arc<ScanRequest>,
 ) -> impl Stream<Item = ScanProgressEvent> + Send + 'static {
     let preparation_request = Arc::clone(&scan_request);
     blocking_iterator_stream(
         TARGET_WALK_THREAD_NAME,
-        move || target_preparation_steps(target_path, preparation_request),
+        move || target_preparation_steps(sandbox_kind, target_path, preparation_request),
         |_spawn_failure| {
             TargetPreparationStep::TargetPrepared(Err(ScanTargetFailure::EnumerationInterrupted))
         },
@@ -826,17 +841,18 @@ fn target_progress_events(
             )]))
         }
         TargetPreparationStep::TargetPrepared(prepared_target) => Either::Right(
-            prepared_target_events(prepared_target, Arc::clone(&scan_request)),
+            prepared_target_events(sandbox_kind, prepared_target, Arc::clone(&scan_request)),
         ),
     })
 }
 
 pub fn scan_progress_events(
+    sandbox_kind: SandboxKind,
     scan_request: ScanRequest,
 ) -> impl Stream<Item = ScanProgressEvent> + Send + 'static {
     let shared_request = Arc::new(scan_request);
     stream::iter(shared_request.scan_targets.clone()).flat_map(move |target_path| {
-        target_progress_events(target_path, Arc::clone(&shared_request))
+        target_progress_events(sandbox_kind, target_path, Arc::clone(&shared_request))
     })
 }
 
@@ -914,11 +930,15 @@ mod scan_progress_events_tests {
         )
     }
 
-    fn clamd_request(temporary_root: &TempDir, scan_targets: Vec<PathBuf>) -> ScanRequest {
+    fn clamd_request(
+        sandbox_kind: SandboxKind,
+        temporary_root: &TempDir,
+        scan_targets: Vec<PathBuf>,
+    ) -> ScanRequest {
         ScanRequest {
             scan_targets,
             scanner_backend: ScannerBackend::ClamdDaemon,
-            scanner_programs: ScannerProgramPaths::locate_trusted_programs(),
+            scanner_programs: ScannerProgramPaths::locate_trusted_programs(sandbox_kind),
             file_list_directory: temporary_root.path().join("data"),
             scan_exclusions: ScanExclusions::default(),
             detection_arguments: Vec::new(),
@@ -954,6 +974,7 @@ mod scan_progress_events_tests {
 
     #[test]
     fn newline_paths_go_through_standard_input_and_others_through_the_file_list() {
+        let sandbox_kind = SandboxKind::HostSystem;
         let temporary_root = tempfile::tempdir().expect("temporary root");
         let scan_target = temporary_root.path().join("scan");
         fs::create_dir_all(&scan_target).expect("scan directory");
@@ -971,7 +992,8 @@ mod scan_progress_events_tests {
         .for_each(|file_path| fs::write(file_path, b"fixture").expect("fixture file"));
 
         let prepared_target = prepare_clamd_phases(
-            &clamd_request(&temporary_root, vec![scan_target.clone()]),
+            sandbox_kind,
+            &clamd_request(sandbox_kind, &temporary_root, vec![scan_target.clone()]),
             enumerate_scan_files(&scan_target, &ScanExclusions::default())
                 .expect("enumerated files"),
         )
@@ -1165,12 +1187,17 @@ mod scan_progress_events_tests {
 
     #[tokio::test]
     async fn invalid_target_produces_a_problem_and_no_counts() {
+        let sandbox_kind = SandboxKind::HostSystem;
         let temporary_root = tempfile::tempdir().expect("temporary root");
         let scan_outcome = fold_scan_outcome(
-            scan_progress_events(clamd_request(
-                &temporary_root,
-                vec![PathBuf::from("/scan/invalid\0target")],
-            ))
+            scan_progress_events(
+                sandbox_kind,
+                clamd_request(
+                    sandbox_kind,
+                    &temporary_root,
+                    vec![PathBuf::from("/scan/invalid\0target")],
+                ),
+            )
             .collect()
             .await,
         );

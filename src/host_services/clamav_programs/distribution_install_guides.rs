@@ -1,3 +1,4 @@
+use crate::host_services::desktop::flatpak_sandbox::SandboxKind;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DistributionFamily {
     DebianFamily,
@@ -88,8 +89,8 @@ pub fn parse_distribution_family(os_release_text: &str) -> DistributionFamily {
     }
 }
 
-pub fn detect_distribution_family() -> DistributionFamily {
-    std::fs::read_to_string(readable_host_path("/etc/os-release"))
+pub fn detect_distribution_family(sandbox_kind: SandboxKind) -> DistributionFamily {
+    std::fs::read_to_string(readable_host_path(sandbox_kind, "/etc/os-release"))
         .map_or(DistributionFamily::UnrecognizedFamily, |os_release_text| {
             parse_distribution_family(&os_release_text)
         })

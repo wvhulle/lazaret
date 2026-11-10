@@ -9,7 +9,7 @@ use tokio::task::spawn_blocking;
 
 use crate::host_services::{
     clamav_programs::database_directory_status::configured_database_directory,
-    desktop::flatpak_sandbox::readable_host_path,
+    desktop::flatpak_sandbox::{SandboxKind, readable_host_path},
 };
 
 const DATABASE_HEADER_LENGTH: u64 = 512;
@@ -69,8 +69,8 @@ fn read_database_header(database_path: &Path) -> Option<Vec<u8>> {
     Some(header_bytes)
 }
 
-fn daily_database_paths() -> Vec<PathBuf> {
-    let mut database_directories = std::iter::once(configured_database_directory())
+fn daily_database_paths(sandbox_kind: SandboxKind) -> Vec<PathBuf> {
+    let mut database_directories = std::iter::once(configured_database_directory(sandbox_kind))
         .chain(FALLBACK_DATABASE_DIRECTORIES.map(PathBuf::from))
         .collect::<Vec<_>>();
     database_directories.dedup();
@@ -79,13 +79,13 @@ fn daily_database_paths() -> Vec<PathBuf> {
         .flat_map(|database_directory| {
             DAILY_DATABASE_FILE_NAMES.map(|file_name| database_directory.join(file_name))
         })
-        .map(readable_host_path)
+        .map(|database_path| readable_host_path(sandbox_kind, database_path))
         .filter(|database_path| database_path.exists())
         .collect()
 }
 
-fn read_database_file_evidence() -> DatabaseFileEvidence {
-    let database_paths = daily_database_paths();
+fn read_database_file_evidence(sandbox_kind: SandboxKind) -> DatabaseFileEvidence {
+    let database_paths = daily_database_paths(sandbox_kind);
     let newest_build_time = database_paths
         .iter()
         .filter_map(|database_path| read_database_header(database_path))
@@ -107,16 +107,16 @@ pub fn parse_database_header_version(header_bytes: &[u8]) -> Option<u64> {
     header_fields.get(2)?.trim().parse().ok()
 }
 
-pub fn newest_disk_signature_version() -> Option<u64> {
-    daily_database_paths()
+pub fn newest_disk_signature_version(sandbox_kind: SandboxKind) -> Option<u64> {
+    daily_database_paths(sandbox_kind)
         .iter()
         .filter_map(|database_path| read_database_header(database_path))
         .filter_map(|header_bytes| parse_database_header_version(&header_bytes))
         .max()
 }
 
-async fn read_database_file_evidence_off_thread() -> DatabaseFileEvidence {
-    spawn_blocking(read_database_file_evidence)
+async fn read_database_file_evidence_off_thread(sandbox_kind: SandboxKind) -> DatabaseFileEvidence {
+    spawn_blocking(move || read_database_file_evidence(sandbox_kind))
         .await
         .unwrap_or(DatabaseFileEvidence::InspectionInterrupted)
 }
@@ -132,12 +132,17 @@ const fn database_evidence_from_files(file_evidence: DatabaseFileEvidence) -> Da
     }
 }
 
-pub async fn inspect_database_evidence_without_banner() -> DatabaseEvidence {
-    database_evidence_from_files(read_database_file_evidence_off_thread().await)
+pub async fn inspect_database_evidence_without_banner(
+    sandbox_kind: SandboxKind,
+) -> DatabaseEvidence {
+    database_evidence_from_files(read_database_file_evidence_off_thread(sandbox_kind).await)
 }
 
-pub async fn inspect_database_evidence_with_banner(version_banner: &str) -> DatabaseEvidence {
-    let file_evidence = read_database_file_evidence_off_thread().await;
+pub async fn inspect_database_evidence_with_banner(
+    sandbox_kind: SandboxKind,
+    version_banner: &str,
+) -> DatabaseEvidence {
+    let file_evidence = read_database_file_evidence_off_thread(sandbox_kind).await;
     match parse_version_banner_build_time(version_banner) {
         Some(banner_built_at) => match file_evidence {
             DatabaseFileEvidence::StampedDatabase { built_at } => {

@@ -6,8 +6,9 @@ use relm4::{
 use crate::{
     host_services::{
         desktop::{
-            locale_formatting::exact_local_time_text, preference_keys::PreferenceKey,
-            stored_settings::application_settings, stored_settings_watch::forward_setting_changes,
+            flatpak_sandbox::SandboxKind, locale_formatting::exact_local_time_text,
+            preference_keys::PreferenceKey, stored_settings::application_settings,
+            stored_settings_watch::forward_setting_changes,
         },
         systemd_bus::host_systemd_units::{
             SystemdBusFailure, TimerUnitSnapshot, UnitTimestamp, timer_unit_snapshot,
@@ -33,6 +34,7 @@ use crate::{
 const SYSTEM_SCAN_TIMER: &str = "clamdscan.timer";
 
 pub struct ScanScheduleSection {
+    sandbox_kind: SandboxKind,
     stored_settings: gio::Settings,
     schedule_rows: Controller<PreferenceRowsGroup>,
     schedule_settings: StoredScheduleSettings,
@@ -240,7 +242,7 @@ impl ScanScheduleSection {
 
 #[relm4::component(pub)]
 impl Component for ScanScheduleSection {
-    type Init = ();
+    type Init = SandboxKind;
     type Input = ScanScheduleSectionInput;
     type Output = ();
     type CommandOutput = ScanScheduleSectionCommand;
@@ -299,7 +301,11 @@ impl Component for ScanScheduleSection {
         }
     }
 
-    fn init((): (), root: Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
+    fn init(
+        sandbox_kind: SandboxKind,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
         let stored_settings = application_settings();
         forward_setting_changes(
             &stored_settings,
@@ -309,6 +315,7 @@ impl Component for ScanScheduleSection {
         );
         let schedule_settings = StoredScheduleSettings::read_from(&stored_settings);
         let model = Self {
+            sandbox_kind,
             schedule_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
                     row_specs: schedule_row_specs(),
@@ -335,6 +342,7 @@ impl Component for ScanScheduleSection {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         self.entry_texts_replaced = false;
         match page_input {
             ScanScheduleSectionInput::TargetsTextChanged(scan_targets_text) => {
@@ -363,7 +371,12 @@ impl Component for ScanScheduleSection {
                 };
                 sender.oneshot_command(async move {
                     ScanScheduleSectionCommand::ScheduleApplied(
-                        enable_scan_schedule(systemd_user_unit_directory(), scan_schedule).await,
+                        enable_scan_schedule(
+                            sandbox_kind,
+                            systemd_user_unit_directory(),
+                            scan_schedule,
+                        )
+                        .await,
                     )
                 });
             }

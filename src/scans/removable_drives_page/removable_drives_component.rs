@@ -18,7 +18,8 @@ use crate::{
         },
         desktop::{
             desktop_notifications::notify_outside_the_window,
-            failure_journal_log::log_failure_to_journal, stored_settings::application_settings,
+            failure_journal_log::log_failure_to_journal, flatpak_sandbox::SandboxKind,
+            stored_settings::application_settings,
         },
         quarantine_vault::quarantine_entry_database::QuarantineVault,
     },
@@ -63,6 +64,7 @@ use crate::{
 };
 
 pub struct RemovableDrivesPageInit {
+    pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub activity_history: ActivityHistory,
     pub file_list_directory: PathBuf,
@@ -90,6 +92,7 @@ const fn shows_page_notice(page_notice: &DrivesPageNotice) -> bool {
 }
 
 pub struct RemovableDrivesPage {
+    sandbox_kind: SandboxKind,
     toaster: Toaster,
     activity_history: ActivityHistory,
     file_list_directory: PathBuf,
@@ -263,6 +266,7 @@ impl RemovableDrivesPage {
     }
 
     fn start_granted_scan(&mut self, sender: &ComponentSender<Self>) {
+        let sandbox_kind = self.sandbox_kind;
         let scan_target = match self.device_scan_flow.scan_slot_granted() {
             GrantedSlotUse::ScanGrantedDrive(scan_target) => scan_target,
             GrantedSlotUse::ReleaseUnusedSlot => {
@@ -275,6 +279,7 @@ impl RemovableDrivesPage {
         self.next_scan_run_number = scan_run_number.following_run();
         self.found_threat_rows.guard().clear();
         let running_scan = start_scan_run(
+            sandbox_kind,
             sender,
             ScanRunRequest {
                 scan_run_number,
@@ -477,6 +482,7 @@ impl Component for RemovableDrivesPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let sandbox_kind = page_init.sandbox_kind;
         let volume_monitor = gio::VolumeMonitor::get();
         let mount_sender = sender.input_sender().clone();
         volume_monitor.connect_mount_added(move |_volume_monitor, added_mount| {
@@ -491,6 +497,7 @@ impl Component for RemovableDrivesPage {
             device_scan_status: device_scan_flow.device_scan_status(),
         };
         let model = Self {
+            sandbox_kind,
             toaster: Toaster::new(&root),
             activity_history: page_init.activity_history.clone(),
             file_list_directory: page_init.file_list_directory,
@@ -506,6 +513,7 @@ impl Component for RemovableDrivesPage {
                 .detach(),
             scan_results_section: ScanResultsSection::builder()
                 .launch(ScanResultsSectionInit {
+                    sandbox_kind,
                     quarantine_vault: page_init.quarantine_vault,
                     dismiss_label: translated_messages::scans::close_results_button(),
                 })

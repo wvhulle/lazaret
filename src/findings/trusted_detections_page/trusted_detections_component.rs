@@ -13,6 +13,7 @@ use crate::{
             TrustedDetectionsSection, TrustedDetectionsSectionOutput,
         },
     },
+    host_services::desktop::flatpak_sandbox::SandboxKind,
     shared_widgets::{
         loading_indicators::{
             BUSY_PAGE_NAME, FirstLoad, IDLE_PAGE_NAME, LOADED_PAGE_NAME, LOADING_PAGE_NAME,
@@ -105,7 +106,7 @@ impl TrustedDetectionsPage {
 
 #[relm4::component(pub)]
 impl Component for TrustedDetectionsPage {
-    type Init = ();
+    type Init = SandboxKind;
     type Input = TrustedDetectionsPageInput;
     type Output = TrustedDetectionsPageOutput;
     type CommandOutput = ();
@@ -148,7 +149,7 @@ impl Component for TrustedDetectionsPage {
     }
 
     fn init(
-        _page_init: Self::Init,
+        sandbox_kind: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -167,7 +168,7 @@ impl Component for TrustedDetectionsPage {
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             trusted_detections_section: TrustedDetectionsSection::builder()
-                .launch(())
+                .launch(sandbox_kind)
                 .forward(sender.input_sender(), page_input_for_trusted_output),
             trust_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {

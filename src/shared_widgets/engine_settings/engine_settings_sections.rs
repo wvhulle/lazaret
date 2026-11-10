@@ -26,6 +26,7 @@ use crate::{
             typed_setting_values::{SwitchPosition, TypedSettingValue, parse_setting_value},
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+        desktop::flatpak_sandbox::SandboxKind,
     },
     shared_widgets::{
         awaited_dialogs::{
@@ -74,10 +75,10 @@ impl EngineSettingsSection {
         matches!(self, Self::ScannerEngine | Self::OnAccessScanning)
     }
 
-    fn read_host_config(self) -> HostConfigView {
+    fn read_host_config(self, sandbox_kind: SandboxKind) -> HostConfigView {
         match self {
-            Self::ScannerEngine | Self::OnAccessScanning => read_clamd_config(),
-            Self::SignatureUpdates => read_freshclam_config(),
+            Self::ScannerEngine | Self::OnAccessScanning => read_clamd_config(sandbox_kind),
+            Self::SignatureUpdates => read_freshclam_config(sandbox_kind),
         }
     }
 
@@ -218,7 +219,13 @@ const fn confirmation_verdict(change_readiness: LiveChangeReadiness) -> Confirma
     }
 }
 
+pub struct EngineSettingsSectionsInit {
+    pub settings_layout: EngineSettingsLayout,
+    pub sandbox_kind: SandboxKind,
+}
+
 pub struct EngineSettingsSections {
+    sandbox_kind: SandboxKind,
     settings_layout: EngineSettingsLayout,
     settings_section: EngineSettingsSection,
     config_load: ConfigLoad,
@@ -791,12 +798,13 @@ impl EngineSettingsSections {
         sender: &ComponentSender<Self>,
         change_work: impl Future<Output = LiveChangeOutcome> + Send + 'static,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         self.change_progress = ChangeProgress::ChangeRunning { changed_row };
         sender.oneshot_command(async move {
             let change_outcome = change_work.await;
             EngineSettingsSectionsCommand::LiveChangeFinished {
                 change_outcome,
-                live_tuning: read_live_tuning().await,
+                live_tuning: read_live_tuning(sandbox_kind).await,
             }
         });
         self.refresh_row_activity();
@@ -890,11 +898,12 @@ impl EngineSettingsSections {
 }
 
 fn load_section_config(
+    sandbox_kind: SandboxKind,
     sender: &ComponentSender<EngineSettingsSections>,
     settings_section: EngineSettingsSection,
 ) {
     sender.oneshot_command(async move {
-        let host_config = settings_section.read_host_config();
+        let host_config = settings_section.read_host_config(sandbox_kind);
         let config_file_owner = match &host_config {
             HostConfigView::ConfigFound { config_path, .. } => {
                 inspect_config_file_owner(std::path::Path::new(config_path))
@@ -902,7 +911,7 @@ fn load_section_config(
             HostConfigView::ConfigNotFound => ConfigFileOwner::SystemPackage,
         };
         let tuning_load = if settings_section.offers_live_tuning() {
-            LiveTuningLoad::TuningRead(read_live_tuning().await)
+            LiveTuningLoad::TuningRead(read_live_tuning(sandbox_kind).await)
         } else {
             LiveTuningLoad::TuningNotOffered
         };
@@ -916,7 +925,7 @@ fn load_section_config(
 
 #[relm4::component(pub)]
 impl Component for EngineSettingsSections {
-    type Init = EngineSettingsLayout;
+    type Init = EngineSettingsSectionsInit;
     type Input = EngineSettingsSectionsInput;
     type Output = EngineSettingsSectionsOutput;
     type CommandOutput = EngineSettingsSectionsCommand;
@@ -955,7 +964,10 @@ impl Component for EngineSettingsSections {
     }
 
     fn init(
-        settings_layout: Self::Init,
+        EngineSettingsSectionsInit {
+            settings_layout,
+            sandbox_kind,
+        }: Self::Init,
         _root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -973,6 +985,7 @@ impl Component for EngineSettingsSections {
                 EngineSettingsSectionsInput::SettingRowReported,
             );
         let model = Self {
+            sandbox_kind,
             settings_layout,
             settings_section,
             config_load: ConfigLoad::LoadingConfig,
@@ -990,7 +1003,7 @@ impl Component for EngineSettingsSections {
         let setting_rows_group = model.setting_rows.widget();
         let detection_row_group = model.detection_rows.widget();
         let widgets = view_output!();
-        load_section_config(&sender, settings_section);
+        load_section_config(sandbox_kind, &sender, settings_section);
         ComponentParts { model, widgets }
     }
 
@@ -1071,6 +1084,7 @@ impl Component for EngineSettingsSections {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match page_command {
             EngineSettingsSectionsCommand::ConfigLoaded {
                 host_config,
@@ -1104,7 +1118,7 @@ impl Component for EngineSettingsSections {
                 );
                 self.tuning_load = LiveTuningLoad::TuningRead(live_tuning);
                 self.rebuild_rows();
-                load_section_config(&sender, self.settings_section);
+                load_section_config(sandbox_kind, &sender, self.settings_section);
             }
         }
     }

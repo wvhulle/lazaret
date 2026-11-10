@@ -13,7 +13,10 @@ use crate::{
         clamav_programs::distribution_install_guides::{
             DistributionFamily, detect_distribution_family,
         },
-        desktop::locale_formatting::{exact_local_time_text, host_moment_formatters},
+        desktop::{
+            flatpak_sandbox::SandboxKind,
+            locale_formatting::{exact_local_time_text, host_moment_formatters},
+        },
         protection_evidence::host_protection_evidence::{
             ScanServiceEvidence, scan_service_evidence,
         },
@@ -48,6 +51,11 @@ use crate::{
     },
     translated_messages,
 };
+
+pub struct ScheduledScansPageInit {
+    pub activity_history: ActivityHistory,
+    pub sandbox_kind: SandboxKind,
+}
 
 pub struct ScheduledScansPage {
     toaster: Toaster,
@@ -132,7 +140,7 @@ impl ScheduledScansPage {
 
 #[relm4::component(pub)]
 impl Component for ScheduledScansPage {
-    type Init = ActivityHistory;
+    type Init = ScheduledScansPageInit;
     type Input = ScheduledScansPageInput;
     type Output = ScheduledScansPageOutput;
     type CommandOutput = ScheduledScansPageCommand;
@@ -228,7 +236,10 @@ impl Component for ScheduledScansPage {
     }
 
     fn init(
-        activity_history: Self::Init,
+        ScheduledScansPageInit {
+            activity_history,
+            sandbox_kind,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -244,10 +255,10 @@ impl Component for ScheduledScansPage {
                     sender.input_sender(),
                     ScheduledScansPageInput::StepRequested,
                 ),
-            distribution_family: detect_distribution_family(),
+            distribution_family: detect_distribution_family(sandbox_kind),
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
-            schedule_section: ScanScheduleSection::builder().launch(()).detach(),
+            schedule_section: ScanScheduleSection::builder().launch(sandbox_kind).detach(),
             history_group: ActivityHistoryGroup::builder()
                 .launch(ActivityHistoryGroupInit {
                     activity_history,

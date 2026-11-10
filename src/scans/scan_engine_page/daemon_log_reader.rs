@@ -12,7 +12,7 @@ use tokio::task::spawn_blocking;
 use crate::host_services::{
     blocking_iterator_stream::blocking_iterator_stream,
     clamav_scanner::clamd_log_lines::{ClamdLogLine, parse_clamd_log_text},
-    desktop::flatpak_sandbox::readable_host_path,
+    desktop::flatpak_sandbox::{SandboxKind, readable_host_path},
     systemd_journal::{
         service_log_contents::{SHOWN_LOG_LINE_COUNT, ServiceLogContents, read_unit_journal_log},
         unit_journal_reader::appended_unit_entries,
@@ -71,10 +71,12 @@ fn read_log_tail(log_path: &Path) -> Option<Vec<ClamdLogLine>> {
     )))
 }
 
-fn readable_log_file() -> Option<PathBuf> {
+fn readable_log_file(sandbox_kind: SandboxKind) -> Option<PathBuf> {
     let configured_paths = CLAMD_CONFIG_PATHS
         .iter()
-        .filter_map(|config_path| fs::read_to_string(readable_host_path(config_path)).ok())
+        .filter_map(|config_path| {
+            fs::read_to_string(readable_host_path(sandbox_kind, config_path)).ok()
+        })
         .filter_map(|config_text| log_path_in_config(&config_text));
     let default_paths = DEFAULT_LOG_PATHS.iter().map(PathBuf::from);
     configured_paths
@@ -82,8 +84,8 @@ fn readable_log_file() -> Option<PathBuf> {
         .find(|log_path| fs::File::open(log_path).is_ok())
 }
 
-fn read_configured_log_file() -> Option<ServiceLogContents> {
-    let log_path = readable_log_file()?;
+fn read_configured_log_file(sandbox_kind: SandboxKind) -> Option<ServiceLogContents> {
+    let log_path = readable_log_file(sandbox_kind)?;
     read_log_tail(&log_path).map(|log_lines| ServiceLogContents::FromLogFile {
         log_path,
         log_lines,
@@ -124,27 +126,29 @@ fn log_file_changes(log_path: &Path) -> impl Iterator<Item = ()> + use<> {
     })
 }
 
-fn daemon_log_changes() -> Box<dyn Iterator<Item = ()>> {
-    match readable_log_file() {
+fn daemon_log_changes(sandbox_kind: SandboxKind) -> Box<dyn Iterator<Item = ()>> {
+    match readable_log_file(sandbox_kind) {
         Some(log_path) => Box::new(log_file_changes(&log_path)),
         None => Box::new(appended_unit_entries(&DAEMON_SERVICE_UNITS)),
     }
 }
 
-pub fn daemon_log_updates() -> impl Stream<Item = ServiceLogContents> + Send + 'static {
-    stream::once(read_daemon_log()).chain(
+pub fn daemon_log_updates(
+    sandbox_kind: SandboxKind,
+) -> impl Stream<Item = ServiceLogContents> + Send + 'static {
+    stream::once(read_daemon_log(sandbox_kind)).chain(
         blocking_iterator_stream(
             DAEMON_LOG_WATCH_THREAD,
-            daemon_log_changes,
+            move || daemon_log_changes(sandbox_kind),
             |_spawn_failure| (),
         )
         .ready_chunks(CHANGE_BURST_SIZE)
-        .then(|_change_burst| read_daemon_log()),
+        .then(move |_change_burst| read_daemon_log(sandbox_kind)),
     )
 }
 
-pub async fn read_daemon_log() -> ServiceLogContents {
-    let file_contents = spawn_blocking(read_configured_log_file)
+pub async fn read_daemon_log(sandbox_kind: SandboxKind) -> ServiceLogContents {
+    let file_contents = spawn_blocking(move || read_configured_log_file(sandbox_kind))
         .await
         .ok()
         .flatten();

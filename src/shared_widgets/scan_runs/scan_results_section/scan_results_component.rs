@@ -17,7 +17,10 @@ use crate::{
             scan_exclusion_rules::exclusion_entry_for_threat,
             scanner_output_parser::{DetectedThreat, sanitize_scanner_line},
         },
-        desktop::stored_settings::{add_exclusion_entry, application_settings},
+        desktop::{
+            flatpak_sandbox::SandboxKind,
+            stored_settings::{add_exclusion_entry, application_settings},
+        },
         quarantine_vault::{
             quarantine_entry_database::{QuarantineEntryRecord, QuarantineVault},
             quarantine_file_moves::QuarantineMoveFailure,
@@ -67,11 +70,13 @@ impl AlertChoice for QuarantineDialogChoice {
 }
 
 pub struct ScanResultsSectionInit {
+    pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub dismiss_label: String,
 }
 
 pub struct ScanResultsSection {
+    sandbox_kind: SandboxKind,
     dismiss_label: String,
     results_view: ScanResultsView,
     results_generation: u64,
@@ -370,8 +375,10 @@ impl Component for ScanResultsSection {
         let ScanResultsSectionInit {
             quarantine_vault,
             dismiss_label,
+            sandbox_kind,
         } = section_init;
         let model = Self {
+            sandbox_kind,
             dismiss_label,
             results_view: ScanResultsView::empty_results(),
             results_generation: 0,
@@ -395,6 +402,7 @@ impl Component for ScanResultsSection {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match panel_input {
             ScanResultsSectionInput::ResultsShown(results_view) => self.show_results(results_view),
             ScanResultsSectionInput::QuarantineThreatRequested(row_index) => {
@@ -465,6 +473,7 @@ impl Component for ScanResultsSection {
             }
             ScanResultsSectionInput::IgnoreSignatureRequested(trust_choice) => {
                 present_trust_confirmation(
+                    sandbox_kind,
                     root,
                     trust_choice,
                     sender.input_sender().clone(),
@@ -522,12 +531,14 @@ impl Component for ScanResultsSection {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match panel_command {
             ScanResultsSectionCommand::ThreatFileFingerprinted {
                 shown_path,
                 fingerprint_outcome: Ok(file_fingerprint),
             } => {
                 present_trust_confirmation(
+                    sandbox_kind,
                     root,
                     TrustChoice::TrustFile {
                         file_fingerprint,

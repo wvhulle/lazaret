@@ -24,6 +24,7 @@ use crate::{
         desktop::{
             application_directories::application_data_directory,
             desktop_notifications::notify_outside_the_window,
+            flatpak_sandbox::SandboxKind,
             stored_settings::{
                 SHOW_LIVE_PROGRESS_KEY, application_settings, read_exclusion_entries,
                 scanner_backend_preference,
@@ -63,6 +64,7 @@ pub struct ScanRunCommands<PageCommand> {
 }
 
 pub fn start_scan_run<Page>(
+    sandbox_kind: SandboxKind,
     sender: &ComponentSender<Page>,
     run_request: ScanRunRequest,
     run_commands: ScanRunCommands<Page::CommandOutput>,
@@ -100,9 +102,11 @@ where
         started_instant,
     );
     let scan_events = stream::once(async move {
-        let scanner_programs = ScannerProgramPaths::locate_trusted_programs_in_background().await?;
-        let scanner_backend = choose_scanner_backend(backend_preference, &scanner_programs).await;
-        let detection_arguments = read_host_clamscan_detection_arguments().await?;
+        let scanner_programs =
+            ScannerProgramPaths::locate_trusted_programs_in_background(sandbox_kind).await?;
+        let scanner_backend =
+            choose_scanner_backend(sandbox_kind, backend_preference, &scanner_programs).await;
+        let detection_arguments = read_host_clamscan_detection_arguments(sandbox_kind).await?;
         let user_trust_loading =
             ActivityHistory::at_database_path(lazaret_database_path(&application_data_directory()))
                 .load_user_trust()
@@ -119,11 +123,12 @@ where
             user_trust_loading,
         ))
     })
-    .flat_map(|scan_request| match scan_request {
-        Ok((scan_request, user_trust_loading)) => {
-            skipping_user_trusted_threats(scan_progress_events(scan_request), user_trust_loading)
-                .left_stream()
-        }
+    .flat_map(move |scan_request| match scan_request {
+        Ok((scan_request, user_trust_loading)) => skipping_user_trusted_threats(
+            scan_progress_events(sandbox_kind, scan_request),
+            user_trust_loading,
+        )
+        .left_stream(),
         Err(start_failure) => stream::once(ready(ScanProgressEvent::ScanPhaseUnstartable(
             start_failure,
         )))

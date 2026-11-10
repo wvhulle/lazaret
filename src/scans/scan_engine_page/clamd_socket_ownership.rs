@@ -8,7 +8,7 @@ use rustix::fs::Access;
 
 use crate::host_services::{
     clamav_config::clamav_host_config::{HostConfigView, read_clamd_config},
-    desktop::flatpak_sandbox::running_in_flatpak,
+    desktop::flatpak_sandbox::SandboxKind,
 };
 
 const DEFAULT_CLAMD_SOCKET: &str = "/run/clamav/clamd.ctl";
@@ -29,8 +29,8 @@ pub enum ClamdSocketOwnership {
     SocketNotCheckable,
 }
 
-fn configured_socket_path() -> PathBuf {
-    match read_clamd_config() {
+fn configured_socket_path(sandbox_kind: SandboxKind) -> PathBuf {
+    match read_clamd_config(sandbox_kind) {
         HostConfigView::ConfigFound {
             config_settings, ..
         } => config_settings
@@ -81,18 +81,18 @@ pub fn inspect_socket_ownership(socket_path: &Path, user_id: u32) -> ClamdSocket
         )
 }
 
-fn inspect_clamd_socket() -> ClamdSocketOwnership {
-    if running_in_flatpak() {
-        return ClamdSocketOwnership::SocketNotCheckable;
+fn inspect_clamd_socket(sandbox_kind: SandboxKind) -> ClamdSocketOwnership {
+    match sandbox_kind {
+        SandboxKind::FlatpakSandbox => ClamdSocketOwnership::SocketNotCheckable,
+        SandboxKind::HostSystem => inspect_socket_ownership(
+            &configured_socket_path(sandbox_kind),
+            rustix::process::getuid().as_raw(),
+        ),
     }
-    inspect_socket_ownership(
-        &configured_socket_path(),
-        rustix::process::getuid().as_raw(),
-    )
 }
 
-pub async fn inspect_clamd_socket_off_thread() -> ClamdSocketOwnership {
-    tokio::task::spawn_blocking(inspect_clamd_socket)
+pub async fn inspect_clamd_socket_off_thread(sandbox_kind: SandboxKind) -> ClamdSocketOwnership {
+    tokio::task::spawn_blocking(move || inspect_clamd_socket(sandbox_kind))
         .await
         .unwrap_or(ClamdSocketOwnership::SocketNotCheckable)
 }

@@ -6,8 +6,11 @@ use relm4::{
 
 use crate::{
     application_window::protection_evidence_refresh::{EvidenceRefresh, GatheredEvidence},
-    host_services::clamav_programs::distribution_install_guides::{
-        DistributionFamily, detect_distribution_family,
+    host_services::{
+        clamav_programs::distribution_install_guides::{
+            DistributionFamily, detect_distribution_family,
+        },
+        desktop::flatpak_sandbox::SandboxKind,
     },
     scans::scan_engine_page::{
         clamd_socket_ownership::{ClamdSocketOwnership, inspect_clamd_socket_off_thread},
@@ -18,8 +21,8 @@ use crate::{
     shared_widgets::{
         engine_settings::engine_settings_sections::{
             EngineSettingsLayout, EngineSettingsNotice, EngineSettingsSections,
-            EngineSettingsSectionsOutput, SettingsChangeFollowUp, engine_settings_notice_toast,
-            settings_change_follow_up,
+            EngineSettingsSectionsInit, EngineSettingsSectionsOutput, SettingsChangeFollowUp,
+            engine_settings_notice_toast, settings_change_follow_up,
         },
         loading_indicators::{
             BUSY_PAGE_NAME, FirstLoad, IDLE_PAGE_NAME, LOADED_PAGE_NAME, LOADING_PAGE_NAME,
@@ -46,6 +49,7 @@ pub const SCAN_ENGINE_SETTINGS_LAYOUT: EngineSettingsLayout =
     EngineSettingsLayout::EngineWithDetection;
 
 pub struct ScanEnginePage {
+    sandbox_kind: SandboxKind,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<ScanEngineAction>>,
     distribution_family: DistributionFamily,
@@ -109,9 +113,11 @@ impl ScanEnginePage {
         let _shell_closed = sender.output(page_output);
     }
 
-    fn inspect_socket(sender: &ComponentSender<Self>) {
-        sender.oneshot_command(async {
-            ScanEnginePageCommand::SocketInspected(inspect_clamd_socket_off_thread().await)
+    fn inspect_socket(sandbox_kind: SandboxKind, sender: &ComponentSender<Self>) {
+        sender.oneshot_command(async move {
+            ScanEnginePageCommand::SocketInspected(
+                inspect_clamd_socket_off_thread(sandbox_kind).await,
+            )
         });
     }
 
@@ -136,7 +142,7 @@ impl ScanEnginePage {
 
 #[relm4::component(pub)]
 impl Component for ScanEnginePage {
-    type Init = ();
+    type Init = SandboxKind;
     type Input = ScanEnginePageInput;
     type Output = ScanEnginePageOutput;
     type CommandOutput = ScanEnginePageCommand;
@@ -180,11 +186,12 @@ impl Component for ScanEnginePage {
     }
 
     fn init(
-        _page_init: Self::Init,
+        sandbox_kind: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            sandbox_kind,
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
@@ -193,12 +200,15 @@ impl Component for ScanEnginePage {
                         .build(),
                 )
                 .forward(sender.input_sender(), ScanEnginePageInput::StepRequested),
-            distribution_family: detect_distribution_family(),
+            distribution_family: detect_distribution_family(sandbox_kind),
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             clamd_socket_view: ClamdSocketView::SocketInspecting,
             engine_settings_sections: EngineSettingsSections::builder()
-                .launch(SCAN_ENGINE_SETTINGS_LAYOUT)
+                .launch(EngineSettingsSectionsInit {
+                    settings_layout: SCAN_ENGINE_SETTINGS_LAYOUT,
+                    sandbox_kind,
+                })
                 .forward(sender.input_sender(), page_input_for_settings_output),
             system_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
@@ -213,7 +223,7 @@ impl Component for ScanEnginePage {
                     group_title: translated_messages::scans::clamd_log_title(),
                     missing_log_title: translated_messages::scans::no_clamd_log_title(),
                     export_file_name: "clamd-logs.txt",
-                    log_updates: daemon_log_updates().boxed(),
+                    log_updates: daemon_log_updates(sandbox_kind).boxed(),
                 })
                 .forward(sender.input_sender(), page_input_for_log_output),
         };
@@ -221,7 +231,7 @@ impl Component for ScanEnginePage {
         let status_loading_page =
             &loading_status_page(&translated_messages::scans::checking_scan_engine());
         let widgets = view_output!();
-        Self::inspect_socket(&sender);
+        Self::inspect_socket(sandbox_kind, &sender);
         ComponentParts { model, widgets }
     }
 
@@ -231,6 +241,7 @@ impl Component for ScanEnginePage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match page_input {
             ScanEnginePageInput::RefreshRequested => {
                 Self::report_output(&sender, ScanEnginePageOutput::EvidenceRefreshRequested);
@@ -241,7 +252,7 @@ impl Component for ScanEnginePage {
             ScanEnginePageInput::EvidenceGathered(gathered_evidence) => {
                 self.gathered_evidence = gathered_evidence;
                 self.show_status_steps();
-                Self::inspect_socket(&sender);
+                Self::inspect_socket(sandbox_kind, &sender);
             }
             ScanEnginePageInput::SettingsNoticeReceived(settings_notice) => {
                 self.toaster

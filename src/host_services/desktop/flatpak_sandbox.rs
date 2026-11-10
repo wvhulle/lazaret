@@ -3,7 +3,6 @@ use std::{
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     process::Command,
-    sync::OnceLock,
 };
 
 use relm4::gtk::glib;
@@ -18,9 +17,20 @@ const PORTAL_BUS_NAME: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
 const BACKGROUND_PORTAL_INTERFACE: &str = "org.freedesktop.portal.Background";
 
-pub fn running_in_flatpak() -> bool {
-    static SANDBOX_DETECTION: OnceLock<bool> = OnceLock::new();
-    *SANDBOX_DETECTION.get_or_init(|| Path::new(FLATPAK_INFO_PATH).exists())
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SandboxKind {
+    FlatpakSandbox,
+    HostSystem,
+}
+
+impl SandboxKind {
+    pub fn detect() -> Self {
+        if Path::new(FLATPAK_INFO_PATH).exists() {
+            Self::FlatpakSandbox
+        } else {
+            Self::HostSystem
+        }
+    }
 }
 
 pub fn host_path_for_sandbox_path(sandbox_path: &Path) -> PathBuf {
@@ -31,7 +41,7 @@ pub fn host_path_for_sandbox_path(sandbox_path: &Path) -> PathBuf {
 }
 
 const HOST_DIRECTORIES_UNDER_RUN_HOST: [&str; 2] = ["/etc", "/usr"];
-const HOST_PROGRAM_DIRECTORIES: [&str; 6] = [
+pub const HOST_PROGRAM_DIRECTORIES: [&str; 6] = [
     "/usr/local/bin",
     "/usr/bin",
     "/bin",
@@ -51,23 +61,17 @@ fn run_host_path_for(host_path: &Path) -> PathBuf {
     }
 }
 
-pub fn readable_host_path(host_path: impl AsRef<Path>) -> PathBuf {
-    if running_in_flatpak() {
-        run_host_path_for(host_path.as_ref())
-    } else {
-        host_path.as_ref().to_path_buf()
+pub fn readable_host_path(sandbox_kind: SandboxKind, host_path: impl AsRef<Path>) -> PathBuf {
+    match sandbox_kind {
+        SandboxKind::FlatpakSandbox => run_host_path_for(host_path.as_ref()),
+        SandboxKind::HostSystem => host_path.as_ref().to_path_buf(),
     }
 }
 
-pub fn host_program_search_directories() -> Option<Vec<PathBuf>> {
-    running_in_flatpak().then(|| HOST_PROGRAM_DIRECTORIES.iter().map(PathBuf::from).collect())
-}
-
-pub fn scanner_visible_path(sandbox_path: &Path) -> PathBuf {
-    if running_in_flatpak() {
-        host_path_for_sandbox_path(sandbox_path)
-    } else {
-        sandbox_path.to_path_buf()
+pub fn scanner_visible_path(sandbox_kind: SandboxKind, sandbox_path: &Path) -> PathBuf {
+    match sandbox_kind {
+        SandboxKind::FlatpakSandbox => host_path_for_sandbox_path(sandbox_path),
+        SandboxKind::HostSystem => sandbox_path.to_path_buf(),
     }
 }
 
@@ -98,54 +102,63 @@ fn flatpak_spawn_arguments(
 }
 
 fn command_for_sandbox(
+    sandbox_kind: SandboxKind,
     program_path: &Path,
     environment_variables: &[ProgramEnvironmentVariable],
-    sandboxed: bool,
 ) -> Command {
-    if sandboxed {
-        let mut spawn_command = Command::new(FLATPAK_SPAWN_PROGRAM);
-        spawn_command.args(flatpak_spawn_arguments(program_path, environment_variables));
-        spawn_command
-    } else {
-        let mut direct_command = Command::new(program_path);
-        direct_command.envs(environment_variables.iter().map(
-            |ProgramEnvironmentVariable {
-                 variable_name,
-                 variable_value,
-             }| (variable_name, variable_value),
-        ));
-        direct_command
+    match sandbox_kind {
+        SandboxKind::FlatpakSandbox => {
+            let mut spawn_command = Command::new(FLATPAK_SPAWN_PROGRAM);
+            spawn_command.args(flatpak_spawn_arguments(program_path, environment_variables));
+            spawn_command
+        }
+        SandboxKind::HostSystem => {
+            let mut direct_command = Command::new(program_path);
+            direct_command.envs(environment_variables.iter().map(
+                |ProgramEnvironmentVariable {
+                     variable_name,
+                     variable_value,
+                 }| (variable_name, variable_value),
+            ));
+            direct_command
+        }
     }
 }
 
 pub fn host_program_command(
+    sandbox_kind: SandboxKind,
     program_path: impl AsRef<OsStr>,
     environment_variables: &[ProgramEnvironmentVariable],
 ) -> Command {
     command_for_sandbox(
+        sandbox_kind,
         Path::new(program_path.as_ref()),
         environment_variables,
-        running_in_flatpak(),
     )
 }
 
 pub fn host_program_async_command(
+    sandbox_kind: SandboxKind,
     program_path: impl AsRef<OsStr>,
     environment_variables: &[ProgramEnvironmentVariable],
 ) -> tokio::process::Command {
-    tokio::process::Command::from(host_program_command(program_path, environment_variables))
+    tokio::process::Command::from(host_program_command(
+        sandbox_kind,
+        program_path,
+        environment_variables,
+    ))
 }
 
-pub fn host_user_data_directory() -> PathBuf {
-    if !running_in_flatpak() {
-        return glib::user_data_dir();
+pub fn host_user_data_directory(sandbox_kind: SandboxKind) -> PathBuf {
+    match sandbox_kind {
+        SandboxKind::HostSystem => glib::user_data_dir(),
+        SandboxKind::FlatpakSandbox => std::env::var_os(HOST_DATA_HOME_VARIABLE)
+            .filter(|host_data_home| !host_data_home.is_empty())
+            .map_or_else(
+                || glib::home_dir().join(DEFAULT_DATA_HOME_IN_HOME),
+                PathBuf::from,
+            ),
     }
-    std::env::var_os(HOST_DATA_HOME_VARIABLE)
-        .filter(|host_data_home| !host_data_home.is_empty())
-        .map_or_else(
-            || glib::home_dir().join(DEFAULT_DATA_HOME_IN_HOME),
-            PathBuf::from,
-        )
 }
 
 pub fn sandboxed_launcher_words(application_id: &str) -> Vec<String> {
@@ -223,8 +236,11 @@ mod flatpak_sandbox_tests {
 
     #[test]
     fn sandboxed_programs_run_on_the_host_with_their_environment() {
-        let spawn_command =
-            command_for_sandbox(Path::new("clamscan"), &[C_LOCALE_ENVIRONMENT], true);
+        let spawn_command = command_for_sandbox(
+            SandboxKind::FlatpakSandbox,
+            Path::new("clamscan"),
+            &[C_LOCALE_ENVIRONMENT],
+        );
         assert_eq!(spawn_command.get_program(), FLATPAK_SPAWN_PROGRAM);
         assert_eq!(
             spawn_command.get_args().collect::<Vec<_>>(),
@@ -234,8 +250,11 @@ mod flatpak_sandbox_tests {
 
     #[test]
     fn programs_outside_the_sandbox_run_directly() {
-        let direct_command =
-            command_for_sandbox(Path::new("clamscan"), &[C_LOCALE_ENVIRONMENT], false);
+        let direct_command = command_for_sandbox(
+            SandboxKind::HostSystem,
+            Path::new("clamscan"),
+            &[C_LOCALE_ENVIRONMENT],
+        );
         assert_eq!(direct_command.get_program(), "clamscan");
         assert_eq!(direct_command.get_args().count(), 0);
         assert_eq!(

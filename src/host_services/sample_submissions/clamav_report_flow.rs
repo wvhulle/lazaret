@@ -12,6 +12,7 @@ use crate::host_services::{
         ClamavReport, ClamavReportKind, ClamavReportRequest, ClamsubmitFailure,
         submit_clamav_report,
     },
+    desktop::flatpak_sandbox::SandboxKind,
     quarantine_vault::quarantine_entry_database::QuarantineVault,
     sample_submissions::submission_samples::{
         SampleReadFailure, SubmissionSample, read_submitted_content,
@@ -57,6 +58,7 @@ pub async fn read_clamav_report_sample(
 }
 
 pub async fn send_read_clamav_report(
+    sandbox_kind: SandboxKind,
     activity_history: &ActivityHistory,
     clamav_report: &ClamavReport,
     submission_sample: SubmissionSample,
@@ -76,7 +78,7 @@ pub async fn send_read_clamav_report(
         Err(history_failure) => return ClamavReportAttempt::HistoryUnavailable(history_failure),
     }
     if let Err(clamsubmit_failure) =
-        submit_clamav_report(clamav_report, submission_sample.sample_bytes).await
+        submit_clamav_report(sandbox_kind, clamav_report, submission_sample.sample_bytes).await
     {
         return ClamavReportAttempt::ReportNotSent(clamsubmit_failure);
     }
@@ -135,6 +137,7 @@ mod clamav_report_flow_tests {
 
     #[tokio::test]
     async fn a_file_already_reported_is_not_sent_again() {
+        let sandbox_kind = SandboxKind::HostSystem;
         let temporary_root = tempfile::tempdir().expect("temporary root");
         let activity_history =
             ActivityHistory::at_database_path(temporary_root.path().join("lazaret.db"));
@@ -177,6 +180,7 @@ mod clamav_report_flow_tests {
             content_sha256_text(b"missed sample")
         );
         let report_attempt = send_read_clamav_report(
+            sandbox_kind,
             &activity_history,
             &report_request.clamav_report,
             submission_sample,

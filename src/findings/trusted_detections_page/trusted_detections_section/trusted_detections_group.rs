@@ -26,6 +26,7 @@ use crate::{
         },
         desktop::{
             application_directories::application_data_directory,
+            flatpak_sandbox::SandboxKind,
             locale_formatting::{byte_size_text, exact_local_time_text},
         },
         lazaret_database::locked_database_connection::lazaret_database_path,
@@ -92,10 +93,10 @@ async fn load_user_trust_reading() -> UserTrustReading {
         )
 }
 
-pub async fn load_trusted_detections() -> TrustedDetectionsSnapshot {
+pub async fn load_trusted_detections(sandbox_kind: SandboxKind) -> TrustedDetectionsSnapshot {
     TrustedDetectionsSnapshot {
         user_trust: load_user_trust_reading().await,
-        trust_list: read_configured_trust_list().await,
+        trust_list: read_configured_trust_list(sandbox_kind).await,
         audit_history: read_journal_off_thread(|| newest_admin_audit_entries(AUDIT_ENTRY_LIMIT))
             .await
             .map_or_else(
@@ -141,6 +142,7 @@ fn added_text(audit_history: &AuditHistoryReading, adding_action: &AuditedAction
 }
 
 pub struct TrustedDetectionsSection {
+    sandbox_kind: SandboxKind,
     trusted_detections_state: TrustedDetectionsState,
     user_trust_rows: FactoryVecDeque<TrustListRow>,
     trusted_file_rows: FactoryVecDeque<TrustListRow>,
@@ -212,7 +214,11 @@ fn trusted_file_row(
     }
 }
 
-fn user_trusted_file_row(sha256_hex: &str, byte_size: u64) -> TrustListRow {
+fn user_trusted_file_row(
+    sandbox_kind: SandboxKind,
+    sha256_hex: &str,
+    byte_size: u64,
+) -> TrustListRow {
     let file_size = bytesize::ByteSize::b(byte_size);
     TrustListRow {
         row_title: sha256_hex.to_owned(),
@@ -224,7 +230,7 @@ fn user_trusted_file_row(sha256_hex: &str, byte_size: u64) -> TrustListRow {
             sha256_hex: sha256_hex.to_owned(),
             trust_scope: TrustScope::OnlyThisUser,
         }),
-        trust_promotion: match system_wide_trust() {
+        trust_promotion: match system_wide_trust(sandbox_kind) {
             SystemWideTrust::OfferedOutsideSandbox => {
                 TrustPromotion::PromotableWith(TrustChoice::TrustFile {
                     file_fingerprint: FileFingerprint {
@@ -255,13 +261,15 @@ fn user_ignored_signature_row(signature_name: &str) -> TrustListRow {
     }
 }
 
-fn user_trust_rows(user_trust: &UserTrustReading) -> Vec<TrustListRow> {
+fn user_trust_rows(sandbox_kind: SandboxKind, user_trust: &UserTrustReading) -> Vec<TrustListRow> {
     match user_trust {
         UserTrustReading::UserTrustRead(user_trust_list) => rows_or_empty_notice(
             user_trust_list
                 .trusted_content_sizes
                 .iter()
-                .map(|(sha256_hex, byte_size)| user_trusted_file_row(sha256_hex, *byte_size))
+                .map(|(sha256_hex, byte_size)| {
+                    user_trusted_file_row(sandbox_kind, sha256_hex, *byte_size)
+                })
                 .chain(
                     user_trust_list
                         .ignored_signatures
@@ -425,6 +433,7 @@ fn replace_rows(shown_rows: &mut FactoryVecDeque<TrustListRow>, listed_rows: Vec
 
 impl TrustedDetectionsSection {
     fn show_snapshot(&mut self, snapshot: TrustedDetectionsSnapshot) {
+        let sandbox_kind = self.sandbox_kind;
         let TrustListGroupRows {
             trusted_file_rows,
             ignored_signature_rows,
@@ -432,7 +441,7 @@ impl TrustedDetectionsSection {
         } = trust_list_group_rows(&snapshot);
         replace_rows(
             &mut self.user_trust_rows,
-            user_trust_rows(&snapshot.user_trust),
+            user_trust_rows(sandbox_kind, &snapshot.user_trust),
         );
         replace_rows(&mut self.trusted_file_rows, trusted_file_rows);
         replace_rows(&mut self.ignored_signature_rows, ignored_signature_rows);
@@ -440,16 +449,18 @@ impl TrustedDetectionsSection {
         self.trusted_detections_state = TrustedDetectionsState::SnapshotShown(snapshot);
     }
 
-    fn reload_snapshot(sender: &ComponentSender<Self>) {
-        sender.oneshot_command(async {
-            TrustedDetectionsSectionCommand::SnapshotLoaded(load_trusted_detections().await)
+    fn reload_snapshot(sandbox_kind: SandboxKind, sender: &ComponentSender<Self>) {
+        sender.oneshot_command(async move {
+            TrustedDetectionsSectionCommand::SnapshotLoaded(
+                load_trusted_detections(sandbox_kind).await,
+            )
         });
     }
 }
 
 #[relm4::component(pub)]
 impl Component for TrustedDetectionsSection {
-    type Init = ();
+    type Init = SandboxKind;
     type Input = TrustedDetectionsSectionInput;
     type Output = TrustedDetectionsSectionOutput;
     type CommandOutput = TrustedDetectionsSectionCommand;
@@ -497,11 +508,12 @@ impl Component for TrustedDetectionsSection {
     }
 
     fn init(
-        _page_init: Self::Init,
+        sandbox_kind: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            sandbox_kind,
             trusted_detections_state: TrustedDetectionsState::SnapshotLoading,
             user_trust_rows: trust_list_rows(&sender),
             trusted_file_rows: trust_list_rows(&sender),
@@ -522,10 +534,14 @@ impl Component for TrustedDetectionsSection {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match page_input {
-            TrustedDetectionsSectionInput::ReloadRequested => Self::reload_snapshot(&sender),
+            TrustedDetectionsSectionInput::ReloadRequested => {
+                Self::reload_snapshot(sandbox_kind, &sender)
+            }
             TrustedDetectionsSectionInput::TrustChangeRequested(trust_choice) => {
                 present_trust_confirmation(
+                    sandbox_kind,
                     root,
                     trust_choice,
                     sender.input_sender().clone(),
@@ -548,6 +564,7 @@ impl Component for TrustedDetectionsSection {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match page_command {
             TrustedDetectionsSectionCommand::SnapshotLoaded(snapshot) => {
                 self.show_snapshot(snapshot)
@@ -557,7 +574,7 @@ impl Component for TrustedDetectionsSection {
                     trust_outcome_text(&trust_outcome),
                 ));
                 let _page_closed = sender.output(TrustedDetectionsSectionOutput::TrustListChanged);
-                Self::reload_snapshot(&sender);
+                Self::reload_snapshot(sandbox_kind, &sender);
             }
         }
     }

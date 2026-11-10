@@ -5,7 +5,7 @@ use crate::{
         clamav_admin_service::trust_requests::{
             FileFingerprint, SystemWideTrust, TrustChoice, TrustScope, system_wide_trust,
         },
-        desktop::locale_formatting::exact_byte_size_text,
+        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::exact_byte_size_text},
     },
     shared_widgets::awaited_dialogs::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
@@ -62,7 +62,7 @@ fn fingerprint_text(file_fingerprint: &FileFingerprint) -> String {
     )
 }
 
-fn confirmation_text(trust_choice: &TrustChoice) -> ConfirmationText {
+fn confirmation_text(sandbox_kind: SandboxKind, trust_choice: &TrustChoice) -> ConfirmationText {
     match trust_choice {
         TrustChoice::TrustFile {
             file_fingerprint,
@@ -74,7 +74,7 @@ fn confirmation_text(trust_choice: &TrustChoice) -> ConfirmationText {
             shown_value: fingerprint_text(file_fingerprint),
             confirm_label: translated_messages::widgets::trust_for_me_button(),
             protection_effect: ProtectionEffect::LowersProtection,
-            every_user_offer: match system_wide_trust() {
+            every_user_offer: match system_wide_trust(sandbox_kind) {
                 SystemWideTrust::OfferedOutsideSandbox => EveryUserOffer::OffersEveryUser,
                 SystemWideTrust::UnavailableInFlatpak => EveryUserOffer::ThisChoiceOnly,
             },
@@ -145,6 +145,7 @@ fn shown_value_label(shown_value: &str) -> gtk::Label {
 }
 
 pub fn present_trust_confirmation<Message: 'static>(
+    sandbox_kind: SandboxKind,
     parent_widget: &impl IsA<gtk::Widget>,
     trust_choice: TrustChoice,
     message_sender: Sender<Message>,
@@ -157,7 +158,7 @@ pub fn present_trust_confirmation<Message: 'static>(
         confirm_label,
         protection_effect,
         every_user_offer,
-    } = confirmation_text(&trust_choice);
+    } = confirmation_text(sandbox_kind, &trust_choice);
     let confirmation_dialog = adw::AlertDialog::new(Some(&heading), Some(&body));
     confirmation_dialog.set_extra_child(Some(&shown_value_label(&shown_value)));
     add_dismissing_choice::<TrustDialogChoice>(
@@ -217,18 +218,25 @@ mod trust_confirmation_dialog_tests {
 
     #[test]
     fn trusting_lowers_protection_and_forgetting_does_not() {
+        let sandbox_kind = SandboxKind::HostSystem;
         assert_eq!(
-            confirmation_text(&TrustChoice::IgnoreSignatureForThisUser {
-                signature_name: "Win.Test.EICAR_HDB-1".to_owned()
-            })
+            confirmation_text(
+                sandbox_kind,
+                &TrustChoice::IgnoreSignatureForThisUser {
+                    signature_name: "Win.Test.EICAR_HDB-1".to_owned()
+                }
+            )
             .protection_effect,
             ProtectionEffect::LowersProtection
         );
         assert_eq!(
-            confirmation_text(&TrustChoice::ForgetTrustedFile {
-                sha256_hex: "00".to_owned(),
-                trust_scope: TrustScope::OnlyThisUser,
-            })
+            confirmation_text(
+                sandbox_kind,
+                &TrustChoice::ForgetTrustedFile {
+                    sha256_hex: "00".to_owned(),
+                    trust_scope: TrustScope::OnlyThisUser,
+                }
+            )
             .protection_effect,
             ProtectionEffect::RestoresProtection
         );
@@ -236,14 +244,19 @@ mod trust_confirmation_dialog_tests {
 
     #[test]
     fn only_trusting_a_file_for_this_user_offers_every_user() {
+        let sandbox_kind = SandboxKind::HostSystem;
         assert_eq!(
-            confirmation_text(&trust_file_choice(TrustScope::EveryUser)).every_user_offer,
+            confirmation_text(sandbox_kind, &trust_file_choice(TrustScope::EveryUser))
+                .every_user_offer,
             EveryUserOffer::ThisChoiceOnly
         );
         assert_eq!(
-            confirmation_text(&TrustChoice::IgnoreSignatureForThisUser {
-                signature_name: "Win.Test.EICAR_HDB-1".to_owned()
-            })
+            confirmation_text(
+                sandbox_kind,
+                &TrustChoice::IgnoreSignatureForThisUser {
+                    signature_name: "Win.Test.EICAR_HDB-1".to_owned()
+                }
+            )
             .every_user_offer,
             EveryUserOffer::ThisChoiceOnly
         );

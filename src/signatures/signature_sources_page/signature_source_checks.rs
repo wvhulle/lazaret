@@ -3,13 +3,16 @@ use std::{io, path::Path};
 use tokio::task::spawn_blocking;
 
 use crate::{
-    host_services::clamav_programs::{
-        database_directory_status::{DatabaseFolderReadFailure, configured_database_directory},
-        distribution_install_guides::DistributionFamily,
-        signature_provider_catalogue::{
-            ProviderCredential, SIGNATURE_PROVIDERS, SettingsOnlyCredential, SignatureFileSource,
-            SignatureProvider, provider_of_signature_file,
+    host_services::{
+        clamav_programs::{
+            database_directory_status::{DatabaseFolderReadFailure, configured_database_directory},
+            distribution_install_guides::DistributionFamily,
+            signature_provider_catalogue::{
+                ProviderCredential, SIGNATURE_PROVIDERS, SettingsOnlyCredential,
+                SignatureFileSource, SignatureProvider, provider_of_signature_file,
+            },
         },
+        desktop::flatpak_sandbox::SandboxKind,
     },
     shared_widgets::host_read_failure_text::database_folder_failure_text,
     signatures::signature_sources_page::source_check_results::{AuditCheck, AuditStatus},
@@ -156,9 +159,10 @@ fn signature_file_names(
 }
 
 pub async fn gather_signature_source_checks(
+    sandbox_kind: SandboxKind,
     distribution_family: DistributionFamily,
 ) -> Vec<AuditCheck> {
-    match spawn_blocking(|| signature_file_names(&configured_database_directory()))
+    match spawn_blocking(move || signature_file_names(&configured_database_directory(sandbox_kind)))
         .await
         .map_err(DatabaseFolderReadFailure::from)
         .flatten()

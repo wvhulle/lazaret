@@ -10,7 +10,7 @@ use std::{
 use rustix::fs::Access;
 
 use crate::host_services::desktop::flatpak_sandbox::{
-    host_program_search_directories, readable_host_path, running_in_flatpak,
+    HOST_PROGRAM_DIRECTORIES, SandboxKind, readable_host_path,
 };
 
 const SYSTEM_PROGRAM_DIRECTORIES: [&str; 3] = ["/usr/local/sbin", "/usr/sbin", "/sbin"];
@@ -124,7 +124,9 @@ pub trait FilesystemInspector {
     fn link_target(&self, host_path: &Path) -> io::Result<PathBuf>;
 }
 
-pub struct HostFilesystemInspector;
+pub struct HostFilesystemInspector {
+    pub sandbox_kind: SandboxKind,
+}
 
 const TRUSTED_SANDBOX_HOST_ROOT: EntryFacts = EntryFacts {
     entry_kind: EntryKind::Directory,
@@ -139,15 +141,14 @@ impl FilesystemInspector for HostFilesystemInspector {
     }
 
     fn root_directory_facts(&self) -> io::Result<EntryFacts> {
-        if running_in_flatpak() {
-            Ok(TRUSTED_SANDBOX_HOST_ROOT)
-        } else {
-            self.entry_facts(Path::new("/"))
+        match self.sandbox_kind {
+            SandboxKind::FlatpakSandbox => Ok(TRUSTED_SANDBOX_HOST_ROOT),
+            SandboxKind::HostSystem => self.entry_facts(Path::new("/")),
         }
     }
 
     fn entry_facts(&self, host_path: &Path) -> io::Result<EntryFacts> {
-        let readable_path = readable_host_path(host_path);
+        let readable_path = readable_host_path(self.sandbox_kind, host_path);
         let entry_metadata = fs::symlink_metadata(&readable_path)?;
         let entry_type = entry_metadata.file_type();
         let entry_kind = if entry_type.is_symlink() {
@@ -169,7 +170,7 @@ impl FilesystemInspector for HostFilesystemInspector {
     }
 
     fn link_target(&self, host_path: &Path) -> io::Result<PathBuf> {
-        fs::read_link(readable_host_path(host_path))
+        fs::read_link(readable_host_path(self.sandbox_kind, host_path))
     }
 }
 
@@ -446,22 +447,26 @@ pub fn locate_program_among(
     }
 }
 
-fn program_search_directories() -> Vec<PathBuf> {
-    host_program_search_directories().unwrap_or_else(|| {
-        env::var_os("PATH")
+fn program_search_directories(sandbox_kind: SandboxKind) -> Vec<PathBuf> {
+    match sandbox_kind {
+        SandboxKind::FlatpakSandbox => HOST_PROGRAM_DIRECTORIES.map(PathBuf::from).to_vec(),
+        SandboxKind::HostSystem => env::var_os("PATH")
             .map(|search_path| env::split_paths(&search_path).collect::<Vec<_>>())
             .unwrap_or_default()
             .into_iter()
             .chain(SYSTEM_PROGRAM_DIRECTORIES.map(PathBuf::from))
-            .collect()
-    })
+            .collect(),
+    }
 }
 
-pub fn locate_trusted_program(clamav_program: ClamavProgram) -> ProgramLocation {
+pub fn locate_trusted_program(
+    sandbox_kind: SandboxKind,
+    clamav_program: ClamavProgram,
+) -> ProgramLocation {
     locate_program_among(
-        &HostFilesystemInspector,
+        &HostFilesystemInspector { sandbox_kind },
         clamav_program.program_name(),
-        program_search_directories(),
+        program_search_directories(sandbox_kind),
     )
 }
 
@@ -732,10 +737,11 @@ mod trusted_program_lookup_tests {
     #[test]
     #[ignore = "reads the real host"]
     fn host_scanner_programs_are_trusted() {
+        let sandbox_kind = SandboxKind::HostSystem;
         [ClamavProgram::ClamdClient, ClamavProgram::StandaloneScanner]
             .into_iter()
             .for_each(|clamav_program| {
-                let program_location = locate_trusted_program(clamav_program);
+                let program_location = locate_trusted_program(sandbox_kind, clamav_program);
                 println!("{program_location:?}");
                 assert!(program_location.runnable_path().is_ok());
             });

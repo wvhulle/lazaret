@@ -14,7 +14,7 @@ use crate::{
         clamav_scanner::scanner_process_events::{
             RetainedScannerFiles, ScanStartFailure, ScannerProcessEvent, scanner_process_events,
         },
-        desktop::flatpak_sandbox::host_program_command,
+        desktop::flatpak_sandbox::{SandboxKind, host_program_command},
         systemd_bus::host_systemd_units::{
             UnitStartOutcome, UnitState, probe_unit_state, signal_system_unit, start_system_unit,
         },
@@ -68,9 +68,10 @@ pub fn plan_database_update(service_state: FreshclamServiceState) -> DatabaseUpd
     }
 }
 
-fn build_freshclam_command() -> Result<Command, ProgramRefusal> {
+fn build_freshclam_command(sandbox_kind: SandboxKind) -> Result<Command, ProgramRefusal> {
     let mut update_command = host_program_command(
-        locate_trusted_program(ClamavProgram::SignatureUpdater).runnable_path()?,
+        sandbox_kind,
+        locate_trusted_program(sandbox_kind, ClamavProgram::SignatureUpdater).runnable_path()?,
         &[],
     );
     update_command
@@ -134,6 +135,7 @@ async fn third_party_output_events(started_after: Timestamp) -> Vec<DatabaseUpda
 }
 
 pub fn database_update_events(
+    sandbox_kind: SandboxKind,
     update_plan: DatabaseUpdatePlan,
 ) -> impl Stream<Item = DatabaseUpdateEvent> + Send + 'static {
     let started_after = Timestamp::now();
@@ -157,7 +159,7 @@ pub fn database_update_events(
         })
         .flat_map(stream::iter)
         .boxed(),
-        DatabaseUpdatePlan::RunFreshclamDirectly => match build_freshclam_command()
+        DatabaseUpdatePlan::RunFreshclamDirectly => match build_freshclam_command(sandbox_kind)
             .map_err(ScanStartFailure::from)
             .and_then(|freshclam_command| {
                 scanner_process_events(freshclam_command, RetainedScannerFiles::NoRetainedFiles)

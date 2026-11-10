@@ -11,7 +11,10 @@ use clamd_configuration::{
 use jiff::Timestamp;
 use zbus::{Connection, proxy};
 
-use crate::{host_services::desktop::flatpak_sandbox::readable_host_path, translated_messages};
+use crate::{
+    host_services::desktop::flatpak_sandbox::{SandboxKind, readable_host_path},
+    translated_messages,
+};
 
 #[proxy(
     interface = "page.codeberg.wvhulle.Lazaret.ClamavAdmin",
@@ -154,18 +157,24 @@ pub fn active_override_settings(
         .collect()
 }
 
-fn live_tuning_from_answer(tunable_answer: zbus::Result<Vec<String>>) -> LiveTuning {
+fn live_tuning_from_answer(
+    sandbox_kind: SandboxKind,
+    tunable_answer: zbus::Result<Vec<String>>,
+) -> LiveTuning {
     match tunable_answer {
         Ok(tunable_settings) => LiveTuning::Available {
             tunable_settings,
-            active_overrides: read_stored_overrides(&readable_host_path(LIVE_OVERRIDES_PATH))
-                .map(|live_overrides| {
-                    active_override_settings(
-                        &live_overrides,
-                        &readable_host_path(BASE_CLAMD_CONFIG_PATH),
-                    )
-                })
-                .unwrap_or_default(),
+            active_overrides: read_stored_overrides(&readable_host_path(
+                sandbox_kind,
+                LIVE_OVERRIDES_PATH,
+            ))
+            .map(|live_overrides| {
+                active_override_settings(
+                    &live_overrides,
+                    &readable_host_path(sandbox_kind, BASE_CLAMD_CONFIG_PATH),
+                )
+            })
+            .unwrap_or_default(),
         },
         Err(zbus::Error::MethodError(error_name, _error_message, _reply))
             if error_name.as_str() == SERVICE_UNKNOWN_ERROR =>
@@ -176,16 +185,19 @@ fn live_tuning_from_answer(tunable_answer: zbus::Result<Vec<String>>) -> LiveTun
     }
 }
 
-async fn live_tuning_on_bus(bus_connection: zbus::Result<Connection>) -> LiveTuning {
+async fn live_tuning_on_bus(
+    sandbox_kind: SandboxKind,
+    bus_connection: zbus::Result<Connection>,
+) -> LiveTuning {
     let tunable_answer = async {
         let clamav_admin_service = ClamavAdminProxy::new(&bus_connection?).await?;
         clamav_admin_service.get_tunable_settings().await
     };
-    live_tuning_from_answer(tunable_answer.await)
+    live_tuning_from_answer(sandbox_kind, tunable_answer.await)
 }
 
-pub async fn read_live_tuning() -> LiveTuning {
-    live_tuning_on_bus(Connection::system().await).await
+pub async fn read_live_tuning(sandbox_kind: SandboxKind) -> LiveTuning {
+    live_tuning_on_bus(sandbox_kind, Connection::system().await).await
 }
 
 pub fn outcome_from_admin_service_answer(admin_service_answer: &str) -> LiveChangeOutcome {
@@ -461,11 +473,12 @@ mod live_settings_client_tests {
 
     #[test]
     fn an_unreachable_admin_service_is_reported_as_unavailable() {
+        let sandbox_kind = SandboxKind::HostSystem;
         let unreachable_bus = Err(zbus::Error::Address("no bus here".to_owned()));
         let live_tuning = tokio::runtime::Builder::new_current_thread()
             .build()
             .expect("runtime")
-            .block_on(live_tuning_on_bus(unreachable_bus));
+            .block_on(live_tuning_on_bus(sandbox_kind, unreachable_bus));
         assert!(matches!(
             live_tuning,
             LiveTuning::AdminServiceUnreachable(zbus::Error::Address(_))

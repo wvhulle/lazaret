@@ -7,7 +7,7 @@ use std::{
 use tokio::task::JoinError;
 
 use crate::host_services::{
-    desktop::flatpak_sandbox::readable_host_path,
+    desktop::flatpak_sandbox::{SandboxKind, readable_host_path},
     systemd_bus::host_systemd_units::{UnitActivity, UnitState, probe_unit_state},
 };
 
@@ -88,10 +88,12 @@ pub fn database_directory_in_config(config_text: &str) -> Option<PathBuf> {
     })
 }
 
-pub fn configured_database_directory() -> PathBuf {
+pub fn configured_database_directory(sandbox_kind: SandboxKind) -> PathBuf {
     CONFIG_CANDIDATES
         .iter()
-        .filter_map(|config_path| fs::read_to_string(readable_host_path(config_path)).ok())
+        .filter_map(|config_path| {
+            fs::read_to_string(readable_host_path(sandbox_kind, config_path)).ok()
+        })
         .find_map(|config_text| database_directory_in_config(&config_text))
         .unwrap_or_else(|| PathBuf::from(DEFAULT_DATABASE_DIRECTORY))
 }

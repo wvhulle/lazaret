@@ -9,13 +9,13 @@ use crate::{
         clamav_config::typed_setting_values::TypedSettingValue,
         desktop::{
             file_manager_actions::SUPPORTED_FILE_MANAGERS,
-            flatpak_sandbox::{request_background_autostart, running_in_flatpak},
+            flatpak_sandbox::{SandboxKind, request_background_autostart},
             preference_keys::PreferenceKey,
         },
         threat_intel::service_key_storage::ThreatIntelService,
     },
     preferences_dialog::{
-        file_manager_row::FileManagerRow,
+        file_manager_row::{FileManagerRow, FileManagerRowInit},
         service_key_section::{ServiceKeySection, ServiceKeySectionOutput},
     },
     shared_widgets::setting_row::preference_rows_group::{
@@ -28,6 +28,7 @@ use crate::{
 pub const ONLINE_SERVICES_PAGE_NAME: &str = "online-services";
 
 pub struct PreferencesDialog {
+    sandbox_kind: SandboxKind,
     window_behavior_rows: Controller<PreferenceRowsGroup>,
     file_manager_rows: FactoryVecDeque<FileManagerRow>,
     abuse_ch_section: Controller<ServiceKeySection>,
@@ -101,7 +102,7 @@ fn window_behavior_row_specs() -> Vec<PreferenceRowSpec> {
 
 #[relm4::component(pub)]
 impl Component for PreferencesDialog {
-    type Init = ();
+    type Init = SandboxKind;
     type Input = PreferencesDialogInput;
     type Output = PreferencesDialogOutput;
     type CommandOutput = PreferencesDialogCommand;
@@ -125,7 +126,7 @@ impl Component for PreferencesDialog {
                 file_manager_group -> adw::PreferencesGroup {
                     set_title: &translated_messages::preferences::file_manager_integration_title(),
                     set_description: Some(&translated_messages::preferences::add_context_menu_description()),
-                    set_visible: !running_in_flatpak(),
+                    set_visible: sandbox_kind == SandboxKind::HostSystem,
                 },
             },
 
@@ -156,22 +157,26 @@ impl Component for PreferencesDialog {
     }
 
     fn init(
-        _dialog_init: Self::Init,
+        sandbox_kind: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let mut file_manager_rows = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
             .detach();
-        if !running_in_flatpak() {
+        if sandbox_kind == SandboxKind::HostSystem {
             let mut row_guard = file_manager_rows.guard();
             SUPPORTED_FILE_MANAGERS
                 .into_iter()
                 .for_each(|file_manager| {
-                    row_guard.push_back(file_manager);
+                    row_guard.push_back(FileManagerRowInit {
+                        file_manager,
+                        sandbox_kind,
+                    });
                 });
         }
         let model = Self {
+            sandbox_kind,
             window_behavior_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
                     row_specs: window_behavior_row_specs(),
@@ -200,12 +205,13 @@ impl Component for PreferencesDialog {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match dialog_input {
             PreferencesDialogInput::PreferenceStored {
                 preference_key: PreferenceKey::StartInBackground,
                 stored_value: TypedSettingValue::BooleanValue(switch_position),
             } => {
-                if running_in_flatpak() {
+                if sandbox_kind == SandboxKind::FlatpakSandbox {
                     let start_in_background = switch_position.is_switched_on();
                     sender.oneshot_command(async move {
                         PreferencesDialogCommand::AutostartRequestFinished(

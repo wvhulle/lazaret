@@ -8,7 +8,7 @@ use tokio::time::timeout;
 
 use crate::host_services::{
     clamav_programs::trusted_program_lookup::{ProgramLocation, ProgramRefusal},
-    desktop::flatpak_sandbox::host_program_async_command,
+    desktop::flatpak_sandbox::{SandboxKind, host_program_async_command},
 };
 
 const PROGRAM_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -52,8 +52,8 @@ fn program_probe_from_output(version_output: &Output) -> ProgramProbe {
     }
 }
 
-pub async fn probe_program_version(program_path: &Path) -> ProgramProbe {
-    let mut version_command = host_program_async_command(program_path, &[]);
+pub async fn probe_program_version(sandbox_kind: SandboxKind, program_path: &Path) -> ProgramProbe {
+    let mut version_command = host_program_async_command(sandbox_kind, program_path, &[]);
     version_command
         .arg("--version")
         .stdin(Stdio::null())
@@ -70,9 +70,12 @@ pub async fn probe_program_version(program_path: &Path) -> ProgramProbe {
     }
 }
 
-pub async fn probe_located_program_version(program_location: &ProgramLocation) -> ProgramProbe {
+pub async fn probe_located_program_version(
+    sandbox_kind: SandboxKind,
+    program_location: &ProgramLocation,
+) -> ProgramProbe {
     match program_location.runnable_path() {
-        Ok(program_path) => probe_program_version(program_path).await,
+        Ok(program_path) => probe_program_version(sandbox_kind, program_path).await,
         Err(ProgramRefusal::ProgramMissing) => ProgramProbe::NotFoundOnPath,
         Err(ProgramRefusal::ProgramReplaceable { candidate_path, .. }) => {
             ProgramProbe::ProgramRefused { candidate_path }
@@ -80,15 +83,18 @@ pub async fn probe_located_program_version(program_location: &ProgramLocation) -
     }
 }
 
-pub async fn located_clamd_answers_ping(clamdscan_location: &ProgramLocation) -> bool {
+pub async fn located_clamd_answers_ping(
+    sandbox_kind: SandboxKind,
+    clamdscan_location: &ProgramLocation,
+) -> bool {
     match clamdscan_location.runnable_path() {
-        Ok(clamdscan_program) => clamd_answers_ping(clamdscan_program).await,
+        Ok(clamdscan_program) => clamd_answers_ping(sandbox_kind, clamdscan_program).await,
         Err(_refused_program) => false,
     }
 }
 
-async fn clamd_answers_ping(clamdscan_program: &Path) -> bool {
-    let mut ping_command = host_program_async_command(clamdscan_program, &[]);
+async fn clamd_answers_ping(sandbox_kind: SandboxKind, clamdscan_program: &Path) -> bool {
+    let mut ping_command = host_program_async_command(sandbox_kind, clamdscan_program, &[]);
     ping_command
         .args(["--ping", "1"])
         .stdin(Stdio::null())
@@ -137,9 +143,10 @@ mod component_availability_tests {
 
     #[tokio::test]
     async fn programs_that_cannot_start_report_the_io_error_kind() {
+        let sandbox_kind = SandboxKind::HostSystem;
         let not_executable = tempfile::NamedTempFile::new().expect("plain file");
         assert_eq!(
-            probe_program_version(not_executable.path()).await,
+            probe_program_version(sandbox_kind, not_executable.path()).await,
             ProgramProbe::ProbeFailed(ProbeFailure::ProgramStartFailed {
                 start_failure_kind: std::io::ErrorKind::PermissionDenied,
             })
@@ -148,8 +155,9 @@ mod component_availability_tests {
 
     #[tokio::test]
     async fn missing_programs_are_distinguished_from_failing_ones() {
+        let sandbox_kind = SandboxKind::HostSystem;
         assert_eq!(
-            probe_program_version(Path::new("/nonexistent/clamscan")).await,
+            probe_program_version(sandbox_kind, Path::new("/nonexistent/clamscan")).await,
             ProgramProbe::NotFoundOnPath
         );
     }

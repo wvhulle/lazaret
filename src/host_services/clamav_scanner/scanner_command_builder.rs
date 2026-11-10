@@ -15,7 +15,7 @@ use crate::host_services::{
     },
     clamav_scanner::scan_exclusion_rules::ScanExclusions,
     desktop::flatpak_sandbox::{
-        host_program_async_command, host_program_command, scanner_visible_path,
+        SandboxKind, host_program_async_command, host_program_command, scanner_visible_path,
     },
 };
 
@@ -41,15 +41,23 @@ pub struct ScannerProgramPaths {
 }
 
 impl ScannerProgramPaths {
-    pub fn locate_trusted_programs() -> Self {
+    pub fn locate_trusted_programs(sandbox_kind: SandboxKind) -> Self {
         Self {
-            clamdscan_program: locate_trusted_program(ClamavProgram::ClamdClient),
-            clamscan_program: locate_trusted_program(ClamavProgram::StandaloneScanner),
+            clamdscan_program: locate_trusted_program(sandbox_kind, ClamavProgram::ClamdClient),
+            clamscan_program: locate_trusted_program(
+                sandbox_kind,
+                ClamavProgram::StandaloneScanner,
+            ),
         }
     }
 
-    pub async fn locate_trusted_programs_in_background() -> Result<Self, ProgramLookupFailure> {
-        Ok(tokio::task::spawn_blocking(Self::locate_trusted_programs).await?)
+    pub async fn locate_trusted_programs_in_background(
+        sandbox_kind: SandboxKind,
+    ) -> Result<Self, ProgramLookupFailure> {
+        Ok(
+            tokio::task::spawn_blocking(move || Self::locate_trusted_programs(sandbox_kind))
+                .await?,
+        )
     }
 }
 
@@ -75,23 +83,27 @@ pub enum ScannerInvocation<'invocation> {
 }
 
 pub async fn choose_scanner_backend(
+    sandbox_kind: SandboxKind,
     backend_preference: ScannerBackendPreference,
     scanner_programs: &ScannerProgramPaths,
 ) -> ScannerBackend {
     match backend_preference {
         ScannerBackendPreference::PreferClamdWhenAvailable => {
-            probe_clamd_availability(scanner_programs).await
+            probe_clamd_availability(sandbox_kind, scanner_programs).await
         }
         ScannerBackendPreference::AlwaysClamd => ScannerBackend::ClamdDaemon,
         ScannerBackendPreference::AlwaysClamscan => ScannerBackend::StandaloneClamscan,
     }
 }
 
-pub async fn probe_clamd_availability(scanner_programs: &ScannerProgramPaths) -> ScannerBackend {
+pub async fn probe_clamd_availability(
+    sandbox_kind: SandboxKind,
+    scanner_programs: &ScannerProgramPaths,
+) -> ScannerBackend {
     let Ok(clamdscan_path) = scanner_programs.clamdscan_program.runnable_path() else {
         return ScannerBackend::StandaloneClamscan;
     };
-    let mut ping_command = host_program_async_command(clamdscan_path, &[]);
+    let mut ping_command = host_program_async_command(sandbox_kind, clamdscan_path, &[]);
     ping_command
         .args(["--ping", "1"])
         .stdin(Stdio::null())
@@ -105,6 +117,7 @@ pub async fn probe_clamd_availability(scanner_programs: &ScannerProgramPaths) ->
 }
 
 pub fn build_scanner_command(
+    sandbox_kind: SandboxKind,
     scanner_programs: &ScannerProgramPaths,
     scanner_invocation: ScannerInvocation<'_>,
 ) -> Result<Command, ProgramRefusal> {
@@ -115,6 +128,7 @@ pub fn build_scanner_command(
             scan_exclusions,
             detection_arguments,
         } => standalone_clamscan_command(
+            sandbox_kind,
             scanner_programs,
             target_path,
             scanner_work_directory,
@@ -122,13 +136,13 @@ pub fn build_scanner_command(
             detection_arguments,
         )?,
         ScannerInvocation::ClamdFileList { file_list_path } => {
-            let mut file_list_command = clamd_base_command(scanner_programs)?;
+            let mut file_list_command = clamd_base_command(sandbox_kind, scanner_programs)?;
             file_list_command.arg("--file-list").arg(file_list_path);
             file_list_command.stdin(Stdio::null());
             file_list_command
         }
         ScannerInvocation::ClamdStandardInput { scan_input_file } => {
-            let mut standard_input_command = clamd_base_command(scanner_programs)?;
+            let mut standard_input_command = clamd_base_command(sandbox_kind, scanner_programs)?;
             standard_input_command.arg("-").stdin(scan_input_file);
             standard_input_command
         }
@@ -138,23 +152,31 @@ pub fn build_scanner_command(
 }
 
 fn clamd_base_command(
+    sandbox_kind: SandboxKind,
     scanner_programs: &ScannerProgramPaths,
 ) -> Result<std::process::Command, ProgramRefusal> {
-    let mut clamd_command =
-        host_program_command(scanner_programs.clamdscan_program.runnable_path()?, &[]);
+    let mut clamd_command = host_program_command(
+        sandbox_kind,
+        scanner_programs.clamdscan_program.runnable_path()?,
+        &[],
+    );
     clamd_command.args(["--fdpass", "-v"]);
     Ok(clamd_command)
 }
 
 fn standalone_clamscan_command(
+    sandbox_kind: SandboxKind,
     scanner_programs: &ScannerProgramPaths,
     target_path: &Path,
     scanner_work_directory: &Path,
     scan_exclusions: &ScanExclusions,
     detection_arguments: &[OsString],
 ) -> Result<std::process::Command, ProgramRefusal> {
-    let mut clamscan_command =
-        host_program_command(scanner_programs.clamscan_program.runnable_path()?, &[]);
+    let mut clamscan_command = host_program_command(
+        sandbox_kind,
+        scanner_programs.clamscan_program.runnable_path()?,
+        &[],
+    );
     if target_path.is_dir() {
         clamscan_command.arg("-r");
     }
@@ -168,6 +190,6 @@ fn standalone_clamscan_command(
         .stdin(Stdio::null());
     clamscan_command
         .arg("--")
-        .arg(OsStr::new(&scanner_visible_path(target_path)));
+        .arg(OsStr::new(&scanner_visible_path(sandbox_kind, target_path)));
     Ok(clamscan_command)
 }

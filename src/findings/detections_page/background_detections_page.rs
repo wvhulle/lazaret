@@ -41,6 +41,7 @@ use crate::{
             DistributionFamily, detect_distribution_family,
         },
         clamav_scanner::scanner_output_parser::ThreatIdentity,
+        desktop::flatpak_sandbox::SandboxKind,
         detection_journal::{
             detection_history_store::ResolutionKind,
             detection_journal_follower::{JournalAccess, detection_journal_events},
@@ -96,6 +97,7 @@ pub struct BackgroundDetectionsPage {
 }
 
 pub struct BackgroundDetectionsPageInit {
+    pub sandbox_kind: SandboxKind,
     pub activity_history: ActivityHistory,
     pub quarantine_vault: QuarantineVault,
 }
@@ -813,10 +815,11 @@ impl Component for BackgroundDetectionsPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let sandbox_kind = page_init.sandbox_kind;
         let model = Self {
             activity_history: page_init.activity_history.clone(),
             quarantine_vault: page_init.quarantine_vault,
-            distribution_family: detect_distribution_family(),
+            distribution_family: detect_distribution_family(sandbox_kind),
             displayed_detections: Vec::new(),
             journal_access: JournalAccess::FollowingJournal,
             incident_view: IncidentView::DetectionList,

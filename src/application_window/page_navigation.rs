@@ -60,7 +60,8 @@ use crate::{
         clamav_programs::clamav_report_submission::ClamavReportRequest,
         desktop::{
             application_directories::application_config_directory,
-            failure_journal_log::log_failure_to_journal, locale_formatting::host_moment_formatters,
+            failure_journal_log::log_failure_to_journal, flatpak_sandbox::SandboxKind,
+            locale_formatting::host_moment_formatters,
             running_instance_forwarding::paths_from_bytes,
         },
         lazaret_database::locked_database_connection::lazaret_database_path,
@@ -91,7 +92,9 @@ use crate::{
             scan_engine_state::ScanEnginePageOutput,
         },
         scheduled_scans_page::{
-            scheduled_scans_component::{ScheduledScansPage, ScheduledScansPageInput},
+            scheduled_scans_component::{
+                ScheduledScansPage, ScheduledScansPageInit, ScheduledScansPageInput,
+            },
             scheduled_scans_state::ScheduledScansPageOutput,
         },
     },
@@ -106,7 +109,9 @@ use crate::{
     },
     signatures::{
         database_updates_page::{
-            database_updates_component::{DatabaseUpdatesPage, DatabaseUpdatesPageInput},
+            database_updates_component::{
+                DatabaseUpdatesPage, DatabaseUpdatesPageInit, DatabaseUpdatesPageInput,
+            },
             database_updates_state::DatabaseUpdatesPageOutput,
         },
         signature_sources_page::signature_sources_component::{
@@ -117,6 +122,7 @@ use crate::{
 };
 
 pub struct PageNavigationInit {
+    pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub data_directory: PathBuf,
     pub window_root: adw::ApplicationWindow,
@@ -125,6 +131,7 @@ pub struct PageNavigationInit {
 }
 
 pub struct PageNavigation {
+    sandbox_kind: SandboxKind,
     visible_page: ApplicationPage,
     sidebar_column: Controller<SidebarNavigationColumn>,
     start_page_state: StartPageState,
@@ -507,6 +514,7 @@ impl PageNavigation {
         refresh_trigger: EvidenceRefreshTrigger,
         sender: &ComponentSender<Self>,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         let EvidenceRefreshTransition {
             next_refresh,
             gathering_start,
@@ -540,8 +548,9 @@ impl PageNavigation {
             GatheringStart::StartGathering => {
                 let lazaret_schedule_enabled = lazaret_schedule_is_enabled();
                 sender.oneshot_command(async move {
-                    let protection_evidence =
-                        Box::new(gather_protection_evidence(lazaret_schedule_enabled).await);
+                    let protection_evidence = Box::new(
+                        gather_protection_evidence(sandbox_kind, lazaret_schedule_enabled).await,
+                    );
                     PageNavigationCommand::EvidenceGathered {
                         protection_evidence,
                         gathered_at: Timestamp::now(),
@@ -698,12 +707,14 @@ impl Component for PageNavigation {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let sandbox_kind = navigation_init.sandbox_kind;
         let quarantine_vault = navigation_init.quarantine_vault;
         let data_directory = navigation_init.data_directory;
         let activity_history =
             ActivityHistory::at_database_path(lazaret_database_path(&data_directory));
         let quarantine_page = QuarantineEntriesPage::builder()
             .launch(QuarantineEntriesPageInit {
+                sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
             })
@@ -729,6 +740,7 @@ impl Component for PageNavigation {
             );
         let scan_page = ScanPage::builder()
             .launch(ScanPageInit {
+                sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
                 profile_store: ScanProfileStore::at_path(
@@ -743,46 +755,56 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_scan_output);
         let removable_drives_page = RemovableDrivesPage::builder()
             .launch(RemovableDrivesPageInit {
+                sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
                 file_list_directory: data_directory,
             })
             .forward(sender.input_sender(), forwarded_removable_drives_output);
         let database_updates_page = DatabaseUpdatesPage::builder()
-            .launch(activity_history.clone())
+            .launch(DatabaseUpdatesPageInit {
+                activity_history: activity_history.clone(),
+                sandbox_kind,
+            })
             .forward(sender.input_sender(), forwarded_database_updates_output);
         let scan_engine_page = ScanEnginePage::builder()
-            .launch(())
+            .launch(sandbox_kind)
             .forward(sender.input_sender(), forwarded_scan_engine_output);
         let on_access_page = OnAccessPage::builder()
-            .launch(())
+            .launch(sandbox_kind)
             .forward(sender.input_sender(), forwarded_on_access_output);
         let scheduled_scans_page = ScheduledScansPage::builder()
-            .launch(activity_history.clone())
+            .launch(ScheduledScansPageInit {
+                activity_history: activity_history.clone(),
+                sandbox_kind,
+            })
             .forward(sender.input_sender(), forwarded_scheduled_scans_output);
         let sent_samples_page = SentSamplesPage::builder()
             .launch(SentSamplesPageInit {
+                sandbox_kind,
                 activity_history: activity_history.clone(),
                 quarantine_vault: quarantine_vault.clone(),
             })
             .forward(sender.input_sender(), forwarded_sent_samples_output);
         let detections_page = BackgroundDetectionsPage::builder()
             .launch(BackgroundDetectionsPageInit {
+                sandbox_kind,
                 activity_history: activity_history.clone(),
                 quarantine_vault,
             })
             .forward(sender.input_sender(), forwarded_detections_output);
         let trusted_detections_page = TrustedDetectionsPage::builder()
-            .launch(())
+            .launch(sandbox_kind)
             .forward(sender.input_sender(), forwarded_trusted_detections_output);
         let signature_sources_page = SignatureSourcesPage::builder()
-            .launch(())
+            .launch(sandbox_kind)
             .forward(sender.input_sender(), forwarded_signature_sources_output);
         let StartPageTransition {
             shown_page: initial_page,
             next_state: initial_start_state,
         } = initial_start_page(navigation_init.startup_page);
         let mut model = Self {
+            sandbox_kind,
             visible_page: initial_page,
             sidebar_column: SidebarNavigationColumn::builder()
                 .launch(initial_page)

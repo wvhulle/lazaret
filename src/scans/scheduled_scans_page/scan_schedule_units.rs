@@ -7,7 +7,7 @@ use std::{
 use jiff::civil::Weekday;
 
 use crate::host_services::{
-    desktop::flatpak_sandbox::{running_in_flatpak, sandboxed_launcher_words},
+    desktop::flatpak_sandbox::{SandboxKind, sandboxed_launcher_words},
     systemd_bus::host_systemd_units::{
         TimerUnitSnapshot, UnitActivity, UnitTimestamp, disable_user_timer, enable_user_timer,
         reload_user_manager, user_timer_snapshot,
@@ -229,21 +229,22 @@ fn current_launcher_path() -> io::Result<PathBuf> {
     ))
 }
 
-pub fn current_launcher_words() -> io::Result<Vec<String>> {
-    if running_in_flatpak() {
-        return Ok(sandboxed_launcher_words(crate::APPLICATION_ID));
+pub fn current_launcher_words(sandbox_kind: SandboxKind) -> io::Result<Vec<String>> {
+    match sandbox_kind {
+        SandboxKind::FlatpakSandbox => Ok(sandboxed_launcher_words(crate::APPLICATION_ID)),
+        SandboxKind::HostSystem => Ok(vec![
+            current_launcher_path()?.to_string_lossy().into_owned(),
+        ]),
     }
-    Ok(vec![
-        current_launcher_path()?.to_string_lossy().into_owned(),
-    ])
 }
 
 pub async fn enable_scan_schedule(
+    sandbox_kind: SandboxKind,
     unit_directory: PathBuf,
     scan_schedule: ScanSchedule,
 ) -> Result<(), ScheduleApplyFailure> {
     let launcher_words =
-        current_launcher_words().map_err(ScheduleApplyFailure::UnitFilesUnwritable)?;
+        current_launcher_words(sandbox_kind).map_err(ScheduleApplyFailure::UnitFilesUnwritable)?;
     fs::create_dir_all(&unit_directory)
         .and_then(|()| {
             fs::write(
@@ -300,8 +301,11 @@ pub fn changed_schedule_units(
     changed_files.chain(drop_in_directories).collect()
 }
 
-pub fn changed_units_of_current_schedule(scan_schedule: &ScanSchedule) -> Vec<String> {
-    current_launcher_words().map_or_else(
+pub fn changed_units_of_current_schedule(
+    sandbox_kind: SandboxKind,
+    scan_schedule: &ScanSchedule,
+) -> Vec<String> {
+    current_launcher_words(sandbox_kind).map_or_else(
         |_launcher_unknown| Vec::new(),
         |launcher_words| {
             changed_schedule_units(

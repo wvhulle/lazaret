@@ -16,6 +16,7 @@ use crate::{
         desktop::{
             desktop_notifications::notify_outside_the_window,
             failure_journal_log::{log_failed_outcome, log_failure_to_journal},
+            flatpak_sandbox::SandboxKind,
             locale_formatting::host_moment_formatters,
         },
     },
@@ -28,7 +29,8 @@ use crate::{
         database_migration_failure_text::describe_history_failure,
         engine_settings::engine_settings_sections::{
             EngineSettingsLayout, EngineSettingsNotice, EngineSettingsSection,
-            EngineSettingsSections, EngineSettingsSectionsOutput, engine_settings_notice_toast,
+            EngineSettingsSections, EngineSettingsSectionsInit, EngineSettingsSectionsOutput,
+            engine_settings_notice_toast,
         },
         loading_indicators::{
             BUSY_PAGE_NAME, FirstLoad, IDLE_PAGE_NAME, LOAD_FAILED_PAGE_NAME, LOADED_PAGE_NAME,
@@ -63,7 +65,13 @@ enum TranscriptDialogView {
     },
 }
 
+pub struct DatabaseUpdatesPageInit {
+    pub activity_history: ActivityHistory,
+    pub sandbox_kind: SandboxKind,
+}
+
 pub struct DatabaseUpdatesPage {
+    sandbox_kind: SandboxKind,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<DatabaseUpdateAction>>,
     history_rows: FactoryVecDeque<ActivityEntryRow>,
@@ -167,9 +175,9 @@ impl DatabaseUpdatesPage {
         });
     }
 
-    fn refresh_host_status(sender: &ComponentSender<Self>) {
-        sender.oneshot_command(async {
-            DatabaseUpdatesPageCommand::HostStatusLoaded(load_host_status().await)
+    fn refresh_host_status(sandbox_kind: SandboxKind, sender: &ComponentSender<Self>) {
+        sender.oneshot_command(async move {
+            DatabaseUpdatesPageCommand::HostStatusLoaded(load_host_status(sandbox_kind).await)
         });
     }
 
@@ -178,11 +186,12 @@ impl DatabaseUpdatesPage {
         start_decision: UpdateStartDecision,
         sender: &ComponentSender<Self>,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match start_decision {
             UpdateStartDecision::StartUpdateNow(update_plan) => {
                 let update_stream = run_stream_then(
                     sender,
-                    database_update_events(update_plan)
+                    database_update_events(sandbox_kind, update_plan)
                         .ready_chunks(UPDATE_BATCH_SIZE)
                         .map(DatabaseUpdatesPageCommand::UpdateBatchArrived),
                     DatabaseUpdatesPageCommand::UpdateStreamFinished,
@@ -196,6 +205,7 @@ impl DatabaseUpdatesPage {
     }
 
     fn finish_update(&mut self, sender: &ComponentSender<Self>) {
+        let sandbox_kind = self.sandbox_kind;
         let finished_effects = match self.update_control.update_stream_ended() {
             UpdateFinishEffects::UpdateFinished(finished_effects) => finished_effects,
             UpdateFinishEffects::StaleStreamEnding => return,
@@ -214,7 +224,7 @@ impl DatabaseUpdatesPage {
                 activity_history.record_activity(activity_entry).await,
             )
         });
-        Self::refresh_host_status(sender);
+        Self::refresh_host_status(sandbox_kind, sender);
         self.show_status_steps();
         finished_effects
             .page_outputs
@@ -238,7 +248,7 @@ impl DatabaseUpdatesPage {
 
 #[relm4::component(pub)]
 impl Component for DatabaseUpdatesPage {
-    type Init = ActivityHistory;
+    type Init = DatabaseUpdatesPageInit;
     type Input = DatabaseUpdatesPageInput;
     type Output = DatabaseUpdatesPageOutput;
     type CommandOutput = DatabaseUpdatesPageCommand;
@@ -310,11 +320,15 @@ impl Component for DatabaseUpdatesPage {
     }
 
     fn init(
-        activity_history: Self::Init,
+        DatabaseUpdatesPageInit {
+            activity_history,
+            sandbox_kind,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            sandbox_kind,
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
@@ -332,14 +346,17 @@ impl Component for DatabaseUpdatesPage {
             update_history: UpdateHistoryView::HistoryLoading,
             activity_history,
             update_control: SignatureUpdateControl::new(),
-            distribution_family: detect_distribution_family(),
+            distribution_family: detect_distribution_family(sandbox_kind),
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             transcript_dialog: TranscriptDialogView::DialogClosed,
             update_settings_sections: EngineSettingsSections::builder()
-                .launch(EngineSettingsLayout::SingleSection(
-                    EngineSettingsSection::SignatureUpdates,
-                ))
+                .launch(EngineSettingsSectionsInit {
+                    settings_layout: EngineSettingsLayout::SingleSection(
+                        EngineSettingsSection::SignatureUpdates,
+                    ),
+                    sandbox_kind,
+                })
                 .forward(sender.input_sender(), page_input_for_settings_output),
         };
         let status_group = &model.status_rows.widget().clone();
@@ -351,7 +368,7 @@ impl Component for DatabaseUpdatesPage {
         let status_loading_page =
             &loading_status_page(&translated_messages::signatures::checking_signatures());
         let widgets = view_output!();
-        Self::refresh_host_status(&sender);
+        Self::refresh_host_status(sandbox_kind, &sender);
         model.reload_history(&sender);
         ComponentParts { model, widgets }
     }

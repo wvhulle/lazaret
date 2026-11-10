@@ -20,6 +20,7 @@ use crate::{
             scanner_output_parser::{sanitize_scanner_line, sanitize_scanner_text},
             scanner_process_events::ScanStartFailure,
         },
+        desktop::flatpak_sandbox::SandboxKind,
     },
     shared_widgets::{
         component_streams::RunningStream,
@@ -572,20 +573,24 @@ fn describe_start_failure(start_failure: &ScanStartFailure) -> String {
     }
 }
 
-pub async fn load_host_status() -> DatabaseHostStatus {
-    let freshclam_location =
-        tokio::task::spawn_blocking(|| locate_trusted_program(ClamavProgram::SignatureUpdater))
-            .await
-            .unwrap_or(ProgramLocation::ProgramNotFound);
-    let freshclam_probe = probe_located_program_version(&freshclam_location).await;
+pub async fn load_host_status(sandbox_kind: SandboxKind) -> DatabaseHostStatus {
+    let freshclam_location = tokio::task::spawn_blocking(move || {
+        locate_trusted_program(sandbox_kind, ClamavProgram::SignatureUpdater)
+    })
+    .await
+    .unwrap_or(ProgramLocation::ProgramNotFound);
+    let freshclam_probe = probe_located_program_version(sandbox_kind, &freshclam_location).await;
     let service_state = detect_freshclam_service().await;
-    let directory_status = tokio::task::spawn_blocking(|| {
-        inspect_database_directory(&configured_database_directory(), SystemTime::now())
+    let directory_status = tokio::task::spawn_blocking(move || {
+        inspect_database_directory(
+            &configured_database_directory(sandbox_kind),
+            SystemTime::now(),
+        )
     })
     .await
     .unwrap_or_else(
         |interrupted_inspection| DatabaseDirectoryStatus::DirectoryUnreadable {
-            database_directory: configured_database_directory(),
+            database_directory: configured_database_directory(sandbox_kind),
             read_failure: interrupted_inspection.into(),
         },
     );

@@ -10,6 +10,7 @@ use crate::{
         clamav_programs::distribution_install_guides::{
             DistributionFamily, detect_distribution_family,
         },
+        desktop::flatpak_sandbox::SandboxKind,
         protection_evidence::host_protection_evidence::ON_ACCESS_SERVICE_UNITS,
         systemd_journal::service_log_contents::unit_journal_log_updates,
     },
@@ -20,8 +21,8 @@ use crate::{
     shared_widgets::{
         engine_settings::engine_settings_sections::{
             EngineSettingsLayout, EngineSettingsNotice, EngineSettingsSection,
-            EngineSettingsSections, EngineSettingsSectionsOutput, SettingsChangeFollowUp,
-            engine_settings_notice_toast, settings_change_follow_up,
+            EngineSettingsSections, EngineSettingsSectionsInit, EngineSettingsSectionsOutput,
+            SettingsChangeFollowUp, engine_settings_notice_toast, settings_change_follow_up,
         },
         loading_indicators::{
             BUSY_PAGE_NAME, FirstLoad, IDLE_PAGE_NAME, LOADED_PAGE_NAME, LOADING_PAGE_NAME,
@@ -119,7 +120,7 @@ impl OnAccessPage {
 
 #[relm4::component(pub)]
 impl Component for OnAccessPage {
-    type Init = ();
+    type Init = SandboxKind;
     type Input = OnAccessPageInput;
     type Output = OnAccessPageOutput;
     type CommandOutput = ();
@@ -163,7 +164,7 @@ impl Component for OnAccessPage {
     }
 
     fn init(
-        _page_init: Self::Init,
+        sandbox_kind: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -176,13 +177,16 @@ impl Component for OnAccessPage {
                         .build(),
                 )
                 .forward(sender.input_sender(), OnAccessPageInput::StepRequested),
-            distribution_family: detect_distribution_family(),
+            distribution_family: detect_distribution_family(sandbox_kind),
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             on_access_settings_sections: EngineSettingsSections::builder()
-                .launch(EngineSettingsLayout::SingleSection(
-                    EngineSettingsSection::OnAccessScanning,
-                ))
+                .launch(EngineSettingsSectionsInit {
+                    settings_layout: EngineSettingsLayout::SingleSection(
+                        EngineSettingsSection::OnAccessScanning,
+                    ),
+                    sandbox_kind,
+                })
                 .forward(sender.input_sender(), page_input_for_settings_output),
             system_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {

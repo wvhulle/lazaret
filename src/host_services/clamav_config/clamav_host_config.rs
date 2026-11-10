@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::host_services::desktop::flatpak_sandbox::readable_host_path;
+use crate::host_services::desktop::flatpak_sandbox::{SandboxKind, readable_host_path};
 
 const CLAMD_CONFIG_PATHS: [&str; 4] = [
     "/run/lazaret/clamd.conf",
@@ -46,11 +46,11 @@ pub fn parse_config_settings(config_text: &str) -> Vec<ConfigSetting> {
         .collect()
 }
 
-fn read_first_config(config_paths: &[&str]) -> HostConfigView {
+fn read_first_config(sandbox_kind: SandboxKind, config_paths: &[&str]) -> HostConfigView {
     config_paths
         .iter()
         .find_map(|config_path| {
-            fs::read_to_string(readable_host_path(config_path))
+            fs::read_to_string(readable_host_path(sandbox_kind, config_path))
                 .ok()
                 .map(|config_text| HostConfigView::ConfigFound {
                     config_path: (*config_path).to_owned(),
@@ -60,12 +60,12 @@ fn read_first_config(config_paths: &[&str]) -> HostConfigView {
         .unwrap_or(HostConfigView::ConfigNotFound)
 }
 
-pub fn read_clamd_config() -> HostConfigView {
-    read_first_config(&CLAMD_CONFIG_PATHS)
+pub fn read_clamd_config(sandbox_kind: SandboxKind) -> HostConfigView {
+    read_first_config(sandbox_kind, &CLAMD_CONFIG_PATHS)
 }
 
-pub fn read_freshclam_config() -> HostConfigView {
-    read_first_config(&FRESHCLAM_CONFIG_PATHS)
+pub fn read_freshclam_config(sandbox_kind: SandboxKind) -> HostConfigView {
+    read_first_config(sandbox_kind, &FRESHCLAM_CONFIG_PATHS)
 }
 
 pub fn is_on_access_setting(config_setting: &ConfigSetting) -> bool {

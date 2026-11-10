@@ -1,3 +1,4 @@
+use crate::host_services::desktop::flatpak_sandbox::SandboxKind;
 mod application_window;
 mod findings;
 mod headless_modes;
@@ -16,7 +17,7 @@ use relm4::{adw, gtk::gio::prelude::SettingsExt};
 
 use crate::{
     application_window::{
-        application_window_shell::ApplicationWindowShell,
+        application_window_shell::{ApplicationWindowShell, ApplicationWindowShellInit},
         startup_arguments::{
             StartupPageRequest, known_startup_page_names, parse_startup_arguments,
         },
@@ -40,6 +41,7 @@ pub(crate) const APPLICATION_ID: &str = RELEASE_APPLICATION_ID;
 pub(crate) const APPLICATION_ID: &str = "page.codeberg.wvhulle.Lazaret.Devel";
 pub(crate) const APPLICATION_DATA_NAME: &str = "lazaret";
 fn main() -> ExitCode {
+    let sandbox_kind = SandboxKind::detect();
     if !settings_schema_is_installed() {
         eprintln!(
             "{}",
@@ -48,7 +50,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     if let Some(scan_options) = parse_scheduled_scan_options(std::env::args()) {
-        return run_scheduled_scan(scan_options);
+        return run_scheduled_scan(sandbox_kind, scan_options);
     }
     let startup_request = parse_startup_arguments(std::env::args());
     if let StartupPageRequest::UnrecognizedPage {
@@ -79,6 +81,9 @@ fn main() -> ExitCode {
     relm4::RelmApp::from_app(application)
         .with_args(Vec::new())
         .visible_on_activate(!start_hidden)
-        .run_async::<ApplicationWindowShell>(startup_request);
+        .run_async::<ApplicationWindowShell>(ApplicationWindowShellInit {
+            startup_request,
+            sandbox_kind,
+        });
     ExitCode::SUCCESS
 }

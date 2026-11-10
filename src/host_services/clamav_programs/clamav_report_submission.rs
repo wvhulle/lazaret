@@ -16,7 +16,8 @@ use crate::{
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
         desktop::{
-            content_pipe::pipe_content_for_child, flatpak_sandbox::host_program_async_command,
+            content_pipe::pipe_content_for_child,
+            flatpak_sandbox::{SandboxKind, host_program_async_command},
         },
     },
     translated_messages,
@@ -130,16 +131,18 @@ pub fn submission_arguments(clamav_report: &ClamavReport) -> Vec<String> {
 }
 
 pub async fn submit_clamav_report(
+    sandbox_kind: SandboxKind,
     clamav_report: &ClamavReport,
     sample_bytes: Vec<u8>,
 ) -> Result<(), ClamsubmitFailure> {
     if !contact_is_complete(&clamav_report.reporter_contact) {
         return Err(ClamsubmitFailure::ContactIncomplete);
     }
-    let submitter_location =
-        tokio::task::spawn_blocking(|| locate_trusted_program(ClamavProgram::SampleSubmitter))
-            .await
-            .map_err(|_lookup_interrupted| ClamsubmitFailure::SubmitterMissing)?;
+    let submitter_location = tokio::task::spawn_blocking(move || {
+        locate_trusted_program(sandbox_kind, ClamavProgram::SampleSubmitter)
+    })
+    .await
+    .map_err(|_lookup_interrupted| ClamsubmitFailure::SubmitterMissing)?;
     let submitter_path = match submitter_location.runnable_path() {
         Ok(submitter_path) => submitter_path.to_path_buf(),
         Err(ProgramRefusal::ProgramMissing) => return Err(ClamsubmitFailure::SubmitterMissing),
@@ -147,7 +150,7 @@ pub async fn submit_clamav_report(
             return Err(ClamsubmitFailure::SubmitterReplaceable);
         }
     };
-    run_submitter(&submitter_path, clamav_report, sample_bytes).await
+    run_submitter(sandbox_kind, &submitter_path, clamav_report, sample_bytes).await
 }
 
 fn first_printed_line(submission_output: &std::process::Output) -> String {
@@ -160,13 +163,14 @@ fn first_printed_line(submission_output: &std::process::Output) -> String {
 }
 
 async fn run_submitter(
+    sandbox_kind: SandboxKind,
     submitter_path: &Path,
     clamav_report: &ClamavReport,
     sample_bytes: Vec<u8>,
 ) -> Result<(), ClamsubmitFailure> {
     let content_pipe = pipe_content_for_child(Cursor::new(sample_bytes))
         .map_err(ClamsubmitFailure::ContentPipeFailed)?;
-    let mut submission_command = host_program_async_command(submitter_path, &[]);
+    let mut submission_command = host_program_async_command(sandbox_kind, submitter_path, &[]);
     submission_command
         .args(submission_arguments(clamav_report))
         .stdin(Stdio::from(content_pipe))
@@ -272,8 +276,10 @@ mod clamav_report_submission_tests {
 
     #[tokio::test]
     async fn an_incomplete_contact_is_refused_before_anything_runs() {
+        let sandbox_kind = SandboxKind::HostSystem;
         assert!(matches!(
             submit_clamav_report(
+                sandbox_kind,
                 &ClamavReport {
                     reporter_contact: contact("", "alex@example.org"),
                     report_kind: ClamavReportKind::MissedMalware,

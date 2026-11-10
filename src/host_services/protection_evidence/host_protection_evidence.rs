@@ -34,7 +34,7 @@ use crate::{
             scan_exclusion_rules::broad_exclusions, scanner_output_parser::sanitize_scanner_line,
         },
         desktop::{
-            flatpak_sandbox::readable_host_path,
+            flatpak_sandbox::{SandboxKind, readable_host_path},
             stored_settings::{application_settings, read_exclusion_entries},
         },
         protection_evidence::{
@@ -595,10 +595,10 @@ pub fn runtime_reductions_in_files(
     }
 }
 
-fn inspect_runtime_reductions() -> RuntimeReductions {
+fn inspect_runtime_reductions(sandbox_kind: SandboxKind) -> RuntimeReductions {
     runtime_reductions_in_files(
-        &readable_host_path(LIVE_OVERRIDES_PATH),
-        &readable_host_path(BASE_CLAMD_CONFIG_PATH),
+        &readable_host_path(sandbox_kind, LIVE_OVERRIDES_PATH),
+        &readable_host_path(sandbox_kind, BASE_CLAMD_CONFIG_PATH),
     )
 }
 
@@ -613,7 +613,10 @@ pub enum AccountSettingFinding {
     },
 }
 
-fn inspect_account_settings(lazaret_schedule_enabled: bool) -> Vec<AccountSettingFinding> {
+fn inspect_account_settings(
+    sandbox_kind: SandboxKind,
+    lazaret_schedule_enabled: bool,
+) -> Vec<AccountSettingFinding> {
     let stored_settings = application_settings();
     let exclusion_findings = broad_exclusions(
         &read_exclusion_entries(&stored_settings),
@@ -627,7 +630,7 @@ fn inspect_account_settings(lazaret_schedule_enabled: bool) -> Vec<AccountSettin
     let schedule_findings = if lazaret_schedule_enabled {
         StoredScheduleSettings::read_from(&stored_settings)
             .scan_schedule()
-            .map(|scan_schedule| changed_units_of_current_schedule(&scan_schedule))
+            .map(|scan_schedule| changed_units_of_current_schedule(sandbox_kind, &scan_schedule))
             .unwrap_or_default()
     } else {
         Vec::new()
@@ -806,21 +809,25 @@ fn program_trust_finding(
     }
 }
 
-fn inspect_program_trust() -> Vec<ProgramTrustFinding> {
+fn inspect_program_trust(sandbox_kind: SandboxKind) -> Vec<ProgramTrustFinding> {
     CHECKED_CLAMAV_PROGRAMS
         .into_iter()
         .filter_map(|clamav_program| {
-            program_trust_finding(clamav_program, &locate_trusted_program(clamav_program))
+            program_trust_finding(
+                clamav_program,
+                &locate_trusted_program(sandbox_kind, clamav_program),
+            )
         })
         .collect()
 }
 
-async fn inspect_engine_installation() -> EngineInstallation {
-    let clamscan_location =
-        spawn_blocking(|| locate_trusted_program(ClamavProgram::StandaloneScanner))
-            .await
-            .unwrap_or(ProgramLocation::ProgramNotFound);
-    match probe_located_program_version(&clamscan_location).await {
+async fn inspect_engine_installation(sandbox_kind: SandboxKind) -> EngineInstallation {
+    let clamscan_location = spawn_blocking(move || {
+        locate_trusted_program(sandbox_kind, ClamavProgram::StandaloneScanner)
+    })
+    .await
+    .unwrap_or(ProgramLocation::ProgramNotFound);
+    match probe_located_program_version(sandbox_kind, &clamscan_location).await {
         ProgramProbe::NotFoundOnPath => EngineInstallation::EngineMissing,
         ProgramProbe::ProgramRefused { candidate_path } => EngineInstallation::ScannerRefused {
             refused_path: sanitized_path_text(&candidate_path),
@@ -927,7 +934,10 @@ pub fn third_party_signature_files(database_directory: &Path) -> ThirdPartySigna
     ThirdPartySignatureListing::FilesListed(signature_files)
 }
 
-async fn inspect_signature_evidence(engine_installation: &EngineInstallation) -> SignatureEvidence {
+async fn inspect_signature_evidence(
+    sandbox_kind: SandboxKind,
+    engine_installation: &EngineInstallation,
+) -> SignatureEvidence {
     let updater_evidence = join_all(SIGNATURE_UPDATER_UNITS.map(inspect_updater_unit))
         .await
         .into_iter()
@@ -936,17 +946,17 @@ async fn inspect_signature_evidence(engine_installation: &EngineInstallation) ->
     SignatureEvidence {
         database_evidence: match engine_installation {
             EngineInstallation::VersionReported { version_banner } => {
-                inspect_database_evidence_with_banner(version_banner).await
+                inspect_database_evidence_with_banner(sandbox_kind, version_banner).await
             }
             EngineInstallation::EngineMissing
             | EngineInstallation::ScannerRefused { .. }
             | EngineInstallation::VersionUnverified(_) => {
-                inspect_database_evidence_without_banner().await
+                inspect_database_evidence_without_banner(sandbox_kind).await
             }
         },
         updater_evidence,
-        third_party_listing: spawn_blocking(|| {
-            third_party_signature_files(&configured_database_directory())
+        third_party_listing: spawn_blocking(move || {
+            third_party_signature_files(&configured_database_directory(sandbox_kind))
         })
         .await
         .unwrap_or_else(|interrupted_listing| {
@@ -955,17 +965,20 @@ async fn inspect_signature_evidence(engine_installation: &EngineInstallation) ->
     }
 }
 
-async fn inspect_daemon_evidence() -> DaemonEvidence {
-    let clamdscan_location = spawn_blocking(|| locate_trusted_program(ClamavProgram::ClamdClient))
-        .await
-        .unwrap_or(ProgramLocation::ProgramNotFound);
-    if located_clamd_answers_ping(&clamdscan_location).await {
-        let daemon_banner = probe_located_program_version(&clamdscan_location).await;
+async fn inspect_daemon_evidence(sandbox_kind: SandboxKind) -> DaemonEvidence {
+    let clamdscan_location =
+        spawn_blocking(move || locate_trusted_program(sandbox_kind, ClamavProgram::ClamdClient))
+            .await
+            .unwrap_or(ProgramLocation::ProgramNotFound);
+    if located_clamd_answers_ping(sandbox_kind, &clamdscan_location).await {
+        let daemon_banner = probe_located_program_version(sandbox_kind, &clamdscan_location).await;
         return DaemonEvidence::ClamdAnswering {
-            loaded_signatures: match spawn_blocking(newest_disk_signature_version)
-                .await
-                .ok()
-                .flatten()
+            loaded_signatures: match spawn_blocking(move || {
+                newest_disk_signature_version(sandbox_kind)
+            })
+            .await
+            .ok()
+            .flatten()
             {
                 Some(disk_version) => compare_loaded_signatures(&daemon_banner, disk_version),
                 None => LoadedSignatures::ComparisonUnavailable,
@@ -1027,23 +1040,29 @@ async fn inspect_on_access_scanner() -> OnAccessScanner {
     on_access_scanner_from_states(&join_all(ON_ACCESS_SERVICE_UNITS.map(probe_unit_state)).await)
 }
 
-async fn inspect_on_access_evidence() -> OnAccessEvidence {
+async fn inspect_on_access_evidence(sandbox_kind: SandboxKind) -> OnAccessEvidence {
     let on_access_scanner = inspect_on_access_scanner().await;
-    let on_access_config = spawn_blocking(read_clamd_config).await.map_or(
-        OnAccessConfig::ConfigUnreadable(ClamdConfigReadFailure::ReadingTaskAborted),
-        on_access_config_from_view,
-    );
+    let on_access_config = spawn_blocking(move || read_clamd_config(sandbox_kind))
+        .await
+        .map_or(
+            OnAccessConfig::ConfigUnreadable(ClamdConfigReadFailure::ReadingTaskAborted),
+            on_access_config_from_view,
+        );
     OnAccessEvidence {
         on_access_scanner,
         on_access_config,
-        kernel_blocking_support: spawn_blocking(inspect_kernel_blocking_support)
+        kernel_blocking_support: spawn_blocking(move || {
+            inspect_kernel_blocking_support(sandbox_kind)
+        })
+        .await
+        .unwrap_or(KernelBlockingSupport::KernelConfigUnreadable(
+            KernelConfigReadFailure::ReadingTaskAborted,
+        )),
+        inotify_watch_limit: spawn_blocking(move || inspect_inotify_watch_limit(sandbox_kind))
             .await
-            .unwrap_or(KernelBlockingSupport::KernelConfigUnreadable(
-                KernelConfigReadFailure::ReadingTaskAborted,
+            .unwrap_or(InotifyWatchLimit::LimitUnreadable(
+                WatchLimitReadFailure::ReadingTaskAborted,
             )),
-        inotify_watch_limit: spawn_blocking(inspect_inotify_watch_limit).await.unwrap_or(
-            InotifyWatchLimit::LimitUnreadable(WatchLimitReadFailure::ReadingTaskAborted),
-        ),
     }
 }
 
@@ -1100,23 +1119,30 @@ pub fn lazaret_schedule_is_enabled() -> bool {
     application_settings().boolean(LAZARET_SCHEDULE_KEY)
 }
 
-pub async fn gather_protection_evidence(lazaret_schedule_enabled: bool) -> ProtectionEvidence {
-    let engine_installation = inspect_engine_installation().await;
-    let signature_evidence = inspect_signature_evidence(&engine_installation).await;
+pub async fn gather_protection_evidence(
+    sandbox_kind: SandboxKind,
+    lazaret_schedule_enabled: bool,
+) -> ProtectionEvidence {
+    let engine_installation = inspect_engine_installation(sandbox_kind).await;
+    let signature_evidence = inspect_signature_evidence(sandbox_kind, &engine_installation).await;
     ProtectionEvidence {
-        program_trust: spawn_blocking(inspect_program_trust).await.map_or(
-            ProgramTrustInspection::CheckInterrupted,
-            ProgramTrustInspection::ProgramsChecked,
-        ),
-        trust_list: read_configured_trust_list().await,
-        runtime_reductions: spawn_blocking(inspect_runtime_reductions).await.unwrap_or(
-            RuntimeReductions::OverridesUnreadable(OverridesReadFailure::ReadingTaskInterrupted),
-        ),
-        account_setting_findings: inspect_account_settings(lazaret_schedule_enabled),
+        program_trust: spawn_blocking(move || inspect_program_trust(sandbox_kind))
+            .await
+            .map_or(
+                ProgramTrustInspection::CheckInterrupted,
+                ProgramTrustInspection::ProgramsChecked,
+            ),
+        trust_list: read_configured_trust_list(sandbox_kind).await,
+        runtime_reductions: spawn_blocking(move || inspect_runtime_reductions(sandbox_kind))
+            .await
+            .unwrap_or(RuntimeReductions::OverridesUnreadable(
+                OverridesReadFailure::ReadingTaskInterrupted,
+            )),
+        account_setting_findings: inspect_account_settings(sandbox_kind, lazaret_schedule_enabled),
         engine_installation,
         signature_evidence,
-        daemon_evidence: inspect_daemon_evidence().await,
-        on_access_evidence: inspect_on_access_evidence().await,
+        daemon_evidence: inspect_daemon_evidence(sandbox_kind).await,
+        on_access_evidence: inspect_on_access_evidence(sandbox_kind).await,
         scheduled_scan_evidence: inspect_scheduled_scan(lazaret_schedule_enabled).await,
         background_service_state: probe_user_unit_state(BACKGROUND_SERVICE_UNIT).await,
         process_attach_scope: inspect_process_attach_scope().await,

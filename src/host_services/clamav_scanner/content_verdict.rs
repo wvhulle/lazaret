@@ -23,7 +23,7 @@ use crate::host_services::{
     },
     desktop::{
         content_pipe::pipe_content_for_child,
-        flatpak_sandbox::{C_LOCALE_ENVIRONMENT, host_program_async_command},
+        flatpak_sandbox::{C_LOCALE_ENVIRONMENT, SandboxKind, host_program_async_command},
     },
     quarantine_vault::quarantine_file_moves::QuarantineMoveFailure,
 };
@@ -103,18 +103,19 @@ pub fn verdict_from_exit(
 }
 
 pub async fn scan_content_with_current_signatures(
+    sandbox_kind: SandboxKind,
     content_source: impl Read + Send + 'static,
 ) -> ContentVerdict {
-    let scanner_programs = match ScannerProgramPaths::locate_trusted_programs_in_background().await
-    {
-        Ok(scanner_programs) => scanner_programs,
-        Err(lookup_failure) => return VerdictFailure::from(lookup_failure).into(),
-    };
-    let scanner_backend = probe_clamd_availability(&scanner_programs).await;
+    let scanner_programs =
+        match ScannerProgramPaths::locate_trusted_programs_in_background(sandbox_kind).await {
+            Ok(scanner_programs) => scanner_programs,
+            Err(lookup_failure) => return VerdictFailure::from(lookup_failure).into(),
+        };
+    let scanner_backend = probe_clamd_availability(sandbox_kind, &scanner_programs).await;
     let (scanner_location, detection_arguments) = match scanner_backend {
         ScannerBackend::ClamdDaemon => (&scanner_programs.clamdscan_program, Vec::new()),
         ScannerBackend::StandaloneClamscan => {
-            match read_host_clamscan_detection_arguments().await {
+            match read_host_clamscan_detection_arguments(sandbox_kind).await {
                 Ok(detection_arguments) => {
                     (&scanner_programs.clamscan_program, detection_arguments)
                 }
@@ -134,7 +135,8 @@ pub async fn scan_content_with_current_signatures(
             return VerdictFailure::ContentPipeFailed(pipe_failure).into();
         }
     };
-    let mut verdict_command = host_program_async_command(&scanner_path, &[C_LOCALE_ENVIRONMENT]);
+    let mut verdict_command =
+        host_program_async_command(sandbox_kind, &scanner_path, &[C_LOCALE_ENVIRONMENT]);
     verdict_command
         .arg("--no-summary")
         .args(detection_arguments)
@@ -201,14 +203,16 @@ mod content_verdict_tests {
     #[test]
     #[ignore = "needs a real ClamAV host"]
     fn host_scanner_detects_eicar_on_standard_input() {
+        let sandbox_kind = SandboxKind::HostSystem;
         let eicar_pattern =
             b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*".to_vec();
         let content_verdict =
             tokio::runtime::Runtime::new()
                 .unwrap()
-                .block_on(scan_content_with_current_signatures(std::io::Cursor::new(
-                    eicar_pattern,
-                )));
+                .block_on(scan_content_with_current_signatures(
+                    sandbox_kind,
+                    std::io::Cursor::new(eicar_pattern),
+                ));
         assert!(
             matches!(content_verdict, ContentVerdict::StillDetected { .. }),
             "{content_verdict:?}"

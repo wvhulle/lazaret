@@ -30,6 +30,7 @@ use crate::{
             },
             scanner_output_parser::ThreatIdentity,
         },
+        desktop::flatpak_sandbox::SandboxKind,
         detection_journal::{
             detection_history_store::{DetectionSources, DetectionState, ResolutionKind},
             detection_journal_follower::{
@@ -43,6 +44,7 @@ use crate::{
 };
 
 fn host_scan_request(
+    sandbox_kind: SandboxKind,
     scan_targets: Vec<PathBuf>,
     scanner_backend: ScannerBackend,
     file_list_directory: &Path,
@@ -50,15 +52,18 @@ fn host_scan_request(
     ScanRequest {
         scan_targets,
         scanner_backend,
-        scanner_programs: ScannerProgramPaths::locate_trusted_programs(),
+        scanner_programs: ScannerProgramPaths::locate_trusted_programs(sandbox_kind),
         file_list_directory: file_list_directory.to_path_buf(),
         scan_exclusions: ScanExclusions::default(),
         detection_arguments: Vec::new(),
     }
 }
 
-async fn complete_scan(scan_request: ScanRequest) -> CompletedScanOutcome {
-    scan_progress_events(scan_request)
+async fn complete_scan(
+    sandbox_kind: SandboxKind,
+    scan_request: ScanRequest,
+) -> CompletedScanOutcome {
+    scan_progress_events(sandbox_kind, scan_request)
         .fold(
             CompletedScanOutcome::default(),
             |mut scan_outcome, progress_event| {
@@ -87,7 +92,10 @@ fn clamav_temporary_entries() -> Vec<String> {
         .unwrap_or_default()
 }
 
-async fn verify_detection_quarantine_and_restore(scanner_backend: ScannerBackend) {
+async fn verify_detection_quarantine_and_restore(
+    sandbox_kind: SandboxKind,
+    scanner_backend: ScannerBackend,
+) {
     let verification_root = tempfile::tempdir().expect("verification root");
     let scan_directory = verification_root.path().join("scan");
     fs::create_dir_all(&scan_directory).expect("scan directory");
@@ -96,11 +104,15 @@ async fn verify_detection_quarantine_and_restore(scanner_backend: ScannerBackend
     fs::write(&eicar_path, eicar_test_bytes()).expect("eicar file");
     fs::write(&non_utf8_path, eicar_test_bytes()).expect("non-utf8 eicar file");
 
-    let scan_outcome = complete_scan(host_scan_request(
-        vec![scan_directory],
-        scanner_backend,
-        verification_root.path(),
-    ))
+    let scan_outcome = complete_scan(
+        sandbox_kind,
+        host_scan_request(
+            sandbox_kind,
+            vec![scan_directory],
+            scanner_backend,
+            verification_root.path(),
+        ),
+    )
     .await;
     println!("{scanner_backend:?}: {scan_outcome:#?}");
     assert_eq!(
@@ -139,20 +151,30 @@ async fn verify_detection_quarantine_and_restore(scanner_backend: ScannerBackend
 #[tokio::test]
 #[ignore = "needs a real ClamAV host"]
 async fn host_clamd_detects_quarantines_and_restores_outside_on_access_paths() {
+    let sandbox_kind = SandboxKind::HostSystem;
     assert_eq!(
-        probe_clamd_availability(&ScannerProgramPaths::locate_trusted_programs()).await,
+        probe_clamd_availability(
+            sandbox_kind,
+            &ScannerProgramPaths::locate_trusted_programs(sandbox_kind)
+        )
+        .await,
         ScannerBackend::ClamdDaemon
     );
-    verify_detection_quarantine_and_restore(ScannerBackend::ClamdDaemon).await;
+    verify_detection_quarantine_and_restore(sandbox_kind, ScannerBackend::ClamdDaemon).await;
 }
 
 #[tokio::test]
 #[ignore = "needs a real ClamAV host"]
 async fn host_clamscan_detects_quarantines_and_restores_outside_on_access_paths() {
-    verify_detection_quarantine_and_restore(ScannerBackend::StandaloneClamscan).await;
+    let sandbox_kind = SandboxKind::HostSystem;
+    verify_detection_quarantine_and_restore(sandbox_kind, ScannerBackend::StandaloneClamscan).await;
 }
 
-async fn verify_blocked_file_flow(scanner_backend: ScannerBackend, quarantine_directory: &Path) {
+async fn verify_blocked_file_flow(
+    sandbox_kind: SandboxKind,
+    scanner_backend: ScannerBackend,
+    quarantine_directory: &Path,
+) {
     let downloads_directory =
         PathBuf::from(std::env::var_os("HOME").expect("home directory")).join("Downloads");
     let eicar_path = downloads_directory.join(format!(
@@ -175,11 +197,15 @@ async fn verify_blocked_file_flow(scanner_backend: ScannerBackend, quarantine_di
     );
 
     let verification_root = tempfile::tempdir_in(quarantine_directory).expect("verification root");
-    let scan_outcome = complete_scan(host_scan_request(
-        vec![eicar_path.clone()],
-        scanner_backend,
-        verification_root.path(),
-    ))
+    let scan_outcome = complete_scan(
+        sandbox_kind,
+        host_scan_request(
+            sandbox_kind,
+            vec![eicar_path.clone()],
+            scanner_backend,
+            verification_root.path(),
+        ),
+    )
     .await;
     println!("{scanner_backend:?} scan: {scan_outcome:#?}");
     assert!(scan_outcome.threats_were_found(), "blocked file reported");
@@ -215,17 +241,33 @@ async fn verify_blocked_file_flow(scanner_backend: ScannerBackend, quarantine_di
 #[tokio::test]
 #[ignore = "needs a real ClamAV host with OnAccessPrevention on ~/Downloads"]
 async fn host_blocked_file_is_detected_quarantined_and_restored() {
+    let sandbox_kind = SandboxKind::HostSystem;
     let vault_parent =
         PathBuf::from(std::env::var_os("HOME").expect("home directory")).join(".local/share");
-    verify_blocked_file_flow(ScannerBackend::ClamdDaemon, &vault_parent).await;
-    verify_blocked_file_flow(ScannerBackend::StandaloneClamscan, &vault_parent).await;
+    verify_blocked_file_flow(sandbox_kind, ScannerBackend::ClamdDaemon, &vault_parent).await;
+    verify_blocked_file_flow(
+        sandbox_kind,
+        ScannerBackend::StandaloneClamscan,
+        &vault_parent,
+    )
+    .await;
 }
 
-async fn verify_cancel_stops_scanner(scanner_backend: ScannerBackend, scan_target: PathBuf) {
+async fn verify_cancel_stops_scanner(
+    sandbox_kind: SandboxKind,
+    scanner_backend: ScannerBackend,
+    scan_target: PathBuf,
+) {
     let temporary_entries_before = clamav_temporary_entries();
     let verification_root = tempfile::tempdir().expect("verification root");
     let (abortable_events, scan_abort_handle) = stream::abortable(scan_progress_events(
-        host_scan_request(vec![scan_target], scanner_backend, verification_root.path()),
+        sandbox_kind,
+        host_scan_request(
+            sandbox_kind,
+            vec![scan_target],
+            scanner_backend,
+            verification_root.path(),
+        ),
     ));
     let scan_task = tokio::spawn(abortable_events.count());
     tokio::time::sleep(Duration::from_secs(8)).await;
@@ -254,7 +296,11 @@ async fn verify_cancel_stops_scanner(scanner_backend: ScannerBackend, scan_targe
         "scanner exited"
     );
     assert_eq!(
-        probe_clamd_availability(&ScannerProgramPaths::locate_trusted_programs()).await,
+        probe_clamd_availability(
+            sandbox_kind,
+            &ScannerProgramPaths::locate_trusted_programs(sandbox_kind)
+        )
+        .await,
         ScannerBackend::ClamdDaemon,
         "clamd stays healthy"
     );
@@ -290,27 +336,35 @@ fn scanner_process_ids(scanner_program: &str) -> Vec<String> {
 #[tokio::test]
 #[ignore = "needs a real ClamAV host and a large directory in HOST_LARGE_SCAN_TARGET"]
 async fn host_cancel_stops_clamd_scan() {
+    let sandbox_kind = SandboxKind::HostSystem;
     let scan_target = PathBuf::from(std::env::var_os("HOST_LARGE_SCAN_TARGET").expect("target"));
-    verify_cancel_stops_scanner(ScannerBackend::ClamdDaemon, scan_target).await;
+    verify_cancel_stops_scanner(sandbox_kind, ScannerBackend::ClamdDaemon, scan_target).await;
 }
 
 #[tokio::test]
 #[ignore = "needs a real ClamAV host and a large directory in HOST_LARGE_SCAN_TARGET"]
 async fn host_cancel_stops_clamscan_scan() {
+    let sandbox_kind = SandboxKind::HostSystem;
     let scan_target = PathBuf::from(std::env::var_os("HOST_LARGE_SCAN_TARGET").expect("target"));
-    verify_cancel_stops_scanner(ScannerBackend::StandaloneClamscan, scan_target).await;
+    verify_cancel_stops_scanner(
+        sandbox_kind,
+        ScannerBackend::StandaloneClamscan,
+        scan_target,
+    )
+    .await;
 }
 
 #[tokio::test]
 #[ignore = "needs a real ClamAV host"]
 async fn host_status_probes_read_the_real_system() {
+    let sandbox_kind = SandboxKind::HostSystem;
     let service_state =
         crate::host_services::clamav_programs::database_directory_status::detect_freshclam_service(
         )
         .await;
     println!("freshclam service: {service_state:?}");
     let database_directory =
-        crate::host_services::clamav_programs::database_directory_status::configured_database_directory();
+        crate::host_services::clamav_programs::database_directory_status::configured_database_directory(sandbox_kind);
     let directory_status =
         crate::host_services::clamav_programs::database_directory_status::inspect_database_directory(
             &database_directory,
@@ -325,7 +379,7 @@ async fn host_status_probes_read_the_real_system() {
     );
     println!(
         "distribution: {:?}",
-        crate::host_services::clamav_programs::distribution_install_guides::detect_distribution_family()
+        crate::host_services::clamav_programs::distribution_install_guides::detect_distribution_family(sandbox_kind)
     );
 }
 

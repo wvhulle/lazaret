@@ -13,6 +13,7 @@ use crate::{
             DistributionFamily, detect_distribution_family,
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+        desktop::flatpak_sandbox::SandboxKind,
     },
     shared_widgets::loading_indicators::{BUSY_PAGE_NAME, IDLE_PAGE_NAME, busy_page_name},
     signatures::signature_sources_page::{
@@ -27,6 +28,7 @@ use crate::{
 };
 
 pub struct SignatureSourcesPage {
+    sandbox_kind: SandboxKind,
     toaster: Toaster,
     check_rows: FactoryVecDeque<AuditCheckRow>,
     source_checks: SourceChecks,
@@ -56,11 +58,12 @@ pub enum SignatureSourcesPageOutput {
 
 impl SignatureSourcesPage {
     fn start_source_checks(&mut self, sender: &ComponentSender<Self>) {
+        let sandbox_kind = self.sandbox_kind;
         self.source_checks = SourceChecks::ChecksRunning;
         let distribution_family = self.distribution_family;
         sender.oneshot_command(async move {
             SignatureSourcesPageCommand::SourceChecksFinished(
-                gather_signature_source_checks(distribution_family).await,
+                gather_signature_source_checks(sandbox_kind, distribution_family).await,
             )
         });
     }
@@ -100,7 +103,7 @@ impl SignatureSourcesPage {
 
 #[relm4::component(pub)]
 impl Component for SignatureSourcesPage {
-    type Init = ();
+    type Init = SandboxKind;
     type Input = SignatureSourcesPageInput;
     type Output = SignatureSourcesPageOutput;
     type CommandOutput = SignatureSourcesPageCommand;
@@ -174,11 +177,12 @@ impl Component for SignatureSourcesPage {
     }
 
     fn init(
-        _page_init: Self::Init,
+        sandbox_kind: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let mut model = Self {
+            sandbox_kind,
             toaster: Toaster::new(&root),
             check_rows: FactoryVecDeque::builder()
                 .launch(adw::PreferencesGroup::default())
@@ -187,7 +191,7 @@ impl Component for SignatureSourcesPage {
                     SignatureSourcesPageInput::GuidanceRequested,
                 ),
             source_checks: SourceChecks::ChecksRunning,
-            distribution_family: detect_distribution_family(),
+            distribution_family: detect_distribution_family(sandbox_kind),
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
         };

@@ -34,6 +34,7 @@ use crate::{
         },
         desktop::{
             failure_journal_log::{log_failed_outcome, log_failure_to_journal},
+            flatpak_sandbox::SandboxKind,
             locale_formatting::byte_size_text,
         },
         quarantine_vault::{
@@ -149,6 +150,7 @@ fn add_deletion_choices(confirmation_dialog: &adw::AlertDialog) {
 }
 
 pub struct QuarantineEntriesPageInit {
+    pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub activity_history: ActivityHistory,
 }
@@ -172,6 +174,7 @@ impl OpenedEntry {
 }
 
 pub struct QuarantineEntriesPage {
+    sandbox_kind: SandboxKind,
     quarantine_vault: QuarantineVault,
     activity_history: ActivityHistory,
     page_state: QuarantinePageState,
@@ -244,9 +247,15 @@ pub enum QuarantineEntriesPageCommand {
     ClamavReviewsSettled(Result<usize, ActivityHistoryFailure>),
 }
 
-async fn verdict_for_entry(quarantine_vault: &QuarantineVault, entry_id: i64) -> ContentVerdict {
+async fn verdict_for_entry(
+    sandbox_kind: SandboxKind,
+    quarantine_vault: &QuarantineVault,
+    entry_id: i64,
+) -> ContentVerdict {
     match quarantine_vault.read_payload_plaintext(entry_id).await {
-        Ok(payload_plaintext) => scan_content_with_current_signatures(payload_plaintext).await,
+        Ok(payload_plaintext) => {
+            scan_content_with_current_signatures(sandbox_kind, payload_plaintext).await
+        }
         Err(read_failure) => VerdictFailure::PayloadUnreadable(read_failure).into(),
     }
 }
@@ -552,6 +561,7 @@ impl QuarantineEntriesPage {
     }
 
     fn start_recheck(&mut self, sender: &ComponentSender<Self>) {
+        let sandbox_kind = self.sandbox_kind;
         let quarantine_vault = self.quarantine_vault.clone();
         let _recheck_refused = self.page_state.start_recheck_run(|rechecked_ids| {
             let recheck_commands = stream::iter(rechecked_ids)
@@ -560,7 +570,12 @@ impl QuarantineEntriesPage {
                     async move {
                         QuarantineEntriesPageCommand::RecheckVerdictArrived {
                             entry_id,
-                            content_verdict: verdict_for_entry(&quarantine_vault, entry_id).await,
+                            content_verdict: verdict_for_entry(
+                                sandbox_kind,
+                                &quarantine_vault,
+                                entry_id,
+                            )
+                            .await,
                         }
                     }
                 })
@@ -863,6 +878,7 @@ impl Component for QuarantineEntriesPage {
         QuarantineEntriesPageInit {
             quarantine_vault,
             activity_history,
+            sandbox_kind,
         }: QuarantineEntriesPageInit,
         root: Self::Root,
         sender: ComponentSender<Self>,
@@ -907,6 +923,7 @@ impl Component for QuarantineEntriesPage {
                 }
             });
         let model = Self {
+            sandbox_kind,
             quarantine_vault,
             activity_history,
             page_state: QuarantinePageState::new(),
@@ -937,6 +954,7 @@ impl Component for QuarantineEntriesPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         let quarantine_vault = self.quarantine_vault.clone();
         match page_input {
             QuarantineEntriesPageInput::HashCopyRequested(file_hash) => {
@@ -958,6 +976,7 @@ impl Component for QuarantineEntriesPage {
             }
             QuarantineEntriesPageInput::TrustRequested(trust_choice) => {
                 present_trust_confirmation(
+                    sandbox_kind,
                     root,
                     trust_choice,
                     sender.input_sender().clone(),
@@ -997,7 +1016,12 @@ impl Component for QuarantineEntriesPage {
                 sender.oneshot_command(async move {
                     QuarantineEntriesPageCommand::RestoreCheckFinished {
                         entry_id,
-                        content_verdict: verdict_for_entry(&quarantine_vault, entry_id).await,
+                        content_verdict: verdict_for_entry(
+                            sandbox_kind,
+                            &quarantine_vault,
+                            entry_id,
+                        )
+                        .await,
                     }
                 });
             }
@@ -1125,6 +1149,7 @@ impl Component for QuarantineEntriesPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         match page_command {
             QuarantineEntriesPageCommand::RestoreCheckFinished {
                 entry_id,
@@ -1162,7 +1187,7 @@ impl Component for QuarantineEntriesPage {
                         settle_clamav_reviews(
                             &activity_history,
                             &rechecked_contents,
-                            current_database_version().await,
+                            current_database_version(sandbox_kind).await,
                         )
                         .await,
                     )

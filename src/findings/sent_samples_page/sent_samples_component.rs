@@ -40,7 +40,7 @@ use crate::{
             ClamavReport, ClamavReportKind, ClamavReportRequest, SubmittedContent,
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-        desktop::locale_formatting::host_moment_formatters,
+        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::host_moment_formatters},
         quarantine_vault::{
             quarantine_entry_database::{QuarantineEntryRecord, QuarantineVault},
             quarantine_file_moves::QuarantineMoveFailure,
@@ -79,6 +79,7 @@ use crate::{
 };
 
 pub struct SentSamplesPageInit {
+    pub sandbox_kind: SandboxKind,
     pub activity_history: ActivityHistory,
     pub quarantine_vault: QuarantineVault,
 }
@@ -89,6 +90,7 @@ enum RemoteRefreshRun {
 }
 
 pub struct SentSamplesPage {
+    sandbox_kind: SandboxKind,
     activity_history: ActivityHistory,
     quarantine_vault: QuarantineVault,
     toaster: Toaster,
@@ -513,6 +515,7 @@ impl SentSamplesPage {
         submission_sample: SubmissionSample,
         sender: &ComponentSender<Self>,
     ) {
+        let sandbox_kind = self.sandbox_kind;
         let upload_key = UploadKey::for_target(
             &submission_sample.submitted_file.content_sha256,
             clamav_report_target(&clamav_report.report_kind),
@@ -524,6 +527,7 @@ impl SentSamplesPage {
         sender.oneshot_command(async move {
             SentSamplesPageCommand::ClamavReportFinished {
                 report_attempt: send_read_clamav_report(
+                    sandbox_kind,
                     &activity_history,
                     &clamav_report,
                     submission_sample,
@@ -643,7 +647,9 @@ impl Component for SentSamplesPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let sandbox_kind = page_init.sandbox_kind;
         let model = Self {
+            sandbox_kind,
             activity_history: page_init.activity_history,
             quarantine_vault: page_init.quarantine_vault,
             toaster: Toaster::new(&root),

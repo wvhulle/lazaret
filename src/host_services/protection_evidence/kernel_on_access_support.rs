@@ -6,7 +6,7 @@ use std::{
 
 use flate2::read::GzDecoder;
 
-use crate::host_services::desktop::flatpak_sandbox::readable_host_path;
+use crate::host_services::desktop::flatpak_sandbox::{SandboxKind, readable_host_path};
 
 const COMPRESSED_KERNEL_CONFIG_PATH: &str = "/proc/config.gz";
 const KERNEL_RELEASE_PATH: &str = "/proc/sys/kernel/osrelease";
@@ -128,11 +128,11 @@ pub fn blocking_support_in_files(
     )
 }
 
-pub fn inspect_kernel_blocking_support() -> KernelBlockingSupport {
+pub fn inspect_kernel_blocking_support(sandbox_kind: SandboxKind) -> KernelBlockingSupport {
     blocking_support_in_files(&KernelConfigLocations {
-        compressed_config_path: readable_host_path(COMPRESSED_KERNEL_CONFIG_PATH),
-        kernel_release_path: readable_host_path(KERNEL_RELEASE_PATH),
-        boot_directory: readable_host_path(BOOT_DIRECTORY),
+        compressed_config_path: readable_host_path(sandbox_kind, COMPRESSED_KERNEL_CONFIG_PATH),
+        kernel_release_path: readable_host_path(sandbox_kind, KERNEL_RELEASE_PATH),
+        boot_directory: readable_host_path(sandbox_kind, BOOT_DIRECTORY),
     })
 }
 
@@ -150,8 +150,8 @@ pub fn watch_limit_in_file(watch_limit_path: &Path) -> InotifyWatchLimit {
     }
 }
 
-pub fn inspect_inotify_watch_limit() -> InotifyWatchLimit {
-    watch_limit_in_file(&readable_host_path(INOTIFY_WATCH_LIMIT_PATH))
+pub fn inspect_inotify_watch_limit(sandbox_kind: SandboxKind) -> InotifyWatchLimit {
+    watch_limit_in_file(&readable_host_path(sandbox_kind, INOTIFY_WATCH_LIMIT_PATH))
 }
 
 #[cfg(test)]

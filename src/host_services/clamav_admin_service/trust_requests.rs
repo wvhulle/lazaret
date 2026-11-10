@@ -9,8 +9,7 @@ use crate::{
         activity_history::activity_history_database::{ActivityHistory, ActivityHistoryFailure},
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
         desktop::{
-            application_directories::application_data_directory,
-            flatpak_sandbox::running_in_flatpak,
+            application_directories::application_data_directory, flatpak_sandbox::SandboxKind,
         },
         lazaret_database::locked_database_connection::lazaret_database_path,
     },
@@ -297,11 +296,10 @@ pub enum SystemWideTrust {
     UnavailableInFlatpak,
 }
 
-pub fn system_wide_trust() -> SystemWideTrust {
-    if running_in_flatpak() {
-        SystemWideTrust::UnavailableInFlatpak
-    } else {
-        SystemWideTrust::OfferedOutsideSandbox
+pub fn system_wide_trust(sandbox_kind: SandboxKind) -> SystemWideTrust {
+    match sandbox_kind {
+        SandboxKind::FlatpakSandbox => SystemWideTrust::UnavailableInFlatpak,
+        SandboxKind::HostSystem => SystemWideTrust::OfferedOutsideSandbox,
     }
 }
 

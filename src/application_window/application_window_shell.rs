@@ -32,6 +32,7 @@ use crate::{
         desktop::{
             application_directories::application_data_directory,
             file_process_lock::{ProcessFileLock, wait_for_file_lock},
+            flatpak_sandbox::SandboxKind,
             stored_settings::{CLOSE_ACTION_KEY, application_settings},
             stored_settings_watch::forward_setting_changes,
         },
@@ -206,6 +207,7 @@ fn register_window_actions(sender: &AsyncComponentSender<ApplicationWindowShell>
 }
 
 async fn opened_window_content(
+    sandbox_kind: SandboxKind,
     window_root: &adw::ApplicationWindow,
     startup_request: StartupRequest,
     sender: &AsyncComponentSender<ApplicationWindowShell>,
@@ -218,6 +220,7 @@ async fn opened_window_content(
     WindowContent::PagesShown {
         page_navigation: PageNavigation::builder()
             .launch(PageNavigationInit {
+                sandbox_kind,
                 quarantine_vault: locked_vault.quarantine_vault,
                 data_directory,
                 window_root: window_root.clone(),
@@ -267,9 +270,14 @@ impl WindowContent {
     }
 }
 
+pub struct ApplicationWindowShellInit {
+    pub startup_request: StartupRequest,
+    pub sandbox_kind: SandboxKind,
+}
+
 #[relm4::component(async, pub)]
 impl AsyncComponent for ApplicationWindowShell {
-    type Init = StartupRequest;
+    type Init = ApplicationWindowShellInit;
     type Input = ApplicationWindowShellInput;
     type Output = ();
     type CommandOutput = ApplicationWindowShellCommand;
@@ -288,7 +296,10 @@ impl AsyncComponent for ApplicationWindowShell {
     }
 
     async fn init(
-        startup_request: Self::Init,
+        ApplicationWindowShellInit {
+            startup_request,
+            sandbox_kind,
+        }: Self::Init,
         root: Self::Root,
         sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
@@ -303,12 +314,13 @@ impl AsyncComponent for ApplicationWindowShell {
         );
         register_window_actions(&sender);
         let model = Self {
-            window_content: opened_window_content(&root, startup_request, &sender).await,
+            window_content: opened_window_content(sandbox_kind, &root, startup_request, &sender)
+                .await,
             tray_connection: TrayConnection::Starting,
             close_action: CloseAction::read_from(&stored_settings),
             stored_settings,
             start_in_background,
-            preferences_dialog: PreferencesDialog::builder().launch(()).forward(
+            preferences_dialog: PreferencesDialog::builder().launch(sandbox_kind).forward(
                 sender.input_sender(),
                 |preferences_output| match preferences_output {
                     PreferencesDialogOutput::StoredServiceKeyChanged => {

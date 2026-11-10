@@ -26,6 +26,7 @@ use crate::{
             application_directories::application_data_directory,
             desktop_notifications::send_session_notification,
             file_process_lock::{FileLockAttempt, try_file_lock},
+            flatpak_sandbox::SandboxKind,
             stored_settings::{
                 application_settings, read_exclusion_entries, scanner_backend_preference,
             },
@@ -163,7 +164,10 @@ fn finished_scan_notification_body(
     }
 }
 
-async fn run_scheduled_scan_async(scan_options: ScheduledScanOptions) -> ExitCode {
+async fn run_scheduled_scan_async(
+    sandbox_kind: SandboxKind,
+    scan_options: ScheduledScanOptions,
+) -> ExitCode {
     let settings = application_settings();
     let data_directory = application_data_directory();
     let activity_history =
@@ -181,22 +185,29 @@ async fn run_scheduled_scan_async(scan_options: ScheduledScanOptions) -> ExitCod
     }
     let started_at = Timestamp::now();
     let started_instant = Instant::now();
-    let scanner_programs = ScannerProgramPaths::locate_trusted_programs();
-    let scanner_backend =
-        choose_scanner_backend(scanner_backend_preference(&settings), &scanner_programs).await;
+    let scanner_programs = ScannerProgramPaths::locate_trusted_programs(sandbox_kind);
+    let scanner_backend = choose_scanner_backend(
+        sandbox_kind,
+        scanner_backend_preference(&settings),
+        &scanner_programs,
+    )
+    .await;
     let user_trust_loading = activity_history.load_user_trust().await;
     let scan_outcome = skipping_user_trusted_threats(
-        scan_progress_events(ScanRequest {
-            scan_targets: scan_targets.clone(),
-            scanner_backend,
-            scanner_programs,
-            file_list_directory: data_directory.clone(),
-            scan_exclusions: ScanExclusions::from_entries(
-                &read_exclusion_entries(&settings),
-                &glib::home_dir(),
-            ),
-            detection_arguments: host_clamscan_detection_arguments(),
-        }),
+        scan_progress_events(
+            sandbox_kind,
+            ScanRequest {
+                scan_targets: scan_targets.clone(),
+                scanner_backend,
+                scanner_programs,
+                file_list_directory: data_directory.clone(),
+                scan_exclusions: ScanExclusions::from_entries(
+                    &read_exclusion_entries(&settings),
+                    &glib::home_dir(),
+                ),
+                detection_arguments: host_clamscan_detection_arguments(sandbox_kind),
+            },
+        ),
         user_trust_loading,
     )
     .fold(
@@ -245,12 +256,17 @@ async fn run_scheduled_scan_async(scan_options: ScheduledScanOptions) -> ExitCod
     }
 }
 
-pub fn run_scheduled_scan(scan_options: ScheduledScanOptions) -> ExitCode {
+pub fn run_scheduled_scan(
+    sandbox_kind: SandboxKind,
+    scan_options: ScheduledScanOptions,
+) -> ExitCode {
     match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
     {
-        Ok(scan_runtime) => scan_runtime.block_on(run_scheduled_scan_async(scan_options)),
+        Ok(scan_runtime) => {
+            scan_runtime.block_on(run_scheduled_scan_async(sandbox_kind, scan_options))
+        }
         Err(runtime_failure) => {
             eprintln!("{runtime_failure}");
             ExitCode::from(SCAN_FAILED_EXIT_CODE)

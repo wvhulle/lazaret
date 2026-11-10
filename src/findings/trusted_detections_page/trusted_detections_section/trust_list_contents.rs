@@ -5,6 +5,7 @@ use bytesize::ByteSize;
 use crate::host_services::{
     clamav_programs::database_directory_status::configured_database_directory,
     clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+    desktop::flatpak_sandbox::SandboxKind,
 };
 
 pub const TRUSTED_FILES_NAME: &str = "lazaret-local.sfp";
@@ -165,12 +166,14 @@ pub fn read_trust_list(database_directory: &Path) -> TrustListReading {
     }
 }
 
-pub async fn read_configured_trust_list() -> TrustListReading {
-    tokio::task::spawn_blocking(|| read_trust_list(&configured_database_directory()))
-        .await
-        .unwrap_or(TrustListReading::FolderUnreadable(
-            TrustListReadFailure::ReadingTaskAborted,
-        ))
+pub async fn read_configured_trust_list(sandbox_kind: SandboxKind) -> TrustListReading {
+    tokio::task::spawn_blocking(move || {
+        read_trust_list(&configured_database_directory(sandbox_kind))
+    })
+    .await
+    .unwrap_or(TrustListReading::FolderUnreadable(
+        TrustListReadFailure::ReadingTaskAborted,
+    ))
 }
 
 #[cfg(test)]
