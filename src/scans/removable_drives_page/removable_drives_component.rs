@@ -19,13 +19,15 @@ use crate::{
         desktop::{
             desktop_notifications::notify_outside_the_window,
             failure_journal_log::log_failure_to_journal, flatpak_sandbox::SandboxKind,
-            stored_settings::application_settings,
+            locale_formatting::MomentFormatters, stored_settings::application_settings,
         },
         quarantine_vault::quarantine_entry_database::QuarantineVault,
     },
     scans::removable_drives_page::{
-        device_auto_scan_section::{DeviceAutoScanSection, DeviceAutoScanSectionOutput},
-        drive_event_row::DriveEventRow,
+        device_auto_scan_section::{
+            DeviceAutoScanSection, DeviceAutoScanSectionInit, DeviceAutoScanSectionOutput,
+        },
+        drive_event_row::{DriveEventRow, DriveEventRowInit},
         drive_mount_checks::{
             DeviceAutoScanSettings, DriveScanDecision, MountedDevice, SettledDriveCheck,
             SettledDriveFacts, classify_settled_drive, device_qualifies_for_scan,
@@ -64,6 +66,7 @@ use crate::{
 };
 
 pub struct RemovableDrivesPageInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub activity_history: ActivityHistory,
@@ -92,6 +95,7 @@ const fn shows_page_notice(page_notice: &DrivesPageNotice) -> bool {
 }
 
 pub struct RemovableDrivesPage {
+    pub moment_formatters: &'static MomentFormatters,
     sandbox_kind: SandboxKind,
     toaster: Toaster,
     activity_history: ActivityHistory,
@@ -168,6 +172,7 @@ impl RemovableDrivesPage {
     }
 
     fn show_drive_events(&mut self) {
+        let moment_formatters = self.moment_formatters;
         let mut event_rows_guard = self.drive_event_rows.guard();
         event_rows_guard.clear();
         self.drive_event_log
@@ -175,7 +180,10 @@ impl RemovableDrivesPage {
             .iter()
             .cloned()
             .for_each(|drive_event| {
-                event_rows_guard.push_back(drive_event);
+                event_rows_guard.push_back(DriveEventRowInit {
+                    drive_event,
+                    moment_formatters,
+                });
             });
     }
 
@@ -482,6 +490,7 @@ impl Component for RemovableDrivesPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let volume_monitor = gio::VolumeMonitor::get();
         let mount_sender = sender.input_sender().clone();
@@ -497,6 +506,7 @@ impl Component for RemovableDrivesPage {
             device_scan_status: device_scan_flow.device_scan_status(),
         };
         let model = Self {
+            moment_formatters,
             sandbox_kind,
             toaster: Toaster::new(&root),
             activity_history: page_init.activity_history.clone(),
@@ -534,16 +544,19 @@ impl Component for RemovableDrivesPage {
                         }
                     },
                 ),
-            settings_section: DeviceAutoScanSection::builder().launch(()).forward(
-                sender.input_sender(),
-                |section_output| match section_output {
-                    DeviceAutoScanSectionOutput::SettingsChanged(auto_scan_settings) => {
-                        RemovableDrivesPageInput::AutoScanSettingsChanged(auto_scan_settings)
-                    }
-                },
-            ),
+            settings_section: DeviceAutoScanSection::builder()
+                .launch(DeviceAutoScanSectionInit { moment_formatters })
+                .forward(
+                    sender.input_sender(),
+                    |section_output| match section_output {
+                        DeviceAutoScanSectionOutput::SettingsChanged(auto_scan_settings) => {
+                            RemovableDrivesPageInput::AutoScanSettingsChanged(auto_scan_settings)
+                        }
+                    },
+                ),
             history_group: ActivityHistoryGroup::builder()
                 .launch(ActivityHistoryGroupInit {
+                    moment_formatters,
                     activity_history: page_init.activity_history,
                     history_filter: ActivityHistoryFilter::DeviceScans,
                     group_title: translated_messages::scans::drive_scans_title(),

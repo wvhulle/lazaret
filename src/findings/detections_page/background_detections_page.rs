@@ -41,7 +41,7 @@ use crate::{
             DistributionFamily, detect_distribution_family,
         },
         clamav_scanner::scanner_output_parser::ThreatIdentity,
-        desktop::flatpak_sandbox::SandboxKind,
+        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters},
         detection_journal::{
             detection_history_store::ResolutionKind,
             detection_journal_follower::{JournalAccess, detection_journal_events},
@@ -78,6 +78,7 @@ const LIST_VIEW_NAME: &str = "list";
 const INCIDENT_VIEW_NAME: &str = "incident";
 
 pub struct BackgroundDetectionsPage {
+    moment_formatters: &'static MomentFormatters,
     activity_history: ActivityHistory,
     quarantine_vault: QuarantineVault,
     distribution_family: DistributionFamily,
@@ -97,6 +98,7 @@ pub struct BackgroundDetectionsPage {
 }
 
 pub struct BackgroundDetectionsPageInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub sandbox_kind: SandboxKind,
     pub activity_history: ActivityHistory,
     pub quarantine_vault: QuarantineVault,
@@ -543,6 +545,7 @@ impl BackgroundDetectionsPage {
     }
 
     fn opened_incident_steps(&self) -> Vec<IncidentStep> {
+        let moment_formatters = self.moment_formatters;
         let IncidentView::IncidentOpen {
             deletion_prompt,
             signature_lookup,
@@ -554,6 +557,7 @@ impl BackgroundDetectionsPage {
         self.opened_detection()
             .map(|displayed_detection| {
                 incident_timeline(
+                    moment_formatters,
                     displayed_detection,
                     *deletion_prompt,
                     signature_lookup,
@@ -815,8 +819,10 @@ impl Component for BackgroundDetectionsPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let model = Self {
+            moment_formatters,
             activity_history: page_init.activity_history.clone(),
             quarantine_vault: page_init.quarantine_vault,
             distribution_family: detect_distribution_family(sandbox_kind),

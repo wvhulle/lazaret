@@ -8,7 +8,7 @@ use crate::{
         },
         clamav_programs::clamav_report_submission::clamsubmit_failure_text,
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-        desktop::locale_formatting::{byte_size_text, exact_local_time_text},
+        desktop::locale_formatting::{MomentFormatters, byte_size_text},
         sample_submissions::{
             bazaar_sample_upload::BazaarUploadAttempt, clamav_report_flow::ClamavReportAttempt,
             submission_samples::SampleReadFailure,
@@ -47,19 +47,25 @@ pub fn history_failure_text(history_failure: &ActivityHistoryFailure) -> String 
     translated_messages::widgets::history_failure(describe_history_failure(history_failure))
 }
 
-pub fn earlier_submission_text(earlier_submission: &SubmissionRecord) -> String {
-    translated_messages::widgets::earlier_submission(exact_local_time_text(
-        earlier_submission.submitted_at,
-    ))
+pub fn earlier_submission_text(
+    moment_formatters: &MomentFormatters,
+    earlier_submission: &SubmissionRecord,
+) -> String {
+    translated_messages::widgets::earlier_submission(
+        moment_formatters.exact_moment_text(earlier_submission.submitted_at),
+    )
 }
 
-pub fn clamav_report_attempt_text(report_attempt: &ClamavReportAttempt) -> String {
+pub fn clamav_report_attempt_text(
+    moment_formatters: &MomentFormatters,
+    report_attempt: &ClamavReportAttempt,
+) -> String {
     match report_attempt {
         ClamavReportAttempt::ReportRecorded(_recorded_submission) => {
             translated_messages::widgets::report_recorded()
         }
         ClamavReportAttempt::AlreadyReported(earlier_submission) => {
-            earlier_submission_text(earlier_submission)
+            earlier_submission_text(moment_formatters, earlier_submission)
         }
         ClamavReportAttempt::SampleUnreadable(read_failure) => {
             translated_messages::widgets::report_not_sent_error(sample_read_failure_text(
@@ -86,7 +92,10 @@ fn upload_not_sent(failure_reason: &str) -> String {
     translated_messages::widgets::nothing_uploaded_error(failure_reason)
 }
 
-pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> String {
+pub fn bazaar_upload_attempt_text(
+    moment_formatters: &MomentFormatters,
+    upload_attempt: &BazaarUploadAttempt,
+) -> String {
     match upload_attempt {
         BazaarUploadAttempt::SubmissionRecorded(SubmissionRecord {
             submission_state:
@@ -101,7 +110,7 @@ pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> Strin
             translated_messages::widgets::malwarebazaar_sample_sent_samples()
         }
         BazaarUploadAttempt::AlreadySubmitted(earlier_submission) => {
-            earlier_submission_text(earlier_submission)
+            earlier_submission_text(moment_formatters, earlier_submission)
         }
         BazaarUploadAttempt::KeyNotUsable => {
             upload_not_sent(&translated_messages::widgets::bazaar_key_not_usable())
@@ -129,7 +138,10 @@ pub fn bazaar_upload_attempt_text(upload_attempt: &BazaarUploadAttempt) -> Strin
     }
 }
 
-pub fn virustotal_upload_attempt_text(upload_attempt: &VirusTotalUploadAttempt) -> String {
+pub fn virustotal_upload_attempt_text(
+    moment_formatters: &MomentFormatters,
+    upload_attempt: &VirusTotalUploadAttempt,
+) -> String {
     match upload_attempt {
         VirusTotalUploadAttempt::SubmissionRecorded(SubmissionRecord {
             submission_state:
@@ -144,7 +156,7 @@ pub fn virustotal_upload_attempt_text(upload_attempt: &VirusTotalUploadAttempt) 
             translated_messages::widgets::virustotal_analysing_file_refresh()
         }
         VirusTotalUploadAttempt::AlreadySubmitted(earlier_submission) => {
-            earlier_submission_text(earlier_submission)
+            earlier_submission_text(moment_formatters, earlier_submission)
         }
         VirusTotalUploadAttempt::ReportAlreadyAvailable(file_report) => {
             translated_messages::widgets::report_already_available(

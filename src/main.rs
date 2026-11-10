@@ -1,4 +1,6 @@
-use crate::host_services::desktop::flatpak_sandbox::SandboxKind;
+use crate::host_services::desktop::{
+    flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters,
+};
 mod application_window;
 mod findings;
 mod headless_modes;
@@ -42,6 +44,8 @@ pub(crate) const APPLICATION_ID: &str = "page.codeberg.wvhulle.Lazaret.Devel";
 pub(crate) const APPLICATION_DATA_NAME: &str = "lazaret";
 fn main() -> ExitCode {
     let sandbox_kind = SandboxKind::detect();
+    let moment_formatters: &'static MomentFormatters =
+        Box::leak(Box::new(MomentFormatters::for_host_locale()));
     if !settings_schema_is_installed() {
         eprintln!(
             "{}",
@@ -84,6 +88,7 @@ fn main() -> ExitCode {
         .run_async::<ApplicationWindowShell>(ApplicationWindowShellInit {
             startup_request,
             sandbox_kind,
+            moment_formatters,
         });
     ExitCode::SUCCESS
 }

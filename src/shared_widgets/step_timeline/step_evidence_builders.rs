@@ -12,7 +12,7 @@ use crate::{
             suggested_remedy_commands::{SuggestedRemedy, suggested_command},
             timeline_step_contents::{
                 ActionableEvidenceRow, EvidenceMoment, SettledNodeState, SettledStep,
-                StepActionButton, StepEvidenceRow, TimelineStep, moment_value_text,
+                StepActionButton, StepEvidenceRow, TimelineStep, moment_tooltip, moment_value_text,
             },
         },
     },
@@ -58,6 +58,7 @@ pub fn timed_evidence_row(
 ) -> StepEvidenceRow {
     StepEvidenceRow {
         evidence_moment,
+        moment_tooltip: moment_tooltip(moment_formatters, evidence_moment),
         ..evidence_row(
             evidence_name,
             moment_value_text(

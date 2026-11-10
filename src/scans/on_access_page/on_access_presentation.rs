@@ -1,7 +1,7 @@
 use crate::{
     host_services::{
         clamav_programs::distribution_install_guides::DistributionFamily,
-        desktop::locale_formatting::byte_size_text,
+        desktop::locale_formatting::{MomentFormatters, byte_size_text},
         protection_evidence::{
             host_protection_evidence::{
                 ClamdConfigReadFailure, ConfiguredPrevention, OnAccessConfig, OnAccessConflict,
@@ -366,6 +366,7 @@ pub fn on_access_setup_steps<StepAction: StepActionButton>(
 }
 
 pub fn on_access_page_steps(
+    moment_formatters: &MomentFormatters,
     protection_evidence: &ProtectionEvidence,
     distribution_family: DistributionFamily,
 ) -> Vec<OnAccessStep> {
@@ -379,6 +380,7 @@ pub fn on_access_page_steps(
         &protection_evidence.on_access_evidence,
     ))
     .chain(runtime_reduction_step(
+        moment_formatters,
         &protection_evidence.runtime_reductions,
         ReducedSettingGroup::OnAccessSettings,
         StepActionSlot::NoAction,
@@ -395,7 +397,7 @@ mod on_access_presentation_tests {
                 ClamdUserExclusion, DaemonEvidence, OverridesChangeTime, ReducedSetting,
                 RuntimeReductions,
             },
-            protection_evidence_fixtures::healthy_evidence,
+            protection_evidence_fixtures::{english_formatters, healthy_evidence},
         },
         shared_widgets::step_timeline::timeline_step_contents::StepNodeState,
     };
@@ -408,8 +410,12 @@ mod on_access_presentation_tests {
         }
     }
 
-    fn page_step_of(on_access_evidence: OnAccessEvidence) -> OnAccessStep {
+    fn page_step_of(
+        moment_formatters: &MomentFormatters,
+        on_access_evidence: OnAccessEvidence,
+    ) -> OnAccessStep {
         on_access_page_steps(
+            moment_formatters,
             &ProtectionEvidence {
                 on_access_evidence,
                 ..healthy_evidence()
@@ -430,18 +436,22 @@ mod on_access_presentation_tests {
 
     #[test]
     fn running_without_prevention_is_never_reported_as_blocking() {
-        let on_access_step = page_step_of(on_access_with(OnAccessConfig::ConfigRead {
-            watch_scope: WatchScope::WatchedLocations {
-                first_location: WatchedLocation::WatchedFolder {
-                    folder_path: "/home/user/Downloads".to_owned(),
+        let moment_formatters = &english_formatters();
+        let on_access_step = page_step_of(
+            moment_formatters,
+            on_access_with(OnAccessConfig::ConfigRead {
+                watch_scope: WatchScope::WatchedLocations {
+                    first_location: WatchedLocation::WatchedFolder {
+                        folder_path: "/home/user/Downloads".to_owned(),
+                    },
+                    other_locations: Vec::new(),
                 },
-                other_locations: Vec::new(),
-            },
-            configured_prevention: ConfiguredPrevention::PreventionOff,
-            setting_conflicts: Vec::new(),
-            clamd_user_exclusion: ClamdUserExclusion::ClamdUserExcluded,
-            size_limit: OnAccessSizeLimit::DefaultLimit,
-        }));
+                configured_prevention: ConfiguredPrevention::PreventionOff,
+                setting_conflicts: Vec::new(),
+                clamd_user_exclusion: ClamdUserExclusion::ClamdUserExcluded,
+                size_limit: OnAccessSizeLimit::DefaultLimit,
+            }),
+        );
         assert_eq!(on_access_step.node_state(), StepNodeState::NeedsReview);
         assert_eq!(
             on_access_step.status_text,
@@ -451,10 +461,14 @@ mod on_access_presentation_tests {
 
     #[test]
     fn an_on_access_unit_systemd_could_not_report_is_unknown_rather_than_not_set_up() {
-        let on_access_step = page_step_of(OnAccessEvidence {
-            on_access_scanner: OnAccessScanner::UnitStateUnknown,
-            ..healthy_evidence().on_access_evidence
-        });
+        let moment_formatters = &english_formatters();
+        let on_access_step = page_step_of(
+            moment_formatters,
+            OnAccessEvidence {
+                on_access_scanner: OnAccessScanner::UnitStateUnknown,
+                ..healthy_evidence().on_access_evidence
+            },
+        );
         assert_eq!(on_access_step.node_state(), StepNodeState::NeedsReview);
         assert!(on_access_step.status_text.starts_with("Unknown"));
         assert!(!on_access_step.status_text.contains("not set up"));
@@ -462,9 +476,13 @@ mod on_access_presentation_tests {
 
     #[test]
     fn an_unreadable_daemon_config_claims_no_missing_blocking() {
-        let on_access_step = page_step_of(on_access_with(OnAccessConfig::ConfigUnreadable(
-            ClamdConfigReadFailure::NoReadableConfig,
-        )));
+        let moment_formatters = &english_formatters();
+        let on_access_step = page_step_of(
+            moment_formatters,
+            on_access_with(OnAccessConfig::ConfigUnreadable(
+                ClamdConfigReadFailure::NoReadableConfig,
+            )),
+        );
         assert_eq!(on_access_step.node_state(), StepNodeState::NeedsReview);
         assert!(
             on_access_step
@@ -481,13 +499,17 @@ mod on_access_presentation_tests {
 
     #[test]
     fn prevention_without_watched_locations_suggests_adding_a_watched_folder() {
-        let on_access_step = page_step_of(on_access_with(OnAccessConfig::ConfigRead {
-            watch_scope: WatchScope::NothingWatched,
-            configured_prevention: ConfiguredPrevention::PreventionRequested,
-            setting_conflicts: Vec::new(),
-            clamd_user_exclusion: ClamdUserExclusion::ClamdUserExcluded,
-            size_limit: OnAccessSizeLimit::DefaultLimit,
-        }));
+        let moment_formatters = &english_formatters();
+        let on_access_step = page_step_of(
+            moment_formatters,
+            on_access_with(OnAccessConfig::ConfigRead {
+                watch_scope: WatchScope::NothingWatched,
+                configured_prevention: ConfiguredPrevention::PreventionRequested,
+                setting_conflicts: Vec::new(),
+                clamd_user_exclusion: ClamdUserExclusion::ClamdUserExcluded,
+                size_limit: OnAccessSizeLimit::DefaultLimit,
+            }),
+        );
         assert_eq!(on_access_step.node_state(), StepNodeState::NeedsReview);
         assert_eq!(
             on_access_step.status_text,
@@ -504,18 +526,22 @@ mod on_access_presentation_tests {
 
     #[test]
     fn a_watched_mount_is_shown_as_a_whole_mount() {
-        let on_access_step = page_step_of(on_access_with(OnAccessConfig::ConfigRead {
-            watch_scope: WatchScope::WatchedLocations {
-                first_location: WatchedLocation::WatchedMount {
-                    mount_path: "/".to_owned(),
+        let moment_formatters = &english_formatters();
+        let on_access_step = page_step_of(
+            moment_formatters,
+            on_access_with(OnAccessConfig::ConfigRead {
+                watch_scope: WatchScope::WatchedLocations {
+                    first_location: WatchedLocation::WatchedMount {
+                        mount_path: "/".to_owned(),
+                    },
+                    other_locations: Vec::new(),
                 },
-                other_locations: Vec::new(),
-            },
-            configured_prevention: ConfiguredPrevention::PreventionRequested,
-            setting_conflicts: Vec::new(),
-            clamd_user_exclusion: ClamdUserExclusion::ClamdUserExcluded,
-            size_limit: OnAccessSizeLimit::DefaultLimit,
-        }));
+                configured_prevention: ConfiguredPrevention::PreventionRequested,
+                setting_conflicts: Vec::new(),
+                clamd_user_exclusion: ClamdUserExclusion::ClamdUserExcluded,
+                size_limit: OnAccessSizeLimit::DefaultLimit,
+            }),
+        );
         assert_eq!(on_access_step.node_state(), StepNodeState::Completed);
         assert_eq!(
             row_value(&on_access_step, "Watched folders"),
@@ -525,13 +551,16 @@ mod on_access_presentation_tests {
 
     #[test]
     fn setting_rows_on_the_page_link_nowhere_because_the_settings_are_below() {
-        let on_access_step = page_step_of(healthy_evidence().on_access_evidence);
+        let moment_formatters = &english_formatters();
+        let on_access_step = page_step_of(moment_formatters, healthy_evidence().on_access_evidence);
         assert!(on_access_step.offered_actions().is_empty());
     }
 
     #[test]
     fn a_stopped_daemon_leaves_on_access_waiting() {
+        let moment_formatters = &english_formatters();
         let page_steps = on_access_page_steps(
+            moment_formatters,
             &ProtectionEvidence {
                 daemon_evidence: DaemonEvidence::UnitStopped {
                     service_unit: "clamav-daemon.service",
@@ -548,6 +577,7 @@ mod on_access_presentation_tests {
 
     #[test]
     fn only_on_access_key_reductions_appear_on_this_page() {
+        let moment_formatters = &english_formatters();
         let reductions_of = |setting_key: &str| ProtectionEvidence {
             runtime_reductions: RuntimeReductions::SettingsReduced {
                 change_time: OverridesChangeTime::ChangeTimeUnknown,
@@ -561,6 +591,7 @@ mod on_access_presentation_tests {
         };
         assert_eq!(
             on_access_page_steps(
+                moment_formatters,
                 &reductions_of("OnAccessPrevention"),
                 DistributionFamily::NixosFamily
             )
@@ -568,8 +599,12 @@ mod on_access_presentation_tests {
             2
         );
         assert_eq!(
-            on_access_page_steps(&reductions_of("DetectPUA"), DistributionFamily::NixosFamily)
-                .len(),
+            on_access_page_steps(
+                moment_formatters,
+                &reductions_of("DetectPUA"),
+                DistributionFamily::NixosFamily
+            )
+            .len(),
             1
         );
     }
@@ -585,7 +620,9 @@ mod on_access_presentation_tests {
 
     #[test]
     fn mount_watching_with_prevention_is_shown_as_not_blocking_with_its_conflict() {
+        let moment_formatters = &english_formatters();
         let page_steps = on_access_page_steps(
+            moment_formatters,
             &ProtectionEvidence {
                 on_access_evidence: on_access_with(OnAccessConfig::ConfigRead {
                     watch_scope: WatchScope::WatchedLocations {
@@ -614,12 +651,16 @@ mod on_access_presentation_tests {
 
     #[test]
     fn an_unreadable_kernel_config_is_unknown_and_never_blocking() {
-        let on_access_step = page_step_of(OnAccessEvidence {
-            kernel_blocking_support: KernelBlockingSupport::KernelConfigUnreadable(
-                KernelConfigReadFailure::NoKernelConfigFound,
-            ),
-            ..healthy_evidence().on_access_evidence
-        });
+        let moment_formatters = &english_formatters();
+        let on_access_step = page_step_of(
+            moment_formatters,
+            OnAccessEvidence {
+                kernel_blocking_support: KernelBlockingSupport::KernelConfigUnreadable(
+                    KernelConfigReadFailure::NoKernelConfigFound,
+                ),
+                ..healthy_evidence().on_access_evidence
+            },
+        );
         assert_eq!(on_access_step.node_state(), StepNodeState::NeedsReview);
         assert!(on_access_step.status_text.contains("unknown"));
         assert_ne!(on_access_step.status_text, "Detected files are blocked");
@@ -627,17 +668,23 @@ mod on_access_presentation_tests {
 
     #[test]
     fn a_notify_only_kernel_says_it_cannot_block() {
-        let on_access_step = page_step_of(OnAccessEvidence {
-            kernel_blocking_support: KernelBlockingSupport::NotifyOnly,
-            ..healthy_evidence().on_access_evidence
-        });
+        let moment_formatters = &english_formatters();
+        let on_access_step = page_step_of(
+            moment_formatters,
+            OnAccessEvidence {
+                kernel_blocking_support: KernelBlockingSupport::NotifyOnly,
+                ..healthy_evidence().on_access_evidence
+            },
+        );
         assert_eq!(on_access_step.node_state(), StepNodeState::NeedsReview);
         assert!(on_access_step.status_text.contains("kernel can't block"));
     }
 
     #[test]
     fn a_missing_clamd_exclusion_gets_its_own_review_step() {
+        let moment_formatters = &english_formatters();
         let page_steps = on_access_page_steps(
+            moment_formatters,
             &ProtectionEvidence {
                 on_access_evidence: on_access_with(OnAccessConfig::ConfigRead {
                     watch_scope: watched_downloads(),
@@ -660,8 +707,14 @@ mod on_access_presentation_tests {
 
     #[test]
     fn a_healthy_setup_adds_no_review_steps() {
+        let moment_formatters = &english_formatters();
         assert_eq!(
-            on_access_page_steps(&healthy_evidence(), DistributionFamily::NixosFamily).len(),
+            on_access_page_steps(
+                moment_formatters,
+                &healthy_evidence(),
+                DistributionFamily::NixosFamily
+            )
+            .len(),
             1
         );
     }

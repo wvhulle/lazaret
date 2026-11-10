@@ -10,10 +10,10 @@ use crate::{
             TrustedDetectionsStepAction, trusted_detections_status_steps,
         },
         trusted_detections_section::trusted_detections_group::{
-            TrustedDetectionsSection, TrustedDetectionsSectionOutput,
+            TrustedDetectionsSection, TrustedDetectionsSectionInit, TrustedDetectionsSectionOutput,
         },
     },
-    host_services::desktop::flatpak_sandbox::SandboxKind,
+    host_services::desktop::{flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters},
     shared_widgets::{
         loading_indicators::{
             BUSY_PAGE_NAME, FirstLoad, IDLE_PAGE_NAME, LOADED_PAGE_NAME, LOADING_PAGE_NAME,
@@ -104,9 +104,14 @@ impl TrustedDetectionsPage {
     }
 }
 
+pub struct TrustedDetectionsPageInit {
+    pub sandbox_kind: SandboxKind,
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::component(pub)]
 impl Component for TrustedDetectionsPage {
-    type Init = SandboxKind;
+    type Init = TrustedDetectionsPageInit;
     type Input = TrustedDetectionsPageInput;
     type Output = TrustedDetectionsPageOutput;
     type CommandOutput = ();
@@ -149,7 +154,10 @@ impl Component for TrustedDetectionsPage {
     }
 
     fn init(
-        sandbox_kind: Self::Init,
+        TrustedDetectionsPageInit {
+            sandbox_kind,
+            moment_formatters,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -168,10 +176,14 @@ impl Component for TrustedDetectionsPage {
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             trusted_detections_section: TrustedDetectionsSection::builder()
-                .launch(sandbox_kind)
+                .launch(TrustedDetectionsSectionInit {
+                    sandbox_kind,
+                    moment_formatters,
+                })
                 .forward(sender.input_sender(), page_input_for_trusted_output),
             trust_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
+                    moment_formatters,
                     audit_topic: AuditTopic::TrustChanges,
                     group_description:
                         translated_messages::findings::files_trusted_detections_description(),

@@ -6,13 +6,12 @@ use relm4::{
 };
 
 use crate::{
-    host_services::desktop::locale_formatting::exact_local_time_text,
     shared_widgets::{
         loading_indicators::inline_row_spinner,
         step_timeline::timeline_step_contents::{
-            ActionableEvidenceRow, EvidenceMoment, EvidenceRowControl, OfferedAction,
-            StepActionButton, StepChoiceRow, StepEvidenceRow, StepPhase, TimelineStep,
-            TimelineStepRowOutput,
+            ActionableEvidenceRow, EvidenceMoment, EvidenceRowControl, MomentTooltip,
+            OfferedAction, StepActionButton, StepChoiceRow, StepEvidenceRow, StepPhase,
+            TimelineStep, TimelineStepRowOutput,
         },
     },
     translated_messages,
@@ -76,18 +75,6 @@ fn moment_prefix(evidence_moment: EvidenceMoment) -> Option<gtk::Widget> {
     Some(moment_icon.upcast())
 }
 
-fn exact_moment_text(evidence_moment: EvidenceMoment) -> Option<String> {
-    match evidence_moment {
-        EvidenceMoment::PastEvent { happened_at } => Some(exact_local_time_text(happened_at)),
-        EvidenceMoment::UpcomingEvent { due_at } => Some(exact_local_time_text(due_at)),
-        EvidenceMoment::CurrentFact
-        | EvidenceMoment::HappeningNow
-        | EvidenceMoment::NeverHappened
-        | EvidenceMoment::NothingUpcoming
-        | EvidenceMoment::SettingValue => None,
-    }
-}
-
 fn evidence_row(step_evidence: &StepEvidenceRow) -> adw::ActionRow {
     let evidence_row = adw::ActionRow::builder()
         .use_markup(false)
@@ -97,8 +84,11 @@ fn evidence_row(step_evidence: &StepEvidenceRow) -> adw::ActionRow {
         .subtitle_lines(0)
         .css_classes(["property"])
         .build();
-    if let Some(exact_moment) = exact_moment_text(step_evidence.evidence_moment) {
-        evidence_row.set_tooltip_text(Some(&exact_moment));
+    match &step_evidence.moment_tooltip {
+        MomentTooltip::ExactMomentTooltip(exact_moment) => {
+            evidence_row.set_tooltip_text(Some(exact_moment));
+        }
+        MomentTooltip::NoMomentTooltip => {}
     }
     if let Some(moment_widget) = moment_prefix(step_evidence.evidence_moment) {
         evidence_row.add_prefix(&moment_widget);

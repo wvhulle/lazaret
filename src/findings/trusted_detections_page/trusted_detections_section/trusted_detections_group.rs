@@ -27,7 +27,7 @@ use crate::{
         desktop::{
             application_directories::application_data_directory,
             flatpak_sandbox::SandboxKind,
-            locale_formatting::{byte_size_text, exact_local_time_text},
+            locale_formatting::{MomentFormatters, byte_size_text},
         },
         lazaret_database::locked_database_connection::lazaret_database_path,
         systemd_journal::unit_journal_reader::{UnitJournalReadFailure, read_journal_off_thread},
@@ -118,7 +118,11 @@ pub fn trust_list_failure_text(read_failure: &TrustListReadFailure) -> String {
     }
 }
 
-fn added_text(audit_history: &AuditHistoryReading, adding_action: &AuditedAction) -> String {
+fn added_text(
+    moment_formatters: &MomentFormatters,
+    audit_history: &AuditHistoryReading,
+    adding_action: &AuditedAction,
+) -> String {
     let audit_entries = match audit_history {
         AuditHistoryReading::EntriesRead(audit_entries) => audit_entries,
         AuditHistoryReading::JournalUnreadable(read_failure) => {
@@ -130,11 +134,11 @@ fn added_text(audit_history: &AuditHistoryReading, adding_action: &AuditedAction
     match latest_applied_entry(audit_entries, adding_action) {
         Some(audit_entry) => match audit_entry.requester {
             Requester::KnownUser { user_id } => translated_messages::findings::known_user(
-                exact_local_time_text(audit_entry.recorded_at),
+                moment_formatters.exact_moment_text(audit_entry.recorded_at),
                 user_id,
             ),
             Requester::UnknownUser => translated_messages::findings::unknown_user(
-                exact_local_time_text(audit_entry.recorded_at),
+                moment_formatters.exact_moment_text(audit_entry.recorded_at),
             ),
         },
         None => translated_messages::findings::no_record_added_system(),
@@ -142,6 +146,7 @@ fn added_text(audit_history: &AuditHistoryReading, adding_action: &AuditedAction
 }
 
 pub struct TrustedDetectionsSection {
+    moment_formatters: &'static MomentFormatters,
     sandbox_kind: SandboxKind,
     trusted_detections_state: TrustedDetectionsState,
     user_trust_rows: FactoryVecDeque<TrustListRow>,
@@ -188,6 +193,7 @@ fn trust_list_rows(
 }
 
 fn trusted_file_row(
+    moment_formatters: &MomentFormatters,
     trusted_file: &TrustedFileEntry,
     audit_history: &AuditHistoryReading,
 ) -> TrustListRow {
@@ -197,6 +203,7 @@ fn trusted_file_row(
             "{} · {}",
             byte_size_text(trusted_file.file_size),
             added_text(
+                moment_formatters,
                 audit_history,
                 &AuditedAction::TrustFile {
                     sha256_hex: trusted_file.sha256_hex.clone(),
@@ -293,12 +300,14 @@ fn user_trust_rows(sandbox_kind: SandboxKind, user_trust: &UserTrustReading) -> 
 }
 
 fn ignored_signature_row(
+    moment_formatters: &MomentFormatters,
     signature_name: &str,
     audit_history: &AuditHistoryReading,
 ) -> TrustListRow {
     TrustListRow {
         row_title: signature_name.to_owned(),
         row_subtitle: added_text(
+            moment_formatters,
             audit_history,
             &AuditedAction::IgnoreSignature {
                 signature_name: signature_name.to_owned(),
@@ -378,18 +387,23 @@ struct TrustListGroupRows {
     foreign_allowlist_rows: Vec<TrustListRow>,
 }
 
-fn trust_list_group_rows(snapshot: &TrustedDetectionsSnapshot) -> TrustListGroupRows {
+fn trust_list_group_rows(
+    moment_formatters: &MomentFormatters,
+    snapshot: &TrustedDetectionsSnapshot,
+) -> TrustListGroupRows {
     let audit_history = &snapshot.audit_history;
     match &snapshot.trust_list {
         TrustListReading::ListsRead(trust_list) => TrustListGroupRows {
             trusted_file_rows: lazaret_list_rows(
                 &trust_list.trusted_files,
-                |trusted_file| trusted_file_row(trusted_file, audit_history),
+                |trusted_file| trusted_file_row(moment_formatters, trusted_file, audit_history),
                 translated_messages::findings::no_trusted_files(),
             ),
             ignored_signature_rows: lazaret_list_rows(
                 &trust_list.ignored_signatures,
-                |signature_name| ignored_signature_row(signature_name, audit_history),
+                |signature_name| {
+                    ignored_signature_row(moment_formatters, signature_name, audit_history)
+                },
                 translated_messages::findings::no_ignored_detections(),
             ),
             foreign_allowlist_rows: trust_list
@@ -433,12 +447,13 @@ fn replace_rows(shown_rows: &mut FactoryVecDeque<TrustListRow>, listed_rows: Vec
 
 impl TrustedDetectionsSection {
     fn show_snapshot(&mut self, snapshot: TrustedDetectionsSnapshot) {
+        let moment_formatters = self.moment_formatters;
         let sandbox_kind = self.sandbox_kind;
         let TrustListGroupRows {
             trusted_file_rows,
             ignored_signature_rows,
             foreign_allowlist_rows,
-        } = trust_list_group_rows(&snapshot);
+        } = trust_list_group_rows(moment_formatters, &snapshot);
         replace_rows(
             &mut self.user_trust_rows,
             user_trust_rows(sandbox_kind, &snapshot.user_trust),
@@ -458,9 +473,14 @@ impl TrustedDetectionsSection {
     }
 }
 
+pub struct TrustedDetectionsSectionInit {
+    pub sandbox_kind: SandboxKind,
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::component(pub)]
 impl Component for TrustedDetectionsSection {
-    type Init = SandboxKind;
+    type Init = TrustedDetectionsSectionInit;
     type Input = TrustedDetectionsSectionInput;
     type Output = TrustedDetectionsSectionOutput;
     type CommandOutput = TrustedDetectionsSectionCommand;
@@ -508,11 +528,15 @@ impl Component for TrustedDetectionsSection {
     }
 
     fn init(
-        sandbox_kind: Self::Init,
+        TrustedDetectionsSectionInit {
+            sandbox_kind,
+            moment_formatters,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            moment_formatters,
             sandbox_kind,
             trusted_detections_state: TrustedDetectionsState::SnapshotLoading,
             user_trust_rows: trust_list_rows(&sender),
@@ -583,13 +607,16 @@ impl Component for TrustedDetectionsSection {
 #[cfg(test)]
 mod trusted_detections_group_tests {
     use super::*;
+    use crate::host_services::protection_evidence::protection_evidence_fixtures::english_formatters;
 
     #[test]
     fn an_unreadable_audit_journal_does_not_claim_there_is_no_record() {
+        let moment_formatters = &english_formatters();
         let ignored_action = AuditedAction::IgnoreSignature {
             signature_name: "Win.Test.EICAR_HDB-1".to_owned(),
         };
         let unreadable_text = added_text(
+            moment_formatters,
             &AuditHistoryReading::JournalUnreadable(UnitJournalReadFailure::ReadingTaskInterrupted),
             &ignored_action,
         );
@@ -597,6 +624,7 @@ mod trusted_detections_group_tests {
         assert!(!unreadable_text.contains("No record"));
         assert_eq!(
             added_text(
+                moment_formatters,
                 &AuditHistoryReading::EntriesRead(Vec::new()),
                 &ignored_action
             ),

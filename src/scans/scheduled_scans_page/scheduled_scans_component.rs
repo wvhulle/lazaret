@@ -13,10 +13,7 @@ use crate::{
         clamav_programs::distribution_install_guides::{
             DistributionFamily, detect_distribution_family,
         },
-        desktop::{
-            flatpak_sandbox::SandboxKind,
-            locale_formatting::{exact_local_time_text, host_moment_formatters},
-        },
+        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters},
         protection_evidence::host_protection_evidence::{
             ScanServiceEvidence, scan_service_evidence,
         },
@@ -54,6 +51,7 @@ use crate::{
 };
 
 pub struct ScheduledScansPageInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub system_bus: SystemBusAccess,
     pub user_bus: UserBusAccess,
     pub activity_history: ActivityHistory,
@@ -61,6 +59,7 @@ pub struct ScheduledScansPageInit {
 }
 
 pub struct ScheduledScansPage {
+    moment_formatters: &'static MomentFormatters,
     system_bus: SystemBusAccess,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<ScheduledScanAction>>,
@@ -123,6 +122,12 @@ impl ScheduledScansPage {
     }
 
     fn show_status_steps(&mut self) {
+        let _moment_formatters = self.moment_formatters;
+        let _moment_formatters = self.moment_formatters;
+        let _moment_formatters = self.moment_formatters;
+        let _moment_formatters = self.moment_formatters;
+        let _moment_formatters = self.moment_formatters;
+        let moment_formatters = self.moment_formatters;
         let GatheredEvidence::Gathered {
             protection_evidence,
             gathered_at,
@@ -134,7 +139,7 @@ impl ScheduledScansPage {
             &mut self.status_rows,
             scheduled_scans_page_steps(
                 protection_evidence,
-                host_moment_formatters(),
+                moment_formatters,
                 *gathered_at,
                 self.distribution_family,
             ),
@@ -194,7 +199,7 @@ impl Component for ScheduledScansPage {
                             set_subtitle: &model
                                 .system_scan_control
                                 .run_started_at()
-                                .map(|started_at| translated_messages::scans::started_at(exact_local_time_text(started_at)))
+                                .map(|started_at| translated_messages::scans::started_at(model.moment_formatters.exact_moment_text(started_at)))
                                 .unwrap_or_default(),
 
                             add_prefix = &adw::Spinner {
@@ -241,6 +246,7 @@ impl Component for ScheduledScansPage {
 
     fn init(
         ScheduledScansPageInit {
+            moment_formatters,
             activity_history,
             sandbox_kind,
             system_bus,
@@ -250,6 +256,7 @@ impl Component for ScheduledScansPage {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            moment_formatters,
             system_bus: system_bus.clone(),
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
@@ -267,6 +274,7 @@ impl Component for ScheduledScansPage {
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             schedule_section: ScanScheduleSection::builder()
                 .launch(ScanScheduleSectionInit {
+                    moment_formatters,
                     sandbox_kind,
                     system_bus: system_bus.clone(),
                     user_bus,
@@ -274,6 +282,7 @@ impl Component for ScheduledScansPage {
                 .detach(),
             history_group: ActivityHistoryGroup::builder()
                 .launch(ActivityHistoryGroupInit {
+                    moment_formatters,
                     activity_history,
                     history_filter: ActivityHistoryFilter::ScheduledScans,
                     group_title: translated_messages::scans::scheduled_runs_title(),

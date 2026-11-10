@@ -5,7 +5,7 @@ use relm4::{
 use crate::{
     host_services::{
         activity_history::activity_history_database::ActivityEntryRecord,
-        desktop::locale_formatting::exact_local_time_text,
+        desktop::locale_formatting::MomentFormatters,
     },
     shared_widgets::activity_entries::activity_export_formats::{
         activity_detail_text, activity_summary_text,
@@ -24,16 +24,24 @@ pub enum ActivityTranscriptDialogInput {
     CopyRequested,
 }
 
-pub fn transcript_text_of(activity_entry: &ActivityEntryRecord) -> String {
+pub fn transcript_text_of(
+    moment_formatters: &MomentFormatters,
+    activity_entry: &ActivityEntryRecord,
+) -> String {
     activity_detail_text(
         activity_entry,
-        &exact_local_time_text(activity_entry.started_at),
+        &moment_formatters.exact_moment_text(activity_entry.started_at),
     )
+}
+
+pub struct ActivityTranscriptDialogInit {
+    pub activity_entry: ActivityEntryRecord,
+    pub moment_formatters: &'static MomentFormatters,
 }
 
 #[relm4::component(pub)]
 impl Component for ActivityTranscriptDialog {
-    type Init = ActivityEntryRecord;
+    type Init = ActivityTranscriptDialogInit;
     type Input = ActivityTranscriptDialogInput;
     type Output = ();
     type CommandOutput = ();
@@ -81,14 +89,17 @@ impl Component for ActivityTranscriptDialog {
     }
 
     fn init(
-        activity_entry: Self::Init,
+        ActivityTranscriptDialogInit {
+            activity_entry,
+            moment_formatters,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let transcript_overlay = &adw::ToastOverlay::new();
         let model = Self {
             transcript_title: activity_summary_text(&activity_entry),
-            transcript_text: transcript_text_of(&activity_entry),
+            transcript_text: transcript_text_of(moment_formatters, &activity_entry),
             toaster: Toaster::new(transcript_overlay),
         };
         let widgets = view_output!();

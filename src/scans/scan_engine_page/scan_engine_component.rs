@@ -10,7 +10,7 @@ use crate::{
         clamav_programs::distribution_install_guides::{
             DistributionFamily, detect_distribution_family,
         },
-        desktop::flatpak_sandbox::SandboxKind,
+        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters},
     },
     scans::scan_engine_page::{
         clamd_socket_ownership::{ClamdSocketOwnership, inspect_clamd_socket_off_thread},
@@ -49,6 +49,7 @@ pub const SCAN_ENGINE_SETTINGS_LAYOUT: EngineSettingsLayout =
     EngineSettingsLayout::EngineWithDetection;
 
 pub struct ScanEnginePage {
+    moment_formatters: &'static MomentFormatters,
     sandbox_kind: SandboxKind,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<ScanEngineAction>>,
@@ -122,6 +123,7 @@ impl ScanEnginePage {
     }
 
     fn show_status_steps(&mut self) {
+        let moment_formatters = self.moment_formatters;
         let GatheredEvidence::Gathered {
             protection_evidence,
             ..
@@ -132,6 +134,7 @@ impl ScanEnginePage {
         show_timeline_steps(
             &mut self.status_rows,
             scan_engine_steps(
+                moment_formatters,
                 protection_evidence,
                 &self.clamd_socket_view,
                 self.distribution_family,
@@ -140,9 +143,14 @@ impl ScanEnginePage {
     }
 }
 
+pub struct ScanEnginePageInit {
+    pub sandbox_kind: SandboxKind,
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::component(pub)]
 impl Component for ScanEnginePage {
-    type Init = SandboxKind;
+    type Init = ScanEnginePageInit;
     type Input = ScanEnginePageInput;
     type Output = ScanEnginePageOutput;
     type CommandOutput = ScanEnginePageCommand;
@@ -186,11 +194,15 @@ impl Component for ScanEnginePage {
     }
 
     fn init(
-        sandbox_kind: Self::Init,
+        ScanEnginePageInit {
+            sandbox_kind,
+            moment_formatters,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            moment_formatters,
             sandbox_kind,
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
@@ -206,12 +218,14 @@ impl Component for ScanEnginePage {
             clamd_socket_view: ClamdSocketView::SocketInspecting,
             engine_settings_sections: EngineSettingsSections::builder()
                 .launch(EngineSettingsSectionsInit {
+                    moment_formatters,
                     settings_layout: SCAN_ENGINE_SETTINGS_LAYOUT,
                     sandbox_kind,
                 })
                 .forward(sender.input_sender(), page_input_for_settings_output),
             system_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
+                    moment_formatters,
                     audit_topic: AuditTopic::EngineChanges,
                     group_description:
                         translated_messages::scans::engine_detection_settings_description(),
@@ -220,6 +234,7 @@ impl Component for ScanEnginePage {
                 .detach(),
             daemon_log_group: ServiceLogGroup::builder()
                 .launch(ServiceLogGroupInit {
+                    moment_formatters,
                     group_title: translated_messages::scans::clamd_log_title(),
                     missing_log_title: translated_messages::scans::no_clamd_log_title(),
                     export_file_name: "clamd-logs.txt",

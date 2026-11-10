@@ -14,6 +14,7 @@ use crate::{
         clamav_scanner::{
             content_verdict::ContentVerdict, scanner_output_parser::displayed_threat_name,
         },
+        desktop::locale_formatting::MomentFormatters,
         quarantine_vault::{
             quarantine_entry_database::QuarantineEntryRecord,
             quarantine_file_moves::RecordedPayloadHash,
@@ -23,6 +24,7 @@ use crate::{
 };
 
 pub struct QuarantineEntryRow {
+    pub moment_formatters: &'static MomentFormatters,
     entry_record: QuarantineEntryRecord,
     row_state: EntryRowState,
 }
@@ -67,6 +69,7 @@ impl QuarantineEntryRow {
     }
 
     fn integrity_unknown(&self) -> bool {
+        let _moment_formatters = self.moment_formatters;
         self.entry_record.payload_hash == RecordedPayloadHash::IntegrityUnknown
     }
 }
@@ -84,7 +87,7 @@ impl FactoryComponent for QuarantineEntryRow {
         adw::ActionRow {
             set_use_markup: false,
             set_title: &displayed_threat_name(&self.entry_record.threat_identity),
-            set_subtitle: &entry_summary_text(&self.entry_record),
+            set_subtitle: &entry_summary_text(self.moment_formatters, &self.entry_record),
             set_subtitle_lines: 0,
             set_activatable: true,
             connect_activated[sender, entry_id = self.entry_record.entry_id] => move |_activated_row| {
@@ -116,6 +119,7 @@ impl FactoryComponent for QuarantineEntryRow {
 
     fn init_model(
         QuarantineRowInit {
+            moment_formatters,
             entry_record,
             row_state,
         }: QuarantineRowInit,
@@ -123,6 +127,7 @@ impl FactoryComponent for QuarantineEntryRow {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            moment_formatters,
             entry_record,
             row_state,
         }

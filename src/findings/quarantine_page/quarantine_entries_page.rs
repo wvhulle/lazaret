@@ -35,7 +35,7 @@ use crate::{
         desktop::{
             failure_journal_log::{log_failed_outcome, log_failure_to_journal},
             flatpak_sandbox::SandboxKind,
-            locale_formatting::byte_size_text,
+            locale_formatting::{MomentFormatters, byte_size_text},
         },
         quarantine_vault::{
             quarantine_entry_database::{
@@ -150,6 +150,7 @@ fn add_deletion_choices(confirmation_dialog: &adw::AlertDialog) {
 }
 
 pub struct QuarantineEntriesPageInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub activity_history: ActivityHistory,
@@ -174,6 +175,7 @@ impl OpenedEntry {
 }
 
 pub struct QuarantineEntriesPage {
+    pub moment_formatters: &'static MomentFormatters,
     sandbox_kind: SandboxKind,
     quarantine_vault: QuarantineVault,
     activity_history: ActivityHistory,
@@ -406,7 +408,9 @@ impl QuarantineEntriesPage {
     fn show_opened_entry(&mut self) {
         let opened_row_init = match self.opened_entry {
             OpenedEntry::EntryListShown => None,
-            OpenedEntry::EntryShown { entry_id } => self.page_state.row_init(entry_id),
+            OpenedEntry::EntryShown { entry_id } => {
+                self.page_state.row_init(self.moment_formatters, entry_id)
+            }
         };
         if opened_row_init.is_none() {
             self.opened_entry = OpenedEntry::EntryListShown;
@@ -423,7 +427,7 @@ impl QuarantineEntriesPage {
             OpenedEntry::EntryListShown => self.entry_count_text(),
             OpenedEntry::EntryShown { entry_id } => self
                 .page_state
-                .row_init(entry_id)
+                .row_init(self.moment_formatters, entry_id)
                 .map(|row_init| displayed_threat_name(&row_init.entry_record.threat_identity))
                 .unwrap_or_default(),
         }
@@ -624,7 +628,7 @@ impl QuarantineEntriesPage {
         let mut entry_rows_guard = self.entry_rows.guard();
         entry_rows_guard.clear();
         self.page_state
-            .matching_rows(&self.search_text)
+            .matching_rows(self.moment_formatters, &self.search_text)
             .into_iter()
             .for_each(|row_init| {
                 entry_rows_guard.push_back(row_init);
@@ -876,6 +880,7 @@ impl Component for QuarantineEntriesPage {
 
     fn init(
         QuarantineEntriesPageInit {
+            moment_formatters,
             quarantine_vault,
             activity_history,
             sandbox_kind,
@@ -923,6 +928,7 @@ impl Component for QuarantineEntriesPage {
                 }
             });
         let model = Self {
+            moment_formatters,
             sandbox_kind,
             quarantine_vault,
             activity_history,

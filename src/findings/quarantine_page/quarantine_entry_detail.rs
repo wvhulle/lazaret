@@ -14,7 +14,7 @@ use crate::{
         clamav_admin_service::trust_requests::{FileFingerprint, TrustChoice, TrustScope},
         clamav_programs::clamav_report_submission::{ClamavReportKind, SubmittedContent},
         clamav_scanner::scanner_output_parser::{displayed_threat_name, sanitize_scanner_line},
-        desktop::locale_formatting::{byte_size_text, exact_local_time_text},
+        desktop::locale_formatting::{MomentFormatters, byte_size_text},
         quarantine_vault::{
             quarantine_entry_database::{QuarantineEntryRecord, StoredDetectionDate},
             quarantine_file_moves::RecordedPayloadHash,
@@ -45,12 +45,16 @@ pub fn quarantined_false_positive_detection(
         })
 }
 
-pub fn entry_summary_text(entry_record: &QuarantineEntryRecord) -> String {
+pub fn entry_summary_text(
+    moment_formatters: &MomentFormatters,
+    entry_record: &QuarantineEntryRecord,
+) -> String {
     format!(
         "{}\n{} · {}",
         sanitize_scanner_line(&entry_record.original_path.to_string_lossy()),
         match &entry_record.detection_date {
-            StoredDetectionDate::DetectedAt(detected_at) => exact_local_time_text(*detected_at),
+            StoredDetectionDate::DetectedAt(detected_at) =>
+                moment_formatters.exact_moment_text(*detected_at),
             StoredDetectionDate::UnreadableText(stored_text) => sanitize_scanner_line(stored_text),
         },
         byte_size_text(entry_record.file_size),
@@ -58,6 +62,7 @@ pub fn entry_summary_text(entry_record: &QuarantineEntryRecord) -> String {
 }
 
 pub struct QuarantineEntryDetail {
+    pub moment_formatters: &'static MomentFormatters,
     entry_record: QuarantineEntryRecord,
     row_state: EntryRowState,
 }
@@ -244,7 +249,7 @@ impl FactoryComponent for QuarantineEntryDetail {
 
             adw::PreferencesGroup {
                 set_title: &glib::markup_escape_text(&displayed_threat_name(&self.entry_record.threat_identity)),
-                set_description: Some(&glib::markup_escape_text(&entry_summary_text(&self.entry_record))),
+                set_description: Some(&glib::markup_escape_text(&entry_summary_text(self.moment_formatters, &self.entry_record))),
 
                 #[wrap(Some)]
                 set_header_suffix = &gtk::Box {
@@ -420,6 +425,7 @@ impl FactoryComponent for QuarantineEntryDetail {
 
     fn init_model(
         QuarantineRowInit {
+            moment_formatters,
             entry_record,
             row_state,
         }: QuarantineRowInit,
@@ -427,6 +433,7 @@ impl FactoryComponent for QuarantineEntryDetail {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            moment_formatters,
             entry_record,
             row_state,
         }

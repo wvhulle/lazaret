@@ -50,7 +50,8 @@ use crate::{
             sent_samples_state::SentSamplesPageOutput,
         },
         trusted_detections_page::trusted_detections_component::{
-            TrustedDetectionsPage, TrustedDetectionsPageInput, TrustedDetectionsPageOutput,
+            TrustedDetectionsPage, TrustedDetectionsPageInit, TrustedDetectionsPageInput,
+            TrustedDetectionsPageOutput,
         },
     },
     host_services::{
@@ -61,8 +62,7 @@ use crate::{
         desktop::{
             application_directories::application_config_directory,
             failure_journal_log::log_failure_to_journal, flatpak_sandbox::SandboxKind,
-            locale_formatting::host_moment_formatters,
-            running_instance_forwarding::paths_from_bytes,
+            locale_formatting::MomentFormatters, running_instance_forwarding::paths_from_bytes,
         },
         lazaret_database::locked_database_connection::lazaret_database_path,
         protection_evidence::host_protection_evidence::{
@@ -78,7 +78,7 @@ use crate::{
             scan_profiles_dialog::scan_profile_store::ScanProfileStore,
         },
         on_access_page::{
-            on_access_component::{OnAccessPage, OnAccessPageInput},
+            on_access_component::{OnAccessPage, OnAccessPageInit, OnAccessPageInput},
             on_access_state::OnAccessPageOutput,
         },
         removable_drives_page::{
@@ -88,7 +88,7 @@ use crate::{
             removable_drives_state::RemovableDrivesPageOutput,
         },
         scan_engine_page::{
-            scan_engine_component::{ScanEnginePage, ScanEnginePageInput},
+            scan_engine_component::{ScanEnginePage, ScanEnginePageInit, ScanEnginePageInput},
             scan_engine_state::ScanEnginePageOutput,
         },
         scheduled_scans_page::{
@@ -122,6 +122,7 @@ use crate::{
 };
 
 pub struct PageNavigationInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub system_bus: SystemBusAccess,
     pub user_bus: UserBusAccess,
     pub sandbox_kind: SandboxKind,
@@ -133,6 +134,7 @@ pub struct PageNavigationInit {
 }
 
 pub struct PageNavigation {
+    moment_formatters: &'static MomentFormatters,
     system_bus: SystemBusAccess,
     user_bus: UserBusAccess,
     sandbox_kind: SandboxKind,
@@ -460,6 +462,7 @@ fn register_page_actions(
 
 impl PageNavigation {
     fn refresh_area_summaries(&mut self) {
+        let moment_formatters = self.moment_formatters;
         let GatheredEvidence::Gathered {
             protection_evidence,
             gathered_at,
@@ -469,7 +472,7 @@ impl PageNavigation {
         };
         let evidence_summaries = evidence_area_summaries(
             protection_evidence,
-            host_moment_formatters(),
+            moment_formatters,
             *gathered_at,
             &glib::home_dir().to_string_lossy(),
         );
@@ -719,6 +722,7 @@ impl Component for PageNavigation {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let moment_formatters = navigation_init.moment_formatters;
         let sandbox_kind = navigation_init.sandbox_kind;
         let system_bus = navigation_init.system_bus;
         let user_bus = navigation_init.user_bus;
@@ -728,6 +732,7 @@ impl Component for PageNavigation {
             ActivityHistory::at_database_path(lazaret_database_path(&data_directory));
         let quarantine_page = QuarantineEntriesPage::builder()
             .launch(QuarantineEntriesPageInit {
+                moment_formatters,
                 sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
@@ -754,6 +759,7 @@ impl Component for PageNavigation {
             );
         let scan_page = ScanPage::builder()
             .launch(ScanPageInit {
+                moment_formatters,
                 sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
@@ -769,6 +775,7 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_scan_output);
         let removable_drives_page = RemovableDrivesPage::builder()
             .launch(RemovableDrivesPageInit {
+                moment_formatters,
                 sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
@@ -777,19 +784,27 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_removable_drives_output);
         let database_updates_page = DatabaseUpdatesPage::builder()
             .launch(DatabaseUpdatesPageInit {
+                moment_formatters,
                 activity_history: activity_history.clone(),
                 sandbox_kind,
                 system_bus: system_bus.clone(),
             })
             .forward(sender.input_sender(), forwarded_database_updates_output);
         let scan_engine_page = ScanEnginePage::builder()
-            .launch(sandbox_kind)
+            .launch(ScanEnginePageInit {
+                sandbox_kind,
+                moment_formatters,
+            })
             .forward(sender.input_sender(), forwarded_scan_engine_output);
         let on_access_page = OnAccessPage::builder()
-            .launch(sandbox_kind)
+            .launch(OnAccessPageInit {
+                sandbox_kind,
+                moment_formatters,
+            })
             .forward(sender.input_sender(), forwarded_on_access_output);
         let scheduled_scans_page = ScheduledScansPage::builder()
             .launch(ScheduledScansPageInit {
+                moment_formatters,
                 activity_history: activity_history.clone(),
                 sandbox_kind,
                 system_bus: system_bus.clone(),
@@ -798,6 +813,7 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_scheduled_scans_output);
         let sent_samples_page = SentSamplesPage::builder()
             .launch(SentSamplesPageInit {
+                moment_formatters,
                 sandbox_kind,
                 activity_history: activity_history.clone(),
                 quarantine_vault: quarantine_vault.clone(),
@@ -805,13 +821,17 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_sent_samples_output);
         let detections_page = BackgroundDetectionsPage::builder()
             .launch(BackgroundDetectionsPageInit {
+                moment_formatters,
                 sandbox_kind,
                 activity_history: activity_history.clone(),
                 quarantine_vault,
             })
             .forward(sender.input_sender(), forwarded_detections_output);
         let trusted_detections_page = TrustedDetectionsPage::builder()
-            .launch(sandbox_kind)
+            .launch(TrustedDetectionsPageInit {
+                sandbox_kind,
+                moment_formatters,
+            })
             .forward(sender.input_sender(), forwarded_trusted_detections_output);
         let signature_sources_page = SignatureSourcesPage::builder()
             .launch(sandbox_kind)
@@ -821,6 +841,7 @@ impl Component for PageNavigation {
             next_state: initial_start_state,
         } = initial_start_page(navigation_init.startup_page);
         let mut model = Self {
+            moment_formatters,
             sandbox_kind,
             visible_page: initial_page,
             sidebar_column: SidebarNavigationColumn::builder()

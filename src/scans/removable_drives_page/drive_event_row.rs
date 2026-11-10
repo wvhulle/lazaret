@@ -3,7 +3,7 @@ use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent}
 use crate::{
     host_services::{
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-        desktop::locale_formatting::exact_local_time_text,
+        desktop::locale_formatting::MomentFormatters,
     },
     scans::removable_drives_page::{
         removable_drives_presentation::{drive_decision_icon, drive_decision_text},
@@ -12,22 +12,29 @@ use crate::{
 };
 
 pub struct DriveEventRow {
+    pub moment_formatters: &'static MomentFormatters,
     drive_event: DriveEvent,
 }
 
 impl DriveEventRow {
     fn event_subtitle(&self) -> String {
+        let moment_formatters = self.moment_formatters;
         format!(
             "{} · {}",
-            exact_local_time_text(self.drive_event.seen_at),
+            moment_formatters.exact_moment_text(self.drive_event.seen_at),
             drive_decision_text(self.drive_event.drive_decision)
         )
     }
 }
 
+pub struct DriveEventRowInit {
+    pub drive_event: DriveEvent,
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::factory(pub)]
 impl FactoryComponent for DriveEventRow {
-    type Init = DriveEvent;
+    type Init = DriveEventRowInit;
     type Input = ();
     type Output = ();
     type CommandOutput = ();
@@ -46,10 +53,16 @@ impl FactoryComponent for DriveEventRow {
     }
 
     fn init_model(
-        drive_event: Self::Init,
+        DriveEventRowInit {
+            drive_event,
+            moment_formatters,
+        }: Self::Init,
         _row_index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { drive_event }
+        Self {
+            drive_event,
+            moment_formatters,
+        }
     }
 }

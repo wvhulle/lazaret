@@ -10,7 +10,7 @@ use crate::{
         activity_history::activity_history_database::{
             ActivityEntryRecord, ActivityRecord, ScanActivityStatus, UpdateActivityStatus,
         },
-        desktop::locale_formatting::exact_local_time_text,
+        desktop::locale_formatting::MomentFormatters,
     },
     shared_widgets::activity_entries::activity_export_formats::{
         activity_status_text, activity_summary_text,
@@ -39,10 +39,13 @@ fn status_icon(activity_record: &ActivityRecord) -> &'static str {
     }
 }
 
-fn entry_subtitle(activity_entry: &ActivityEntryRecord) -> String {
+fn entry_subtitle(
+    moment_formatters: &MomentFormatters,
+    activity_entry: &ActivityEntryRecord,
+) -> String {
     let first_target = activity_entry.activity_record.scan_targets().first();
     [
-        exact_local_time_text(activity_entry.started_at),
+        moment_formatters.exact_moment_text(activity_entry.started_at),
         activity_status_text(&activity_entry.activity_record),
     ]
     .into_iter()
@@ -52,12 +55,18 @@ fn entry_subtitle(activity_entry: &ActivityEntryRecord) -> String {
 }
 
 pub struct ActivityEntryRow {
+    pub moment_formatters: &'static MomentFormatters,
     pub activity_entry: ActivityEntryRecord,
+}
+
+pub struct ActivityEntryRowInit {
+    pub activity_entry: ActivityEntryRecord,
+    pub moment_formatters: &'static MomentFormatters,
 }
 
 #[relm4::factory(pub)]
 impl FactoryComponent for ActivityEntryRow {
-    type Init = ActivityEntryRecord;
+    type Init = ActivityEntryRowInit;
     type Input = ();
     type Output = ();
     type CommandOutput = ();
@@ -68,7 +77,7 @@ impl FactoryComponent for ActivityEntryRow {
             set_use_markup: false,
             set_activatable: true,
             set_title: &activity_summary_text(&self.activity_entry),
-            set_subtitle: &entry_subtitle(&self.activity_entry),
+            set_subtitle: &entry_subtitle(self.moment_formatters, &self.activity_entry),
 
             add_suffix = &gtk::Image {
                 set_icon_name: Some(status_icon(&self.activity_entry.activity_record)),
@@ -78,10 +87,16 @@ impl FactoryComponent for ActivityEntryRow {
     }
 
     fn init_model(
-        activity_entry: ActivityEntryRecord,
+        ActivityEntryRowInit {
+            activity_entry,
+            moment_formatters,
+        }: Self::Init,
         _row_index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { activity_entry }
+        Self {
+            activity_entry,
+            moment_formatters,
+        }
     }
 }

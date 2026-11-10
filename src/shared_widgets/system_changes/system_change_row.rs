@@ -3,18 +3,20 @@ use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent}
 use crate::{
     host_services::{
         clamav_admin_service::admin_audit_records::{AdminAuditEntry, Requester},
-        desktop::locale_formatting::exact_local_time_text,
+        desktop::locale_formatting::MomentFormatters,
     },
     translated_messages,
 };
 
 pub struct SystemChangeRow {
+    pub moment_formatters: &'static MomentFormatters,
     audit_entry: AdminAuditEntry,
 }
 
 impl SystemChangeRow {
     fn row_subtitle(&self) -> String {
-        let recorded_time_text = exact_local_time_text(self.audit_entry.recorded_at);
+        let moment_formatters = self.moment_formatters;
+        let recorded_time_text = moment_formatters.exact_moment_text(self.audit_entry.recorded_at);
         let outcome_text = self.audit_entry.audited_outcome.described();
         match self.audit_entry.requester {
             Requester::KnownUser { user_id } => translated_messages::widgets::known_user(
@@ -29,9 +31,14 @@ impl SystemChangeRow {
     }
 }
 
+pub struct SystemChangeRowInit {
+    pub audit_entry: AdminAuditEntry,
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::factory(pub)]
 impl FactoryComponent for SystemChangeRow {
-    type Init = AdminAuditEntry;
+    type Init = SystemChangeRowInit;
     type Input = ();
     type Output = ();
     type CommandOutput = ();
@@ -54,10 +61,16 @@ impl FactoryComponent for SystemChangeRow {
     }
 
     fn init_model(
-        audit_entry: Self::Init,
+        SystemChangeRowInit {
+            audit_entry,
+            moment_formatters,
+        }: Self::Init,
         _row_index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { audit_entry }
+        Self {
+            audit_entry,
+            moment_formatters,
+        }
     }
 }

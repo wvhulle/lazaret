@@ -1,7 +1,7 @@
 use crate::{
     host_services::{
         clamav_admin_service::live_settings_client::StoredOverridesFailure,
-        desktop::locale_formatting::exact_local_time_text,
+        desktop::locale_formatting::MomentFormatters,
         protection_evidence::host_protection_evidence::{
             OverriddenSetting, OverridesChangeTime, OverridesReadFailure, ReducedSetting,
             RuntimeReductions,
@@ -35,6 +35,7 @@ impl ReducedSettingGroup {
 }
 
 fn reduced_settings_status(
+    moment_formatters: &MomentFormatters,
     reduced_settings: &[&ReducedSetting],
     change_time: OverridesChangeTime,
 ) -> String {
@@ -43,7 +44,7 @@ fn reduced_settings_status(
         OverridesChangeTime::ChangedAt { changed_at } => {
             translated_messages::widgets::count_settings_reduced_since(
                 setting_count,
-                exact_local_time_text(changed_at),
+                moment_formatters.exact_moment_text(changed_at),
             )
         }
         OverridesChangeTime::ChangeTimeUnknown => {
@@ -52,11 +53,16 @@ fn reduced_settings_status(
     }
 }
 
-fn override_change_time_row(change_time: OverridesChangeTime) -> StepEvidenceRow {
+fn override_change_time_row(
+    moment_formatters: &MomentFormatters,
+    change_time: OverridesChangeTime,
+) -> StepEvidenceRow {
     evidence_row(
         translated_messages::widgets::changed_label(),
         match change_time {
-            OverridesChangeTime::ChangedAt { changed_at } => exact_local_time_text(changed_at),
+            OverridesChangeTime::ChangedAt { changed_at } => {
+                moment_formatters.exact_moment_text(changed_at)
+            }
             OverridesChangeTime::ChangeTimeUnknown => {
                 translated_messages::widgets::change_time_unknown_override()
             }
@@ -130,6 +136,7 @@ pub fn runtime_reduction_condition(
 }
 
 pub fn runtime_reduction_step<StepAction: StepActionButton>(
+    moment_formatters: &MomentFormatters,
     runtime_reductions: &RuntimeReductions,
     setting_group: ReducedSettingGroup,
     header_action: StepActionSlot<StepAction>,
@@ -155,7 +162,7 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
                 TimelineStep::settled(
                     translated_messages::widgets::protection_reduced_purpose(),
                     translated_messages::widgets::administrator_changed_runtime(),
-                    reduced_settings_status(&grouped_settings, *change_time),
+                    reduced_settings_status(moment_formatters, &grouped_settings, *change_time),
                     SettledStep {
                         evidence_rows: plain_rows(grouped_settings.iter().map(|reduced_setting| {
                             evidence_row(
@@ -194,7 +201,10 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
                                         ),
                                     )
                                 })
-                                .chain(std::iter::once(override_change_time_row(*change_time))),
+                                .chain(std::iter::once(override_change_time_row(
+                                    moment_formatters,
+                                    *change_time,
+                                ))),
                         ),
                         header_action,
                         ..SettledStep::without_offers(node_state)
@@ -208,8 +218,11 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
 #[cfg(test)]
 mod runtime_reduction_steps_tests {
     use super::*;
-    use crate::shared_widgets::step_timeline::timeline_step_contents::{
-        ActionConsequence, OfferedAction, StepNodeState,
+    use crate::{
+        host_services::protection_evidence::protection_evidence_fixtures::english_formatters,
+        shared_widgets::step_timeline::timeline_step_contents::{
+            ActionConsequence, OfferedAction, StepNodeState,
+        },
     };
 
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -249,8 +262,12 @@ mod runtime_reduction_steps_tests {
         }
     }
 
-    fn reduction_rows(setting_group: ReducedSettingGroup) -> Vec<String> {
+    fn reduction_rows(
+        moment_formatters: &MomentFormatters,
+        setting_group: ReducedSettingGroup,
+    ) -> Vec<String> {
         runtime_reduction_step::<ReviewStepAction>(
+            moment_formatters,
             &mixed_reductions(),
             setting_group,
             StepActionSlot::NoAction,
@@ -267,24 +284,27 @@ mod runtime_reduction_steps_tests {
 
     #[test]
     fn each_group_lists_only_its_own_reduced_keys() {
+        let moment_formatters = &english_formatters();
         assert_eq!(
-            reduction_rows(ReducedSettingGroup::OnAccessSettings),
+            reduction_rows(moment_formatters, ReducedSettingGroup::OnAccessSettings),
             vec!["OnAccessPrevention"]
         );
         assert_eq!(
-            reduction_rows(ReducedSettingGroup::EngineSettings),
+            reduction_rows(moment_formatters, ReducedSettingGroup::EngineSettings),
             vec!["DetectPUA"]
         );
     }
 
     #[test]
     fn a_group_without_reduced_keys_adds_no_step_and_stays_met() {
+        let moment_formatters = &english_formatters();
         let on_access_only = RuntimeReductions::SettingsReduced {
             change_time: OverridesChangeTime::ChangeTimeUnknown,
             reduced_settings: vec![reduced_setting("OnAccessPrevention")],
         };
         assert_eq!(
             runtime_reduction_step::<ReviewStepAction>(
+                moment_formatters,
                 &on_access_only,
                 ReducedSettingGroup::EngineSettings,
                 StepActionSlot::NoAction,
@@ -299,6 +319,7 @@ mod runtime_reduction_steps_tests {
 
     #[test]
     fn unreadable_overrides_concern_every_group() {
+        let moment_formatters = &english_formatters();
         let unreadable_overrides =
             RuntimeReductions::OverridesUnreadable(OverridesReadFailure::ReadingTaskInterrupted);
         [
@@ -308,6 +329,7 @@ mod runtime_reduction_steps_tests {
         .into_iter()
         .for_each(|setting_group| {
             let reduction_step = runtime_reduction_step(
+                moment_formatters,
                 &unreadable_overrides,
                 setting_group,
                 StepActionSlot::ActionOffered(OfferedAction::plain(

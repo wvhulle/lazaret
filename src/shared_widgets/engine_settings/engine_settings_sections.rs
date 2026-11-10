@@ -26,7 +26,7 @@ use crate::{
             typed_setting_values::{SwitchPosition, TypedSettingValue, parse_setting_value},
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-        desktop::flatpak_sandbox::SandboxKind,
+        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters},
     },
     shared_widgets::{
         awaited_dialogs::{
@@ -42,7 +42,7 @@ use crate::{
                 RootOwnedConfigFile, RowChangeActivity, SettingLabel, SettingRowState,
                 SettingSubject, ShownSettingValue,
             },
-            setting_row_widget::{SettingRow, SettingRowInput, SettingRowOutput},
+            setting_row_widget::{SettingRow, SettingRowInit, SettingRowInput, SettingRowOutput},
         },
     },
     translated_messages,
@@ -220,11 +220,13 @@ const fn confirmation_verdict(change_readiness: LiveChangeReadiness) -> Confirma
 }
 
 pub struct EngineSettingsSectionsInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub settings_layout: EngineSettingsLayout,
     pub sandbox_kind: SandboxKind,
 }
 
 pub struct EngineSettingsSections {
+    pub moment_formatters: &'static MomentFormatters,
     sandbox_kind: SandboxKind,
     settings_layout: EngineSettingsLayout,
     settings_section: EngineSettingsSection,
@@ -456,6 +458,7 @@ fn shown_value_of(setting_key: &str, setting_value: &str) -> ShownSettingValue {
 }
 
 fn replace_row_states(
+    moment_formatters: &'static MomentFormatters,
     row_factory: &mut FactoryVecDeque<SettingRow>,
     row_states: Vec<SettingRowState>,
 ) {
@@ -487,7 +490,10 @@ fn replace_row_states(
     let mut row_guard = row_factory.guard();
     row_guard.clear();
     row_states.into_iter().for_each(|row_state| {
-        row_guard.push_back(row_state);
+        row_guard.push_back(SettingRowInit {
+            row_state,
+            moment_formatters,
+        });
     });
 }
 
@@ -680,6 +686,7 @@ impl EngineSettingsSections {
     }
 
     fn rebuild_rows(&mut self) {
+        let moment_formatters = self.moment_formatters;
         let detection_states = if self.settings_layout.shows_detection_switches() {
             DETECTION_OPTIONS
                 .into_iter()
@@ -688,9 +695,13 @@ impl EngineSettingsSections {
         } else {
             Vec::new()
         };
-        replace_row_states(&mut self.detection_rows, detection_states);
+        replace_row_states(
+            moment_formatters,
+            &mut self.detection_rows,
+            detection_states,
+        );
         let config_states = self.config_row_states();
-        replace_row_states(&mut self.setting_rows, config_states);
+        replace_row_states(moment_formatters, &mut self.setting_rows, config_states);
     }
 
     fn refresh_row_activity(&self) {
@@ -965,6 +976,7 @@ impl Component for EngineSettingsSections {
 
     fn init(
         EngineSettingsSectionsInit {
+            moment_formatters,
             settings_layout,
             sandbox_kind,
         }: Self::Init,
@@ -985,6 +997,7 @@ impl Component for EngineSettingsSections {
                 EngineSettingsSectionsInput::SettingRowReported,
             );
         let model = Self {
+            moment_formatters,
             sandbox_kind,
             settings_layout,
             settings_section,

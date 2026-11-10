@@ -1,9 +1,34 @@
 use relm4::{gtk, gtk::prelude::*, typed_view::list::RelmListItem};
 
 use crate::{
-    host_services::desktop::locale_formatting::log_local_time_text,
+    host_services::desktop::locale_formatting::MomentFormatters,
     shared_widgets::service_log::service_log_state::ShownLogRow,
 };
+
+pub enum ShownLogTime {
+    NoLogTime,
+    LoggedAt(String),
+}
+
+pub struct LogEntryRow {
+    shown_log_row: ShownLogRow,
+    shown_log_time: ShownLogTime,
+}
+
+pub fn log_entry_row(
+    moment_formatters: &MomentFormatters,
+    shown_log_row: ShownLogRow,
+) -> LogEntryRow {
+    let shown_log_time = shown_log_row
+        .logged_at
+        .map_or(ShownLogTime::NoLogTime, |logged_at| {
+            ShownLogTime::LoggedAt(moment_formatters.log_moment_text(logged_at))
+        });
+    LogEntryRow {
+        shown_log_row,
+        shown_log_time,
+    }
+}
 
 const LEVEL_STYLE_CLASSES: [&str; 3] = ["error", "warning", "dim-label"];
 
@@ -28,7 +53,7 @@ fn plain_text_label(style_classes: &[&str]) -> gtk::Label {
         .build()
 }
 
-impl RelmListItem for ShownLogRow {
+impl RelmListItem for LogEntryRow {
     type Root = gtk::Box;
     type Widgets = LogEntryWidgets;
 
@@ -69,12 +94,12 @@ impl RelmListItem for ShownLogRow {
     }
 
     fn bind(&mut self, entry_widgets: &mut Self::Widgets, _entry_box: &mut Self::Root) {
-        let level_icon_name = self.row_level.level_icon_name();
+        let level_icon_name = self.shown_log_row.row_level.level_icon_name();
         entry_widgets.level_icon.set_icon_name(level_icon_name);
         entry_widgets
             .level_icon
             .set_visible(level_icon_name.is_some());
-        let level_text = self.row_level.level_label_text();
+        let level_text = self.shown_log_row.row_level.level_label_text();
         entry_widgets
             .level_label
             .set_visible(!level_text.is_empty());
@@ -86,18 +111,31 @@ impl RelmListItem for ShownLogRow {
             LEVEL_STYLE_CLASSES
                 .iter()
                 .for_each(|style_class| level_widget.remove_css_class(style_class));
-            level_widget.add_css_class(self.row_level.level_style_class().unwrap_or("dim-label"));
+            level_widget.add_css_class(
+                self.shown_log_row
+                    .row_level
+                    .level_style_class()
+                    .unwrap_or("dim-label"),
+            );
+        }
+        match &self.shown_log_time {
+            ShownLogTime::LoggedAt(logged_time_text) => {
+                entry_widgets.time_label.set_label(logged_time_text);
+                entry_widgets.time_label.set_visible(true);
+            }
+            ShownLogTime::NoLogTime => {
+                entry_widgets.time_label.set_label("");
+                entry_widgets.time_label.set_visible(false);
+            }
         }
         entry_widgets
-            .time_label
-            .set_label(&self.logged_at.map_or_else(String::new, log_local_time_text));
-        entry_widgets
-            .time_label
-            .set_visible(self.logged_at.is_some());
-        entry_widgets.sender_label.set_label(&self.sender_text);
+            .sender_label
+            .set_label(&self.shown_log_row.sender_text);
         entry_widgets
             .sender_label
-            .set_visible(!self.sender_text.is_empty());
-        entry_widgets.message_label.set_label(&self.message_text);
+            .set_visible(!self.shown_log_row.sender_text.is_empty());
+        entry_widgets
+            .message_label
+            .set_label(&self.shown_log_row.message_text);
     }
 }

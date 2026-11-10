@@ -8,13 +8,13 @@ use crate::{
         activity_history::activity_history_database::{
             ActivityEntryRecord, ActivityHistory, ActivityHistoryFailure,
         },
-        desktop::failure_journal_log::log_failed_outcome,
+        desktop::{failure_journal_log::log_failed_outcome, locale_formatting::MomentFormatters},
     },
     shared_widgets::{
         activity_entries::{
-            activity_entry_row::ActivityEntryRow,
+            activity_entry_row::{ActivityEntryRow, ActivityEntryRowInit},
             activity_history_filter::{ActivityHistoryFilter, FilteredHistoryView},
-            activity_transcript_dialog::ActivityTranscriptDialog,
+            activity_transcript_dialog::{ActivityTranscriptDialog, ActivityTranscriptDialogInit},
         },
         database_migration_failure_text::describe_history_failure,
     },
@@ -22,6 +22,7 @@ use crate::{
 };
 
 pub struct ActivityHistoryGroupInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub activity_history: ActivityHistory,
     pub history_filter: ActivityHistoryFilter,
     pub group_title: String,
@@ -36,6 +37,7 @@ enum TranscriptDialogView {
 }
 
 pub struct ActivityHistoryGroup {
+    pub moment_formatters: &'static MomentFormatters,
     activity_history: ActivityHistory,
     history_filter: ActivityHistoryFilter,
     history_view: FilteredHistoryView,
@@ -74,11 +76,15 @@ impl ActivityHistoryGroup {
     }
 
     fn open_transcript(&mut self, row_position: usize, root: &adw::PreferencesGroup) {
+        let moment_formatters = self.moment_formatters;
         let Some(activity_entry) = self.history_view.listed_entries().get(row_position) else {
             return;
         };
         let transcript_dialog = ActivityTranscriptDialog::builder()
-            .launch(activity_entry.clone())
+            .launch(ActivityTranscriptDialogInit {
+                activity_entry: activity_entry.clone(),
+                moment_formatters,
+            })
             .detach();
         transcript_dialog.widget().present(Some(root));
         self.transcript_dialog = TranscriptDialogView::DialogOpen {
@@ -146,7 +152,9 @@ impl Component for ActivityHistoryGroup {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let moment_formatters = group_init.moment_formatters;
         let model = Self {
+            moment_formatters,
             activity_history: group_init.activity_history.clone(),
             history_filter: group_init.history_filter,
             history_view: FilteredHistoryView::HistoryLoading,
@@ -181,6 +189,7 @@ impl Component for ActivityHistoryGroup {
         _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let moment_formatters = self.moment_formatters;
         match group_command {
             ActivityHistoryGroupCommand::HistoryLoaded(load_outcome) => {
                 log_failed_outcome("loading the scan history failed", &load_outcome);
@@ -193,7 +202,10 @@ impl Component for ActivityHistoryGroup {
                     .iter()
                     .cloned()
                     .for_each(|activity_entry| {
-                        history_guard.push_back(activity_entry);
+                        history_guard.push_back(ActivityEntryRowInit {
+                            activity_entry,
+                            moment_formatters,
+                        });
                     });
             }
         }

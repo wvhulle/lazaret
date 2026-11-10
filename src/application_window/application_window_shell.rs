@@ -33,6 +33,7 @@ use crate::{
             application_directories::application_data_directory,
             file_process_lock::{ProcessFileLock, wait_for_file_lock},
             flatpak_sandbox::SandboxKind,
+            locale_formatting::MomentFormatters,
             stored_settings::{CLOSE_ACTION_KEY, application_settings},
             stored_settings_watch::forward_setting_changes,
         },
@@ -46,7 +47,8 @@ use crate::{
         systemd_bus::host_systemd_units::{SystemBusAccess, UserBusAccess},
     },
     preferences_dialog::preferences_dialog_component::{
-        ONLINE_SERVICES_PAGE_NAME, PreferencesDialog, PreferencesDialogOutput,
+        ONLINE_SERVICES_PAGE_NAME, PreferencesDialog, PreferencesDialogInit,
+        PreferencesDialogOutput,
     },
     shared_widgets::quarantine_failure_text::describe_quarantine_failure,
     translated_messages,
@@ -208,6 +210,7 @@ fn register_window_actions(sender: &AsyncComponentSender<ApplicationWindowShell>
 }
 
 async fn opened_window_content(
+    moment_formatters: &'static MomentFormatters,
     sandbox_kind: SandboxKind,
     window_root: &adw::ApplicationWindow,
     startup_request: StartupRequest,
@@ -221,6 +224,7 @@ async fn opened_window_content(
     WindowContent::PagesShown {
         page_navigation: PageNavigation::builder()
             .launch(PageNavigationInit {
+                moment_formatters,
                 sandbox_kind,
                 system_bus: SystemBusAccess::connect().await,
                 user_bus: UserBusAccess::connect().await,
@@ -276,6 +280,7 @@ impl WindowContent {
 pub struct ApplicationWindowShellInit {
     pub startup_request: StartupRequest,
     pub sandbox_kind: SandboxKind,
+    pub moment_formatters: &'static MomentFormatters,
 }
 
 #[relm4::component(async, pub)]
@@ -302,6 +307,7 @@ impl AsyncComponent for ApplicationWindowShell {
         ApplicationWindowShellInit {
             startup_request,
             sandbox_kind,
+            moment_formatters,
         }: Self::Init,
         root: Self::Root,
         sender: AsyncComponentSender<Self>,
@@ -317,20 +323,31 @@ impl AsyncComponent for ApplicationWindowShell {
         );
         register_window_actions(&sender);
         let model = Self {
-            window_content: opened_window_content(sandbox_kind, &root, startup_request, &sender)
-                .await,
+            window_content: opened_window_content(
+                moment_formatters,
+                sandbox_kind,
+                &root,
+                startup_request,
+                &sender,
+            )
+            .await,
             tray_connection: TrayConnection::Starting,
             close_action: CloseAction::read_from(&stored_settings),
             stored_settings,
             start_in_background,
-            preferences_dialog: PreferencesDialog::builder().launch(sandbox_kind).forward(
-                sender.input_sender(),
-                |preferences_output| match preferences_output {
-                    PreferencesDialogOutput::StoredServiceKeyChanged => {
-                        ApplicationWindowShellInput::StoredServiceKeyChanged
-                    }
-                },
-            ),
+            preferences_dialog: PreferencesDialog::builder()
+                .launch(PreferencesDialogInit {
+                    sandbox_kind,
+                    moment_formatters,
+                })
+                .forward(
+                    sender.input_sender(),
+                    |preferences_output| match preferences_output {
+                        PreferencesDialogOutput::StoredServiceKeyChanged => {
+                            ApplicationWindowShellInput::StoredServiceKeyChanged
+                        }
+                    },
+                ),
         };
         let content_widget = model.window_content.content_widget();
         let widgets = view_output!();

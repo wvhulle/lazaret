@@ -6,7 +6,10 @@ use relm4::{
 };
 
 use crate::{
-    host_services::systemd_journal::service_log_contents::ServiceLogContents,
+    host_services::{
+        desktop::locale_formatting::MomentFormatters,
+        systemd_journal::service_log_contents::ServiceLogContents,
+    },
     shared_widgets::{
         awaited_dialogs::{
             TextExportOutcome, deliver_local_outcome, describe_export_failure, exported_text,
@@ -15,15 +18,19 @@ use crate::{
         loading_indicators::{
             LOADED_PAGE_NAME, LOADING_PAGE_NAME, empty_placeholder_row, loading_placeholder_row,
         },
-        service_log::service_log_state::{
-            LogRowFilter, MISSING_LOG_PAGE_NAME, NO_MATCHING_ROWS_PAGE_NAME, ServiceLogView,
-            ShownLogRow, exported_log_text, filtered_log_rows,
+        service_log::{
+            log_entry_row::{LogEntryRow, log_entry_row},
+            service_log_state::{
+                LogRowFilter, MISSING_LOG_PAGE_NAME, NO_MATCHING_ROWS_PAGE_NAME, ServiceLogView,
+                exported_log_text, filtered_log_rows,
+            },
         },
     },
     translated_messages,
 };
 
 pub struct ServiceLogGroupInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub group_title: String,
     pub missing_log_title: String,
     pub export_file_name: &'static str,
@@ -31,10 +38,11 @@ pub struct ServiceLogGroupInit {
 }
 
 pub struct ServiceLogGroup {
+    moment_formatters: &'static MomentFormatters,
     export_file_name: &'static str,
     log_view: ServiceLogView,
     row_filter: LogRowFilter,
-    log_list: TypedListView<ShownLogRow, gtk::NoSelection>,
+    log_list: TypedListView<LogEntryRow, gtk::NoSelection>,
     shown_row_count: usize,
     _log_follow: RunningStream,
 }
@@ -81,7 +89,13 @@ impl ServiceLogGroup {
         };
         self.shown_row_count = shown_rows.len();
         self.log_list.clear();
-        self.log_list.extend_from_iter(shown_rows.into_iter().rev());
+        let moment_formatters = self.moment_formatters;
+        self.log_list.extend_from_iter(
+            shown_rows
+                .into_iter()
+                .rev()
+                .map(|shown_log_row| log_entry_row(moment_formatters, shown_log_row)),
+        );
     }
 }
 
@@ -190,13 +204,16 @@ impl Component for ServiceLogGroup {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let _moment_formatters = group_init.moment_formatters;
         let ServiceLogGroupInit {
+            moment_formatters,
             group_title,
             missing_log_title,
             export_file_name,
             log_updates,
         } = group_init;
         let model = Self {
+            moment_formatters,
             export_file_name,
             log_view: ServiceLogView::LogReading,
             row_filter: LogRowFilter::default(),

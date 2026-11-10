@@ -8,7 +8,7 @@ use crate::{
             signature_provider_catalogue::{provider_of_signature, signature_source_name},
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-        desktop::locale_formatting::exact_local_time_text,
+        desktop::locale_formatting::MomentFormatters,
         detection_journal::detection_history_store::{
             DetectionSources, DetectionState, ResolutionKind, StoredDetection,
         },
@@ -204,7 +204,10 @@ fn source_text(stored_detection: &StoredDetection) -> String {
     }
 }
 
-fn detected_step(stored_detection: &StoredDetection) -> IncidentStep {
+fn detected_step(
+    moment_formatters: &MomentFormatters,
+    stored_detection: &StoredDetection,
+) -> IncidentStep {
     let signature_text = sanitize_scanner_line(&stored_detection.signature_name);
     let evidence_rows = vec![
         evidence_row(
@@ -221,7 +224,7 @@ fn detected_step(stored_detection: &StoredDetection) -> IncidentStep {
         ),
         evidence_row(
             translated_messages::findings::last_seen(),
-            exact_local_time_text(stored_detection.last_seen),
+            moment_formatters.exact_moment_text(stored_detection.last_seen),
         ),
         evidence_row(
             translated_messages::findings::times_seen(),
@@ -237,7 +240,7 @@ fn detected_step(stored_detection: &StoredDetection) -> IncidentStep {
         },
         translated_messages::findings::signature_first_seen_time(
             &signature_text,
-            exact_local_time_text(stored_detection.first_seen),
+            moment_formatters.exact_moment_text(stored_detection.first_seen),
         ),
         SettledStep {
             evidence_rows,
@@ -469,7 +472,10 @@ fn review_step(
     )])
 }
 
-fn resolved_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
+fn resolved_step(
+    moment_formatters: &MomentFormatters,
+    displayed_detection: &DisplayedDetection,
+) -> IncidentStep {
     let stored_detection = &displayed_detection.stored_detection;
     let step_title = translated_messages::findings::resolved_title();
     let mechanism_details = translated_messages::findings::resolved_detection_opens_again();
@@ -485,7 +491,7 @@ fn resolved_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
         DetectionState::Resolved { resolved_at, .. } => {
             translated_messages::findings::resolved_state_step(
                 detection_state_text(displayed_detection),
-                exact_local_time_text(*resolved_at),
+                moment_formatters.exact_moment_text(*resolved_at),
             )
         }
         DetectionState::Open => detection_state_text(displayed_detection),
@@ -521,6 +527,7 @@ fn resolved_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
 }
 
 pub fn incident_timeline(
+    moment_formatters: &MomentFormatters,
     displayed_detection: &DisplayedDetection,
     deletion_prompt: DeletionPrompt,
     lookup_state: &SignatureLookupState,
@@ -528,7 +535,7 @@ pub fn incident_timeline(
     distribution_family: DistributionFamily,
 ) -> Vec<IncidentStep> {
     vec![
-        detected_step(&displayed_detection.stored_detection),
+        detected_step(moment_formatters, &displayed_detection.stored_detection),
         blocked_step(displayed_detection),
         review_step(
             displayed_detection,
@@ -537,7 +544,7 @@ pub fn incident_timeline(
             service_access,
             distribution_family,
         ),
-        resolved_step(displayed_detection),
+        resolved_step(moment_formatters, displayed_detection),
     ]
 }
 
@@ -547,9 +554,12 @@ mod incident_timeline_presentation_tests {
 
     use super::*;
     use crate::{
-        host_services::threat_intel::{
-            malware_bazaar_client::MalwareFamily,
-            service_access::{ApiKey, KeyProblem, OnlineServiceAccess},
+        host_services::{
+            protection_evidence::protection_evidence_fixtures::english_formatters,
+            threat_intel::{
+                malware_bazaar_client::MalwareFamily,
+                service_access::{ApiKey, KeyProblem, OnlineServiceAccess},
+            },
         },
         shared_widgets::step_timeline::timeline_step_contents::{
             ButtonStyle, StepNodeState, StepPhase,
@@ -580,10 +590,12 @@ mod incident_timeline_presentation_tests {
     }
 
     fn review_choices(
+        moment_formatters: &MomentFormatters,
         displayed_detection: &DisplayedDetection,
         deletion_prompt: DeletionPrompt,
     ) -> Vec<StepChoiceRow<IncidentStepAction>> {
         let review_step = incident_timeline(
+            moment_formatters,
             displayed_detection,
             deletion_prompt,
             &SignatureLookupState::NotLookedUp,
@@ -598,10 +610,11 @@ mod incident_timeline_presentation_tests {
     }
 
     fn choice_actions(
+        moment_formatters: &MomentFormatters,
         displayed_detection: &DisplayedDetection,
         deletion_prompt: DeletionPrompt,
     ) -> Vec<IncidentStepAction> {
-        review_choices(displayed_detection, deletion_prompt)
+        review_choices(moment_formatters, displayed_detection, deletion_prompt)
             .into_iter()
             .map(|choice_row| choice_row.chosen_action)
             .filter(|chosen_action| {
@@ -612,7 +625,12 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn permanent_deletion_is_always_shown_as_destructive() {
-        let deletion_choices = review_choices(&blocked_detection(), DeletionPrompt::AwaitingAnswer);
+        let moment_formatters = &english_formatters();
+        let deletion_choices = review_choices(
+            moment_formatters,
+            &blocked_detection(),
+            DeletionPrompt::AwaitingAnswer,
+        );
         let choice_styles = deletion_choices
             .iter()
             .map(|choice_row| choice_row.offered_choice().button_style())
@@ -633,7 +651,9 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn a_blocked_file_explains_itself_and_asks_for_a_decision() {
+        let moment_formatters = &english_formatters();
         let incident_steps = incident_timeline(
+            moment_formatters,
             &blocked_detection(),
             DeletionPrompt::NotAsked,
             &SignatureLookupState::NotLookedUp,
@@ -661,11 +681,20 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn deleting_takes_two_explicit_choices() {
-        let first_choices = choice_actions(&blocked_detection(), DeletionPrompt::NotAsked);
+        let moment_formatters = &english_formatters();
+        let first_choices = choice_actions(
+            moment_formatters,
+            &blocked_detection(),
+            DeletionPrompt::NotAsked,
+        );
         assert!(first_choices.contains(&IncidentStepAction::AskIncidentDeletion));
         assert!(!first_choices.contains(&IncidentStepAction::DeleteIncidentFile));
         assert_eq!(
-            choice_actions(&blocked_detection(), DeletionPrompt::AwaitingAnswer),
+            choice_actions(
+                moment_formatters,
+                &blocked_detection(),
+                DeletionPrompt::AwaitingAnswer
+            ),
             vec![
                 IncidentStepAction::DeleteIncidentFile,
                 IncidentStepAction::CancelIncidentDeletion
@@ -675,6 +704,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn a_file_found_only_by_the_schedule_is_not_reported_as_blocked() {
+        let moment_formatters = &english_formatters();
         let displayed_detection = DisplayedDetection {
             stored_detection: StoredDetection {
                 detection_sources: DetectionSources::ScheduleOnly,
@@ -686,6 +716,7 @@ mod incident_timeline_presentation_tests {
             },
         };
         let incident_steps = incident_timeline(
+            moment_formatters,
             &displayed_detection,
             DeletionPrompt::NotAsked,
             &SignatureLookupState::NotLookedUp,
@@ -705,6 +736,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn a_foreign_file_offers_no_move_or_delete_even_when_blocked() {
+        let moment_formatters = &english_formatters();
         [FileAccess::BlockedOnAccess, FileAccess::Readable]
             .into_iter()
             .for_each(|file_access| {
@@ -716,7 +748,11 @@ mod incident_timeline_presentation_tests {
                     ..blocked_detection()
                 };
                 assert_eq!(
-                    choice_actions(&displayed_detection, DeletionPrompt::NotAsked),
+                    choice_actions(
+                        moment_formatters,
+                        &displayed_detection,
+                        DeletionPrompt::NotAsked
+                    ),
                     vec![IncidentStepAction::DismissIncident]
                 );
             });
@@ -724,13 +760,18 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn an_unresolved_file_that_could_not_be_checked_still_needs_attention() {
+        let moment_formatters = &english_formatters();
         let displayed_detection = DisplayedDetection {
             file_state: DetectedFileState::StateUnknown,
             ..blocked_detection()
         };
         assert!(detection_needs_attention(&displayed_detection));
         assert_eq!(
-            choice_actions(&displayed_detection, DeletionPrompt::NotAsked),
+            choice_actions(
+                moment_formatters,
+                &displayed_detection,
+                DeletionPrompt::NotAsked
+            ),
             vec![IncidentStepAction::DismissIncident]
         );
     }
@@ -756,6 +797,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn a_readable_file_found_on_access_is_not_blamed_on_the_schedule() {
+        let moment_formatters = &english_formatters();
         let displayed_detection = DisplayedDetection {
             stored_detection: StoredDetection {
                 detection_sources: DetectionSources::OnAccessOnly,
@@ -767,6 +809,7 @@ mod incident_timeline_presentation_tests {
             },
         };
         let incident_steps = incident_timeline(
+            moment_formatters,
             &displayed_detection,
             DeletionPrompt::NotAsked,
             &SignatureLookupState::NotLookedUp,

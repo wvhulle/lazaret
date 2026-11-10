@@ -5,8 +5,8 @@ use relm4::{
 
 use crate::{
     host_services::desktop::{
-        preference_keys::PreferenceKey, stored_settings::application_settings,
-        stored_settings_watch::forward_setting_changes,
+        locale_formatting::MomentFormatters, preference_keys::PreferenceKey,
+        stored_settings::application_settings, stored_settings_watch::forward_setting_changes,
     },
     scans::removable_drives_page::drive_mount_checks::{
         DEVICE_SCAN_SETTING_KEYS, DeviceAutoScanSettings,
@@ -52,9 +52,13 @@ fn device_scan_row_specs() -> Vec<PreferenceRowSpec> {
     ]
 }
 
+pub struct DeviceAutoScanSectionInit {
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::component(pub)]
 impl Component for DeviceAutoScanSection {
-    type Init = ();
+    type Init = DeviceAutoScanSectionInit;
     type Input = DeviceAutoScanSectionInput;
     type Output = DeviceAutoScanSectionOutput;
     type CommandOutput = ();
@@ -70,7 +74,7 @@ impl Component for DeviceAutoScanSection {
     }
 
     fn init(
-        _page_init: Self::Init,
+        DeviceAutoScanSectionInit { moment_formatters }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -85,6 +89,7 @@ impl Component for DeviceAutoScanSection {
             stored_settings,
             device_scan_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
+                    moment_formatters,
                     row_specs: device_scan_row_specs(),
                     apply_mode: PreferenceApplyMode::AppliesImmediately,
                 })

@@ -12,7 +12,7 @@ use crate::{
         clamav_config::typed_setting_values::{
             DraftEdit, SIZE_UNITS, SizeUnit, SwitchPosition, TypedSettingValue,
         },
-        desktop::locale_formatting::byte_size_text,
+        desktop::locale_formatting::{MomentFormatters, byte_size_text},
     },
     shared_widgets::setting_row::setting_row_state::{
         ChangeRoute, FollowUpAction, RowChangeActivity, SettingLabel, SettingRowState,
@@ -49,6 +49,7 @@ enum DraftComparison {
 }
 
 pub struct SettingRow {
+    moment_formatters: &'static MomentFormatters,
     row_state: SettingRowState,
     editor_draft: TypedSettingValue,
 }
@@ -133,7 +134,7 @@ fn row_title(row_state: &SettingRowState) -> String {
     }
 }
 
-fn explanation_text(row_state: &SettingRowState) -> String {
+fn explanation_text(moment_formatters: &MomentFormatters, row_state: &SettingRowState) -> String {
     let setting_description = match &row_state.setting_label {
         SettingLabel::DescribedSetting { description, .. } => description.clone(),
         SettingLabel::ConfigKeyOnly => String::new(),
@@ -147,7 +148,7 @@ fn explanation_text(row_state: &SettingRowState) -> String {
     [
         setting_description,
         unreadable_note,
-        source_texts(&row_state.setting_subject).explanation,
+        source_texts(moment_formatters, &row_state.setting_subject).explanation,
         route_explanation(change_route(&row_state.setting_subject)),
     ]
     .into_iter()
@@ -516,15 +517,17 @@ impl SettingRow {
     }
 
     fn header_subtitle(&self) -> String {
+        let moment_formatters = self.moment_formatters;
         if self.row_state.change_activity.shows_applying_spinner() {
             translated_messages::widgets::setting_applying_subtitle()
         } else {
-            source_texts(&self.row_state.setting_subject).short_tag
+            source_texts(moment_formatters, &self.row_state.setting_subject).short_tag
         }
     }
 
     fn source_icon_name(&self) -> Option<&'static str> {
-        match source_texts(&self.row_state.setting_subject).source_emphasis {
+        let moment_formatters = self.moment_formatters;
+        match source_texts(moment_formatters, &self.row_state.setting_subject).source_emphasis {
             SourceEmphasis::PlainSource => None,
             SourceEmphasis::NeedsAttention => Some("dialog-warning-symbolic"),
             SourceEmphasis::FixedValue => Some("changes-prevent-symbolic"),
@@ -667,22 +670,31 @@ impl SettingRow {
     }
 }
 
+pub struct SettingRowInit {
+    pub row_state: SettingRowState,
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 impl FactoryComponent for SettingRow {
     type ParentWidget = adw::PreferencesGroup;
     type CommandOutput = ();
     type Input = SettingRowInput;
     type Output = SettingRowOutput;
-    type Init = SettingRowState;
+    type Init = SettingRowInit;
     type Root = adw::ExpanderRow;
     type Widgets = SettingRowWidgets;
     type Index = DynamicIndex;
 
     fn init_model(
-        row_state: Self::Init,
+        SettingRowInit {
+            row_state,
+            moment_formatters,
+        }: Self::Init,
         _row_index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            moment_formatters,
             editor_draft: shown_value_or_text(&row_state.shown_value),
             row_state,
         }
@@ -743,7 +755,8 @@ impl FactoryComponent for SettingRow {
         detail_box.append(&explanation_label);
         detail_box.append(&action_box);
         root.add_row(&detail_box);
-        let attention_shown = row_needs_attention(&self.row_state.setting_subject);
+        let attention_shown =
+            row_needs_attention(self.moment_formatters, &self.row_state.setting_subject);
         root.set_expanded(attention_shown);
         let mut widgets = SettingRowWidgets {
             expander_row: root,
@@ -790,6 +803,7 @@ impl FactoryComponent for SettingRow {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, sender: FactorySender<Self>) {
+        let moment_formatters = self.moment_formatters;
         self.replace_editor_when_kind_changed(widgets, &sender);
         self.show_draft_in_editor(widgets);
         if follow_up_actions(&self.row_state.setting_subject, &self.row_state.shown_value)
@@ -805,7 +819,7 @@ impl FactoryComponent for SettingRow {
             }
             None => widgets.source_icon.set_visible(false),
         }
-        if source_texts(&self.row_state.setting_subject).source_emphasis
+        if source_texts(moment_formatters, &self.row_state.setting_subject).source_emphasis
             == SourceEmphasis::NeedsAttention
         {
             widgets.source_icon.add_css_class("warning");
@@ -814,7 +828,7 @@ impl FactoryComponent for SettingRow {
             widgets.source_icon.remove_css_class("warning");
             widgets.source_icon.add_css_class("dim-label");
         }
-        let explanation = explanation_text(&self.row_state);
+        let explanation = explanation_text(moment_formatters, &self.row_state);
         widgets.explanation_label.set_label(&explanation);
         widgets
             .expander_row
@@ -823,7 +837,8 @@ impl FactoryComponent for SettingRow {
         widgets
             .expander_row
             .set_enable_expansion(!explanation.is_empty() || !widgets.shown_actions.is_empty());
-        let needs_attention = row_needs_attention(&self.row_state.setting_subject);
+        let needs_attention =
+            row_needs_attention(moment_formatters, &self.row_state.setting_subject);
         if needs_attention && !widgets.attention_shown {
             widgets.expander_row.set_expanded(true);
         }

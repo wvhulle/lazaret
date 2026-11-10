@@ -1,5 +1,3 @@
-use std::sync::OnceLock;
-
 use bytesize::ByteSize;
 use fixed_decimal::Decimal;
 use icu::{
@@ -29,6 +27,7 @@ pub enum LocaleDataMissing {
     RelativeTime(#[from] icu_provider::DataError),
 }
 
+#[derive(Debug)]
 pub struct MomentFormatters {
     date_time_formatter: DateTimeFormatter<YMDT>,
     log_time_formatter: DateTimeFormatter<YMDT>,
@@ -115,6 +114,12 @@ impl MomentFormatters {
         })
     }
 
+    pub fn for_host_locale() -> Self {
+        Self::try_for_locales(&host_locale_for("LC_TIME"), &host_locale_for("LC_MESSAGES"))
+            .or_else(|_missing_locale_data| Self::try_for_locales(&locale!("en"), &locale!("en")))
+            .expect("compiled ICU data always contains English")
+    }
+
     pub fn format_wall_clock(&self, wall_clock: &civil::DateTime) -> String {
         written_text(&self.date_time_formatter.format(wall_clock))
     }
@@ -161,28 +166,6 @@ impl MomentFormatters {
         };
         written_text(&self.days_formatter.format(Decimal::from(unit_count)))
     }
-}
-
-pub fn host_moment_formatters() -> &'static MomentFormatters {
-    static HOST_MOMENT_FORMATTERS: OnceLock<MomentFormatters> = OnceLock::new();
-    HOST_MOMENT_FORMATTERS.get_or_init(|| {
-        MomentFormatters::try_for_locales(
-            &host_locale_for("LC_TIME"),
-            &host_locale_for("LC_MESSAGES"),
-        )
-        .or_else(|_missing_locale_data| {
-            MomentFormatters::try_for_locales(&locale!("en"), &locale!("en"))
-        })
-        .expect("compiled ICU data always contains English")
-    })
-}
-
-pub fn exact_local_time_text(moment: Timestamp) -> String {
-    host_moment_formatters().exact_moment_text(moment)
-}
-
-pub fn log_local_time_text(moment: Timestamp) -> String {
-    host_moment_formatters().log_moment_text(moment)
 }
 
 pub fn byte_size_text(byte_size: ByteSize) -> String {

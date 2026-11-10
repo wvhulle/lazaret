@@ -4,6 +4,7 @@ use crate::{
     findings::quarantine_page::quarantine_entries_page::entry_matches_search,
     host_services::{
         clamav_scanner::content_verdict::ContentVerdict,
+        desktop::locale_formatting::MomentFormatters,
         quarantine_vault::{
             quarantine_entry_database::QuarantineEntryRecord,
             quarantine_file_moves::{QuarantineMoveFailure, RecordedPayloadHash},
@@ -104,6 +105,7 @@ pub struct EntryRowState {
 
 #[derive(Clone, Debug)]
 pub struct QuarantineRowInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub entry_record: QuarantineEntryRecord,
     pub row_state: EntryRowState,
 }
@@ -434,21 +436,31 @@ impl QuarantinePageState {
         }
     }
 
-    pub fn row_init(&self, entry_id: i64) -> Option<QuarantineRowInit> {
+    pub fn row_init(
+        &self,
+        moment_formatters: &'static MomentFormatters,
+        entry_id: i64,
+    ) -> Option<QuarantineRowInit> {
         self.listed_entries()
             .iter()
             .find(|entry_record| entry_record.entry_id == entry_id)
             .map(|entry_record| QuarantineRowInit {
+                moment_formatters,
                 entry_record: entry_record.clone(),
                 row_state: self.row_state(entry_id),
             })
     }
 
-    pub fn matching_rows(&self, search_text: &str) -> Vec<QuarantineRowInit> {
+    pub fn matching_rows(
+        &self,
+        moment_formatters: &'static MomentFormatters,
+        search_text: &str,
+    ) -> Vec<QuarantineRowInit> {
         self.listed_entries()
             .iter()
             .filter(|entry_record| entry_matches_search(entry_record, search_text))
             .map(|entry_record| QuarantineRowInit {
+                moment_formatters,
                 entry_record: entry_record.clone(),
                 row_state: self.row_state(entry_record.entry_id),
             })
@@ -463,6 +475,7 @@ mod quarantine_page_state_tests {
     use super::*;
     use crate::host_services::{
         clamav_scanner::scanner_output_parser::ThreatIdentity,
+        protection_evidence::protection_evidence_fixtures::leaked_english_formatters,
         quarantine_vault::{
             quarantine_entry_database::StoredDetectionDate,
             quarantine_file_moves::RecordedPayloadHash,
@@ -528,7 +541,11 @@ mod quarantine_page_state_tests {
             page_state.listing().placeholder_page_name(),
             LOAD_FAILED_PAGE_NAME
         );
-        assert!(page_state.matching_rows("").is_empty());
+        assert!(
+            page_state
+                .matching_rows(leaked_english_formatters(), "")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -683,9 +700,14 @@ mod quarantine_page_state_tests {
             Err(EntryActionRefusal::ReputationCheckRunning { entry_id: 1 })
         );
         page_state.record_reputation_answers(1, checked_answers());
-        assert!(page_state.matching_rows("sample-2").len() == 1);
+        assert!(
+            page_state
+                .matching_rows(leaked_english_formatters(), "sample-2")
+                .len()
+                == 1
+        );
         page_state.record_loaded_entries(Ok(vec![quarantined_entry(1), quarantined_entry(2)]));
-        let shown_rows = page_state.matching_rows("sample-1");
+        let shown_rows = page_state.matching_rows(leaked_english_formatters(), "sample-1");
         assert!(matches!(
             shown_rows.as_slice(),
             [QuarantineRowInit {

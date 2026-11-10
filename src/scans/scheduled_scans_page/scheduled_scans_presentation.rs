@@ -3,7 +3,7 @@ use jiff::Timestamp;
 use crate::{
     host_services::{
         clamav_programs::distribution_install_guides::DistributionFamily,
-        desktop::locale_formatting::{MomentFormatters, exact_local_time_text},
+        desktop::locale_formatting::MomentFormatters,
         protection_evidence::{
             host_protection_evidence::{
                 ProtectionEvidence, ScanServiceEvidence, ScanUnitResult, ScheduledScanEvidence,
@@ -65,9 +65,11 @@ impl From<UnitTimestamp> for EvidenceMoment {
     }
 }
 
-fn next_run_text(next_run: UnitTimestamp) -> String {
+fn next_run_text(moment_formatters: &MomentFormatters, next_run: UnitTimestamp) -> String {
     match next_run {
-        UnitTimestamp::RecordedAt { recorded_at } => exact_local_time_text(recorded_at),
+        UnitTimestamp::RecordedAt { recorded_at } => {
+            moment_formatters.exact_moment_text(recorded_at)
+        }
         UnitTimestamp::NeverRecorded => translated_messages::scans::not_scheduled(),
     }
 }
@@ -165,6 +167,7 @@ pub const fn scheduled_scan_condition(
 }
 
 fn scheduled_status_text(
+    moment_formatters: &MomentFormatters,
     scheduled_scan_evidence: &ScheduledScanEvidence,
     daemon_answering: bool,
 ) -> String {
@@ -185,7 +188,10 @@ fn scheduled_status_text(
                 translated_messages::scans::last_scan_ended_error()
             }
             ScanServiceEvidence::ServiceConfigured { .. } => {
-                translated_messages::scans::next_scan_time(next_run_text(*next_run))
+                translated_messages::scans::next_scan_time(next_run_text(
+                    moment_formatters,
+                    *next_run,
+                ))
             }
             ScanServiceEvidence::ServiceMissing => {
                 translated_messages::scans::timer_starts_scan_service()
@@ -286,7 +292,7 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
     TimelineStep::settled(
         translated_messages::scans::scheduled_scan(),
         translated_messages::scans::scheduled_scan_catches_files(),
-        scheduled_status_text(scheduled_scan_evidence, daemon_answering),
+        scheduled_status_text(moment_formatters, scheduled_scan_evidence, daemon_answering),
         SettledStep {
             evidence_rows: plain_rows(evidence_rows),
             header_action,

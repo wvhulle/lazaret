@@ -17,14 +17,14 @@ use crate::{
             desktop_notifications::notify_outside_the_window,
             failure_journal_log::{log_failed_outcome, log_failure_to_journal},
             flatpak_sandbox::SandboxKind,
-            locale_formatting::host_moment_formatters,
+            locale_formatting::MomentFormatters,
         },
         systemd_bus::host_systemd_units::SystemBusAccess,
     },
     shared_widgets::{
         activity_entries::{
-            activity_entry_row::ActivityEntryRow,
-            activity_transcript_dialog::ActivityTranscriptDialog,
+            activity_entry_row::{ActivityEntryRow, ActivityEntryRowInit},
+            activity_transcript_dialog::{ActivityTranscriptDialog, ActivityTranscriptDialogInit},
         },
         component_streams::run_stream_then,
         database_migration_failure_text::describe_history_failure,
@@ -67,12 +67,14 @@ enum TranscriptDialogView {
 }
 
 pub struct DatabaseUpdatesPageInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub system_bus: SystemBusAccess,
     pub activity_history: ActivityHistory,
     pub sandbox_kind: SandboxKind,
 }
 
 pub struct DatabaseUpdatesPage {
+    moment_formatters: &'static MomentFormatters,
     system_bus: SystemBusAccess,
     sandbox_kind: SandboxKind,
     toaster: Toaster,
@@ -152,6 +154,7 @@ impl DatabaseUpdatesPage {
     }
 
     fn show_status_steps(&mut self) {
+        let moment_formatters = self.moment_formatters;
         let GatheredEvidence::Gathered {
             protection_evidence,
             gathered_at,
@@ -164,7 +167,7 @@ impl DatabaseUpdatesPage {
             database_update_steps(
                 protection_evidence,
                 &self.update_control.update_view(),
-                host_moment_formatters(),
+                moment_formatters,
                 *gathered_at,
                 self.distribution_family,
             ),
@@ -242,11 +245,15 @@ impl DatabaseUpdatesPage {
     }
 
     fn open_transcript(&mut self, row_position: usize, root: &adw::ToastOverlay) {
+        let moment_formatters = self.moment_formatters;
         let Some(activity_entry) = self.update_history.listed_entries().get(row_position) else {
             return;
         };
         let transcript_dialog = ActivityTranscriptDialog::builder()
-            .launch(activity_entry.clone())
+            .launch(ActivityTranscriptDialogInit {
+                activity_entry: activity_entry.clone(),
+                moment_formatters,
+            })
             .detach();
         transcript_dialog.widget().present(Some(root));
         self.transcript_dialog = TranscriptDialogView::DialogOpen {
@@ -330,6 +337,7 @@ impl Component for DatabaseUpdatesPage {
 
     fn init(
         DatabaseUpdatesPageInit {
+            moment_formatters,
             activity_history,
             sandbox_kind,
             system_bus,
@@ -338,6 +346,7 @@ impl Component for DatabaseUpdatesPage {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            moment_formatters,
             system_bus,
             sandbox_kind,
             toaster: Toaster::new(&root),
@@ -363,6 +372,7 @@ impl Component for DatabaseUpdatesPage {
             transcript_dialog: TranscriptDialogView::DialogClosed,
             update_settings_sections: EngineSettingsSections::builder()
                 .launch(EngineSettingsSectionsInit {
+                    moment_formatters,
                     settings_layout: EngineSettingsLayout::SingleSection(
                         EngineSettingsSection::SignatureUpdates,
                     ),
@@ -442,6 +452,7 @@ impl Component for DatabaseUpdatesPage {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let moment_formatters = self.moment_formatters;
         match page_command {
             DatabaseUpdatesPageCommand::HostStatusLoaded(host_status) => {
                 let start_decision = self.update_control.host_status_loaded(host_status);
@@ -477,7 +488,10 @@ impl Component for DatabaseUpdatesPage {
                     .iter()
                     .cloned()
                     .for_each(|activity_entry| {
-                        history_guard.push_back(activity_entry);
+                        history_guard.push_back(ActivityEntryRowInit {
+                            activity_entry,
+                            moment_formatters,
+                        });
                     });
             }
         }

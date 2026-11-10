@@ -10,7 +10,7 @@ use crate::{
         clamav_programs::distribution_install_guides::{
             DistributionFamily, detect_distribution_family,
         },
-        desktop::flatpak_sandbox::SandboxKind,
+        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters},
         protection_evidence::host_protection_evidence::ON_ACCESS_SERVICE_UNITS,
         systemd_journal::service_log_contents::unit_journal_log_updates,
     },
@@ -46,6 +46,7 @@ use crate::{
 };
 
 pub struct OnAccessPage {
+    moment_formatters: &'static MomentFormatters,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<OnAccessAction>>,
     distribution_family: DistributionFamily,
@@ -104,6 +105,7 @@ impl OnAccessPage {
     }
 
     fn show_status_steps(&mut self) {
+        let moment_formatters = self.moment_formatters;
         let GatheredEvidence::Gathered {
             protection_evidence,
             ..
@@ -113,14 +115,23 @@ impl OnAccessPage {
         };
         show_timeline_steps(
             &mut self.status_rows,
-            on_access_page_steps(protection_evidence, self.distribution_family),
+            on_access_page_steps(
+                moment_formatters,
+                protection_evidence,
+                self.distribution_family,
+            ),
         );
     }
 }
 
+pub struct OnAccessPageInit {
+    pub sandbox_kind: SandboxKind,
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::component(pub)]
 impl Component for OnAccessPage {
-    type Init = SandboxKind;
+    type Init = OnAccessPageInit;
     type Input = OnAccessPageInput;
     type Output = OnAccessPageOutput;
     type CommandOutput = ();
@@ -164,11 +175,15 @@ impl Component for OnAccessPage {
     }
 
     fn init(
-        sandbox_kind: Self::Init,
+        OnAccessPageInit {
+            sandbox_kind,
+            moment_formatters,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            moment_formatters,
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
@@ -182,6 +197,7 @@ impl Component for OnAccessPage {
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             on_access_settings_sections: EngineSettingsSections::builder()
                 .launch(EngineSettingsSectionsInit {
+                    moment_formatters,
                     settings_layout: EngineSettingsLayout::SingleSection(
                         EngineSettingsSection::OnAccessScanning,
                     ),
@@ -190,6 +206,7 @@ impl Component for OnAccessPage {
                 .forward(sender.input_sender(), page_input_for_settings_output),
             system_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
+                    moment_formatters,
                     audit_topic: AuditTopic::OnAccessChanges,
                     group_description:
                         translated_messages::scans::access_settings_changed_description(),
@@ -198,6 +215,7 @@ impl Component for OnAccessPage {
                 .detach(),
             clamonacc_log_group: ServiceLogGroup::builder()
                 .launch(ServiceLogGroupInit {
+                    moment_formatters,
                     group_title: translated_messages::scans::clamonacc_log_title(),
                     missing_log_title: translated_messages::scans::clamonacc_not_written_title(),
                     export_file_name: "clamonacc-logs.txt",

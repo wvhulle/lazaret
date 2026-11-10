@@ -5,14 +5,16 @@ use relm4::{
 use crate::{
     host_services::{
         clamav_admin_service::admin_audit_records::AdminAuditEntry,
-        desktop::failure_journal_log::log_failure_to_journal,
+        desktop::{
+            failure_journal_log::log_failure_to_journal, locale_formatting::MomentFormatters,
+        },
     },
     shared_widgets::{
         loading_indicators::{
             LOAD_FAILED_PAGE_NAME, empty_placeholder_row, loading_placeholder_stack,
         },
         system_changes::{
-            system_change_row::SystemChangeRow,
+            system_change_row::{SystemChangeRow, SystemChangeRowInit},
             system_changes_state::{
                 AuditTopic, SystemChangesReadFailure, SystemChangesView, audit_entries_for_topic,
                 read_system_changes,
@@ -23,12 +25,14 @@ use crate::{
 };
 
 pub struct SystemChangesGroupInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub audit_topic: AuditTopic,
     pub group_description: String,
     pub empty_title: String,
 }
 
 pub struct SystemChangesGroup {
+    pub moment_formatters: &'static MomentFormatters,
     audit_topic: AuditTopic,
     system_changes_view: SystemChangesView,
     system_change_rows: FactoryVecDeque<SystemChangeRow>,
@@ -63,10 +67,14 @@ impl SystemChangesGroup {
     }
 
     fn replace_rows(&mut self, audit_entries: Vec<AdminAuditEntry>) {
+        let moment_formatters = self.moment_formatters;
         let mut row_guard = self.system_change_rows.guard();
         row_guard.clear();
         audit_entries.into_iter().for_each(|audit_entry| {
-            row_guard.push_back(audit_entry);
+            row_guard.push_back(SystemChangeRowInit {
+                audit_entry,
+                moment_formatters,
+            });
         });
     }
 }
@@ -118,7 +126,9 @@ impl Component for SystemChangesGroup {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let moment_formatters = group_init.moment_formatters;
         let model = Self {
+            moment_formatters,
             audit_topic: group_init.audit_topic,
             system_changes_view: SystemChangesView::SystemChangesLoading,
             system_change_rows: FactoryVecDeque::builder()

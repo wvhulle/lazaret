@@ -31,6 +31,7 @@ use crate::{
         desktop::{
             failure_journal_log::log_failure_to_journal,
             flatpak_sandbox::SandboxKind,
+            locale_formatting::MomentFormatters,
             stored_settings::{application_settings, scanner_backend_preference},
         },
         quarantine_vault::quarantine_entry_database::QuarantineVault,
@@ -38,7 +39,7 @@ use crate::{
     scans::manual_scan_page::{
         eicar_test_file::{EicarTestFileFailure, written_eicar_test_file},
         exclusions_page::scan_exclusions_page::ScanExclusionsSection,
-        scan_options_section::ScanOptionsSection,
+        scan_options_section::{ScanOptionsSection, ScanOptionsSectionInit},
         scan_page_state::{ScanPageState, ScanStartPermission, ScanStartPermit},
         scan_profile_selection::{ProfileChoiceRow, ScanProfileChoice, TargetRowsChange},
         scan_profiles_dialog::{
@@ -96,6 +97,7 @@ enum ScannerBackendView {
 }
 
 pub struct ScanPageInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub activity_history: ActivityHistory,
@@ -795,6 +797,7 @@ impl Component for ScanPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let scan_target_rows = FactoryVecDeque::builder()
             .launch(gtk::ListBox::default())
@@ -866,11 +869,14 @@ impl Component for ScanPage {
             scan_target_rows,
             scanner_backend_view: ScannerBackendView::DetectingBackend,
             scanner_program_trust: ScannerProgramTrust::ProgramsTrusted,
-            scan_options_section: ScanOptionsSection::builder().launch(()).detach(),
+            scan_options_section: ScanOptionsSection::builder()
+                .launch(ScanOptionsSectionInit { moment_formatters })
+                .detach(),
             device_scan_activity: DeviceScanActivity::DeviceScanIdle,
             reported_scan_activity: PageScanActivity::PageScanIdle,
             recent_scans_group: ActivityHistoryGroup::builder()
                 .launch(ActivityHistoryGroupInit {
+                    moment_formatters,
                     activity_history: page_init.activity_history,
                     history_filter: ActivityHistoryFilter::ManualScans,
                     group_title: translated_messages::scans::recent_scans_title(),

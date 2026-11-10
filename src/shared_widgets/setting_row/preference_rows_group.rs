@@ -9,9 +9,9 @@ use crate::{
     host_services::{
         clamav_config::typed_setting_values::TypedSettingValue,
         desktop::{
-            failure_journal_log::log_failure_to_journal, preference_keys::PreferenceKey,
-            preference_sources::preference_source, stored_settings::application_settings,
-            stored_settings_watch::forward_setting_changes,
+            failure_journal_log::log_failure_to_journal, locale_formatting::MomentFormatters,
+            preference_keys::PreferenceKey, preference_sources::preference_source,
+            stored_settings::application_settings, stored_settings_watch::forward_setting_changes,
         },
     },
     shared_widgets::setting_row::{
@@ -19,7 +19,7 @@ use crate::{
             FollowUpAction, PreferenceApplyStage, RowChangeActivity, SettingLabel, SettingRowState,
             SettingSubject, ShownSettingValue,
         },
-        setting_row_widget::{SettingRow, SettingRowInput, SettingRowOutput},
+        setting_row_widget::{SettingRow, SettingRowInit, SettingRowInput, SettingRowOutput},
     },
     translated_messages,
 };
@@ -38,11 +38,13 @@ pub enum PreferenceApplyMode {
 }
 
 pub struct PreferenceRowsInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub row_specs: Vec<PreferenceRowSpec>,
     pub apply_mode: PreferenceApplyMode,
 }
 
 pub struct PreferenceRowsGroup {
+    pub moment_formatters: &'static MomentFormatters,
     stored_settings: gio::Settings,
     row_specs: Vec<PreferenceRowSpec>,
     apply_mode: PreferenceApplyMode,
@@ -145,6 +147,7 @@ impl PreferenceRowsGroup {
     }
 
     fn refresh_rows(&mut self) {
+        let moment_formatters = self.moment_formatters;
         let row_states = self.row_states();
         if row_states.len() == self.setting_rows.len() {
             row_states
@@ -160,7 +163,10 @@ impl PreferenceRowsGroup {
             let mut row_guard = self.setting_rows.guard();
             row_guard.clear();
             row_states.into_iter().for_each(|row_state| {
-                row_guard.push_back(row_state);
+                row_guard.push_back(SettingRowInit {
+                    row_state,
+                    moment_formatters,
+                });
             });
         }
     }
@@ -206,6 +212,7 @@ impl Component for PreferenceRowsGroup {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let moment_formatters = rows_init.moment_formatters;
         let stored_settings = application_settings();
         let watched_keys = rows_init
             .row_specs
@@ -223,6 +230,7 @@ impl Component for PreferenceRowsGroup {
             PreferenceRowsInput::SettingRowReported,
         );
         let mut model = Self {
+            moment_formatters,
             stored_settings,
             row_specs: rows_init.row_specs,
             apply_mode: rows_init.apply_mode,

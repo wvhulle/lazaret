@@ -4,7 +4,7 @@ use relm4::{
 };
 
 use crate::{
-    host_services::desktop::preference_keys::PreferenceKey,
+    host_services::desktop::{locale_formatting::MomentFormatters, preference_keys::PreferenceKey},
     shared_widgets::setting_row::preference_rows_group::{
         PreferenceApplyMode, PreferenceRowSpec, PreferenceRowsGroup, PreferenceRowsInit,
     },
@@ -30,9 +30,13 @@ fn scan_option_row_specs() -> Vec<PreferenceRowSpec> {
     ]
 }
 
+pub struct ScanOptionsSectionInit {
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::component(pub)]
 impl Component for ScanOptionsSection {
-    type Init = ();
+    type Init = ScanOptionsSectionInit;
     type Input = ();
     type Output = ();
     type CommandOutput = ();
@@ -51,13 +55,14 @@ impl Component for ScanOptionsSection {
     }
 
     fn init(
-        _section_init: Self::Init,
+        ScanOptionsSectionInit { moment_formatters }: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
             option_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
+                    moment_formatters,
                     row_specs: scan_option_row_specs(),
                     apply_mode: PreferenceApplyMode::AppliesImmediately,
                 })

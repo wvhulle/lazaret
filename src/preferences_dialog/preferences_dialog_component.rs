@@ -10,6 +10,7 @@ use crate::{
         desktop::{
             file_manager_actions::SUPPORTED_FILE_MANAGERS,
             flatpak_sandbox::{SandboxKind, request_background_autostart},
+            locale_formatting::MomentFormatters,
             preference_keys::PreferenceKey,
         },
         threat_intel::service_key_storage::ThreatIntelService,
@@ -100,9 +101,14 @@ fn window_behavior_row_specs() -> Vec<PreferenceRowSpec> {
     ]
 }
 
+pub struct PreferencesDialogInit {
+    pub sandbox_kind: SandboxKind,
+    pub moment_formatters: &'static MomentFormatters,
+}
+
 #[relm4::component(pub)]
 impl Component for PreferencesDialog {
-    type Init = SandboxKind;
+    type Init = PreferencesDialogInit;
     type Input = PreferencesDialogInput;
     type Output = PreferencesDialogOutput;
     type CommandOutput = PreferencesDialogCommand;
@@ -157,7 +163,10 @@ impl Component for PreferencesDialog {
     }
 
     fn init(
-        sandbox_kind: Self::Init,
+        PreferencesDialogInit {
+            sandbox_kind,
+            moment_formatters,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -179,6 +188,7 @@ impl Component for PreferencesDialog {
             sandbox_kind,
             window_behavior_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
+                    moment_formatters,
                     row_specs: window_behavior_row_specs(),
                     apply_mode: PreferenceApplyMode::AppliesImmediately,
                 })

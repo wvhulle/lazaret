@@ -169,6 +169,32 @@ pub struct StepEvidenceRow {
     pub evidence_name: String,
     pub evidence_value: String,
     pub evidence_moment: EvidenceMoment,
+    pub moment_tooltip: MomentTooltip,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MomentTooltip {
+    NoMomentTooltip,
+    ExactMomentTooltip(String),
+}
+
+pub fn moment_tooltip(
+    moment_formatters: &MomentFormatters,
+    evidence_moment: EvidenceMoment,
+) -> MomentTooltip {
+    match evidence_moment {
+        EvidenceMoment::PastEvent { happened_at } => {
+            MomentTooltip::ExactMomentTooltip(moment_formatters.exact_moment_text(happened_at))
+        }
+        EvidenceMoment::UpcomingEvent { due_at } => {
+            MomentTooltip::ExactMomentTooltip(moment_formatters.exact_moment_text(due_at))
+        }
+        EvidenceMoment::CurrentFact
+        | EvidenceMoment::HappeningNow
+        | EvidenceMoment::NeverHappened
+        | EvidenceMoment::NothingUpcoming
+        | EvidenceMoment::SettingValue => MomentTooltip::NoMomentTooltip,
+    }
 }
 
 impl StepEvidenceRow {
@@ -177,6 +203,7 @@ impl StepEvidenceRow {
             evidence_name,
             evidence_value,
             evidence_moment: EvidenceMoment::CurrentFact,
+            moment_tooltip: MomentTooltip::NoMomentTooltip,
         }
     }
 }

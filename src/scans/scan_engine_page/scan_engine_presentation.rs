@@ -5,6 +5,7 @@ use crate::{
             distribution_install_guides::{DistributionFamily, engine_install_guides},
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
+        desktop::locale_formatting::MomentFormatters,
         protection_evidence::host_protection_evidence::{
             DaemonEvidence, EngineInstallation, LoadedSignatures, ProtectionEvidence,
             daemon_is_answering,
@@ -278,6 +279,7 @@ pub fn socket_step(clamd_socket_view: &ClamdSocketView, daemon_answering: bool) 
 }
 
 pub fn scan_engine_steps(
+    moment_formatters: &MomentFormatters,
     protection_evidence: &ProtectionEvidence,
     clamd_socket_view: &ClamdSocketView,
     distribution_family: DistributionFamily,
@@ -303,6 +305,7 @@ pub fn scan_engine_steps(
         ),
     ])
     .chain(runtime_reduction_step(
+        moment_formatters,
         &protection_evidence.runtime_reductions,
         ReducedSettingGroup::EngineSettings,
         StepActionSlot::NoAction,
@@ -321,7 +324,7 @@ mod scan_engine_presentation_tests {
                 OverridesChangeTime, ProgramTrustFinding, ProgramTrustInspection, ReducedSetting,
                 RuntimeReductions,
             },
-            protection_evidence_fixtures::healthy_evidence,
+            protection_evidence_fixtures::{english_formatters, healthy_evidence},
         },
         shared_widgets::step_timeline::timeline_step_contents::StepNodeState,
     };
@@ -332,8 +335,12 @@ mod scan_engine_presentation_tests {
         })
     }
 
-    fn engine_steps_with(protection_evidence: &ProtectionEvidence) -> Vec<ScanEngineStep> {
+    fn engine_steps_with(
+        moment_formatters: &MomentFormatters,
+        protection_evidence: &ProtectionEvidence,
+    ) -> Vec<ScanEngineStep> {
         scan_engine_steps(
+            moment_formatters,
             protection_evidence,
             &protected_socket(),
             DistributionFamily::NixosFamily,
@@ -358,7 +365,8 @@ mod scan_engine_presentation_tests {
 
     #[test]
     fn a_healthy_engine_completes_every_step_in_order() {
-        let engine_steps = engine_steps_with(&healthy_evidence());
+        let moment_formatters = &english_formatters();
+        let engine_steps = engine_steps_with(moment_formatters, &healthy_evidence());
         assert_eq!(
             step_titles(&engine_steps),
             vec![
@@ -440,34 +448,42 @@ mod scan_engine_presentation_tests {
 
     #[test]
     fn only_a_replaceable_scanner_adds_a_trust_step() {
-        let refused_scanner = engine_steps_with(&ProtectionEvidence {
-            program_trust: ProgramTrustInspection::ProgramsChecked(vec![
-                ProgramTrustFinding::OnlyReplaceableProgram {
-                    program_name: "clamdscan",
-                    replaceable_paths: vec!["/home/user/.local/bin/clamdscan".to_owned()],
-                },
-            ]),
-            ..healthy_evidence()
-        });
+        let moment_formatters = &english_formatters();
+        let refused_scanner = engine_steps_with(
+            moment_formatters,
+            &ProtectionEvidence {
+                program_trust: ProgramTrustInspection::ProgramsChecked(vec![
+                    ProgramTrustFinding::OnlyReplaceableProgram {
+                        program_name: "clamdscan",
+                        replaceable_paths: vec!["/home/user/.local/bin/clamdscan".to_owned()],
+                    },
+                ]),
+                ..healthy_evidence()
+            },
+        );
         assert_eq!(
             refused_scanner[1].step_title,
             "Scanner programs can be trusted"
         );
         assert_eq!(refused_scanner[1].node_state(), StepNodeState::HasFailed);
-        let refused_updater = engine_steps_with(&ProtectionEvidence {
-            program_trust: ProgramTrustInspection::ProgramsChecked(vec![
-                ProgramTrustFinding::OnlyReplaceableProgram {
-                    program_name: "freshclam",
-                    replaceable_paths: vec!["/home/user/.local/bin/freshclam".to_owned()],
-                },
-            ]),
-            ..healthy_evidence()
-        });
+        let refused_updater = engine_steps_with(
+            moment_formatters,
+            &ProtectionEvidence {
+                program_trust: ProgramTrustInspection::ProgramsChecked(vec![
+                    ProgramTrustFinding::OnlyReplaceableProgram {
+                        program_name: "freshclam",
+                        replaceable_paths: vec!["/home/user/.local/bin/freshclam".to_owned()],
+                    },
+                ]),
+                ..healthy_evidence()
+            },
+        );
         assert_eq!(refused_updater.len(), 3);
     }
 
     #[test]
     fn only_engine_key_reductions_appear_on_the_engine_page() {
+        let moment_formatters = &english_formatters();
         let reductions_of = |setting_key: &str| ProtectionEvidence {
             runtime_reductions: RuntimeReductions::SettingsReduced {
                 change_time: OverridesChangeTime::ChangeTimeUnknown,
@@ -480,11 +496,15 @@ mod scan_engine_presentation_tests {
             ..healthy_evidence()
         };
         assert_eq!(
-            step_titles(&engine_steps_with(&reductions_of("DetectPUA"))).last(),
+            step_titles(&engine_steps_with(
+                moment_formatters,
+                &reductions_of("DetectPUA")
+            ))
+            .last(),
             Some(&"Protection reduced on purpose")
         );
         assert_eq!(
-            engine_steps_with(&reductions_of("OnAccessPrevention")).len(),
+            engine_steps_with(moment_formatters, &reductions_of("OnAccessPrevention")).len(),
             3
         );
     }

@@ -6,7 +6,7 @@ use relm4::{
 use crate::{
     host_services::{
         desktop::{
-            flatpak_sandbox::SandboxKind, locale_formatting::exact_local_time_text,
+            flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters,
             preference_keys::PreferenceKey, stored_settings::application_settings,
             stored_settings_watch::forward_setting_changes,
         },
@@ -35,6 +35,7 @@ use crate::{
 const SYSTEM_SCAN_TIMER: &str = "clamdscan.timer";
 
 pub struct ScanScheduleSection {
+    moment_formatters: &'static MomentFormatters,
     system_bus: SystemBusAccess,
     user_bus: UserBusAccess,
     sandbox_kind: SandboxKind,
@@ -75,12 +76,17 @@ pub enum ScanScheduleSectionCommand {
     ScheduleApplied(Result<(), ScheduleApplyFailure>),
 }
 
-fn describe_timer_state(timer_state: &ScheduleTimerState) -> String {
+fn describe_timer_state(
+    moment_formatters: &MomentFormatters,
+    timer_state: &ScheduleTimerState,
+) -> String {
     match timer_state {
         ScheduleTimerState::TimerInactive => translated_messages::scans::timer_inactive(),
         ScheduleTimerState::TimerActive {
             next_run: UnitTimestamp::RecordedAt { recorded_at },
-        } => translated_messages::scans::next_run_time(exact_local_time_text(*recorded_at)),
+        } => translated_messages::scans::next_run_time(
+            moment_formatters.exact_moment_text(*recorded_at),
+        ),
         ScheduleTimerState::TimerActive {
             next_run: UnitTimestamp::NeverRecorded,
         } => translated_messages::scans::scheduled_time_next_run(),
@@ -88,25 +94,34 @@ fn describe_timer_state(timer_state: &ScheduleTimerState) -> String {
     }
 }
 
-fn describe_system_schedule(next_run: UnitTimestamp) -> String {
+fn describe_system_schedule(
+    moment_formatters: &MomentFormatters,
+    next_run: UnitTimestamp,
+) -> String {
     match next_run {
         UnitTimestamp::RecordedAt { recorded_at } => {
-            translated_messages::scans::system_already_runs_scheduled(exact_local_time_text(
-                recorded_at,
-            ))
+            translated_messages::scans::system_already_runs_scheduled(
+                moment_formatters.exact_moment_text(recorded_at),
+            )
         }
         UnitTimestamp::NeverRecorded => translated_messages::scans::system_scan_timer_settings(),
     }
 }
 
-fn describe_user_timer(user_timer_view: &UserTimerView) -> String {
+fn describe_user_timer(
+    moment_formatters: &MomentFormatters,
+    user_timer_view: &UserTimerView,
+) -> String {
     match user_timer_view {
         UserTimerView::ReadingUserTimer => translated_messages::scans::reading_user_timer(),
-        UserTimerView::UserTimerRead(timer_state) => describe_timer_state(timer_state),
+        UserTimerView::UserTimerRead(timer_state) => {
+            describe_timer_state(moment_formatters, timer_state)
+        }
     }
 }
 
 fn describe_schedule_group(
+    moment_formatters: &MomentFormatters,
     system_schedule_owner: &SystemScheduleOwner,
     user_timer_view: &UserTimerView,
 ) -> String {
@@ -114,8 +129,12 @@ fn describe_schedule_group(
         SystemScheduleOwner::InspectingSystemTimer => {
             translated_messages::scans::inspecting_system_timer()
         }
-        SystemScheduleOwner::NoSystemTimer => describe_user_timer(user_timer_view),
-        SystemScheduleOwner::SystemTimerExists { next_run } => describe_system_schedule(*next_run),
+        SystemScheduleOwner::NoSystemTimer => {
+            describe_user_timer(moment_formatters, user_timer_view)
+        }
+        SystemScheduleOwner::SystemTimerExists { next_run } => {
+            describe_system_schedule(moment_formatters, *next_run)
+        }
         SystemScheduleOwner::SystemTimerUnknown(inspection_failure) => {
             translated_messages::scans::system_timer_unknown(inspection_failure)
         }
@@ -235,6 +254,7 @@ impl ScanScheduleSection {
     }
 
     fn show_stored_settings(&mut self) {
+        let _moment_formatters = self.moment_formatters;
         let stored_schedule = StoredScheduleSettings::read_from(&self.stored_settings);
         if stored_schedule == self.schedule_settings {
             return;
@@ -248,6 +268,7 @@ impl ScanScheduleSection {
 }
 
 pub struct ScanScheduleSectionInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub sandbox_kind: SandboxKind,
     pub system_bus: SystemBusAccess,
     pub user_bus: UserBusAccess,
@@ -274,6 +295,7 @@ impl Component for ScanScheduleSection {
                 set_sensitive: allows_applying_schedule(&model.system_schedule_owner),
                 #[watch]
                 set_description: Some(&describe_schedule_group(
+                    model.moment_formatters,
                     &model.system_schedule_owner,
                     &model.user_timer_view,
                 )),
@@ -316,6 +338,7 @@ impl Component for ScanScheduleSection {
 
     fn init(
         ScanScheduleSectionInit {
+            moment_formatters,
             sandbox_kind,
             system_bus,
             user_bus,
@@ -332,11 +355,13 @@ impl Component for ScanScheduleSection {
         );
         let schedule_settings = StoredScheduleSettings::read_from(&stored_settings);
         let model = Self {
+            moment_formatters,
             sandbox_kind,
             system_bus,
             user_bus,
             schedule_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
+                    moment_formatters,
                     row_specs: schedule_row_specs(),
                     apply_mode: PreferenceApplyMode::AppliedWithGroup,
                 })

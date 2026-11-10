@@ -6,7 +6,7 @@ use crate::{
             setting_provenance::ConfigFileOwner,
             typed_setting_values::{SettingParseFailure, TypedSettingValue, WriteRefusal},
         },
-        desktop::{locale_formatting::exact_local_time_text, preference_keys::PreferenceKey},
+        desktop::{locale_formatting::MomentFormatters, preference_keys::PreferenceKey},
     },
     translated_messages,
 };
@@ -266,6 +266,7 @@ fn file_source_texts(config_file: &RootOwnedConfigFile, file_entry: FileEntry) -
 }
 
 fn override_source_texts(
+    moment_formatters: &MomentFormatters,
     config_file: &RootOwnedConfigFile,
     override_lifetime: OverrideLifetime,
 ) -> SourceTexts {
@@ -286,10 +287,10 @@ fn override_source_texts(
         },
         OverrideLifetime::ExpiresAt { expires_at } => SourceTexts {
             short_tag: translated_messages::widgets::source_reduced_until_tag(
-                exact_local_time_text(expires_at),
+                moment_formatters.exact_moment_text(expires_at),
             ),
             explanation: translated_messages::widgets::source_reduced_until_explanation(
-                exact_local_time_text(expires_at),
+                moment_formatters.exact_moment_text(expires_at),
             ),
             source_emphasis: SourceEmphasis::NeedsAttention,
         },
@@ -338,7 +339,10 @@ pub fn shown_value_text(typed_value: &TypedSettingValue) -> String {
     }
 }
 
-pub fn source_texts(setting_subject: &SettingSubject) -> SourceTexts {
+pub fn source_texts(
+    moment_formatters: &MomentFormatters,
+    setting_subject: &SettingSubject,
+) -> SourceTexts {
     match setting_subject {
         SettingSubject::Preference {
             apply_stage: PreferenceApplyStage::WaitsForGroupApply,
@@ -362,7 +366,7 @@ pub fn source_texts(setting_subject: &SettingSubject) -> SourceTexts {
                 config_file,
                 override_lifetime,
                 ..
-            } => override_source_texts(config_file, *override_lifetime),
+            } => override_source_texts(moment_formatters, config_file, *override_lifetime),
             ClamavSource::ProtectedSetting { .. } => SourceTexts {
                 short_tag: translated_messages::widgets::source_protected_tag(),
                 explanation: translated_messages::widgets::source_protected_explanation(),
@@ -439,8 +443,12 @@ pub fn follow_up_actions(
     }
 }
 
-pub fn row_needs_attention(setting_subject: &SettingSubject) -> bool {
-    source_texts(setting_subject).source_emphasis == SourceEmphasis::NeedsAttention
+pub fn row_needs_attention(
+    moment_formatters: &MomentFormatters,
+    setting_subject: &SettingSubject,
+) -> bool {
+    source_texts(moment_formatters, setting_subject).source_emphasis
+        == SourceEmphasis::NeedsAttention
 }
 
 pub fn draft_refusal(
@@ -479,7 +487,10 @@ mod setting_row_state_tests {
     use jiff::Timestamp;
 
     use super::*;
-    use crate::host_services::clamav_config::typed_setting_values::SwitchPosition;
+    use crate::host_services::{
+        clamav_config::typed_setting_values::SwitchPosition,
+        protection_evidence::protection_evidence_fixtures::english_formatters,
+    };
 
     fn nixos_file() -> RootOwnedConfigFile {
         RootOwnedConfigFile {
@@ -534,6 +545,7 @@ mod setting_row_state_tests {
 
     #[test]
     fn a_runtime_change_is_reverted_and_copied_from_its_own_row() {
+        let moment_formatters = &english_formatters();
         let changed_subject = runtime_override(OverrideLifetime::Permanent);
         assert_eq!(
             change_route(&changed_subject),
@@ -546,20 +558,22 @@ mod setting_row_state_tests {
                 FollowUpAction::CopyConfigurationLine
             ]
         );
-        assert!(row_needs_attention(&changed_subject));
-        assert!(row_needs_attention(&runtime_override(
-            OverrideLifetime::ExpiresAt {
+        assert!(row_needs_attention(moment_formatters, &changed_subject));
+        assert!(row_needs_attention(
+            moment_formatters,
+            &runtime_override(OverrideLifetime::ExpiresAt {
                 expires_at: Timestamp::UNIX_EPOCH
-            }
-        )));
+            })
+        ));
     }
 
     #[test]
     fn an_allowed_setting_is_editable_without_unlocking_and_needs_no_follow_up() {
+        let moment_formatters = &english_formatters();
         let allowed_subject = file_setting(RuntimeRoute::ChangeableWithPassword);
         assert!(change_route(&allowed_subject).allows_editing());
         assert!(follow_up_actions(&allowed_subject, &switch_value()).is_empty());
-        assert!(!row_needs_attention(&allowed_subject));
+        assert!(!row_needs_attention(moment_formatters, &allowed_subject));
     }
 
     #[test]
@@ -587,6 +601,7 @@ mod setting_row_state_tests {
 
     #[test]
     fn protected_settings_and_configured_preferences_are_fixed() {
+        let moment_formatters = &english_formatters();
         let protected_subject = clamav_subject(ClamavSource::ProtectedSetting {
             config_file: nixos_file(),
         });
@@ -604,13 +619,14 @@ mod setting_row_state_tests {
             ChangeRoute::FixedByConfiguration
         );
         assert_eq!(
-            source_texts(&locked_subject).source_emphasis,
+            source_texts(moment_formatters, &locked_subject).source_emphasis,
             SourceEmphasis::FixedValue
         );
     }
 
     #[test]
     fn preferences_offer_a_reset_only_when_you_chose_the_value() {
+        let moment_formatters = &english_formatters();
         assert_eq!(
             follow_up_actions(
                 &preference_subject(
@@ -630,12 +646,13 @@ mod setting_row_state_tests {
             let quiet_subject =
                 preference_subject(preference_source, PreferenceApplyStage::AppliesImmediately);
             assert!(follow_up_actions(&quiet_subject, &switch_value()).is_empty());
-            assert!(!row_needs_attention(&quiet_subject));
+            assert!(!row_needs_attention(moment_formatters, &quiet_subject));
         });
     }
 
     #[test]
     fn a_staged_preference_waits_for_the_group_apply() {
+        let moment_formatters = &english_formatters();
         let staged_subject = preference_subject(
             PreferenceSource::ChosenByYou,
             PreferenceApplyStage::WaitsForGroupApply,
@@ -644,10 +661,13 @@ mod setting_row_state_tests {
             change_route(&staged_subject),
             ChangeRoute::TakesEffectOnGroupApply
         );
-        assert!(row_needs_attention(&staged_subject));
-        assert!(!row_needs_attention(&preference_subject(
-            PreferenceSource::ChosenByYou,
-            PreferenceApplyStage::AppliedWithGroup
-        )));
+        assert!(row_needs_attention(moment_formatters, &staged_subject));
+        assert!(!row_needs_attention(
+            moment_formatters,
+            &preference_subject(
+                PreferenceSource::ChosenByYou,
+                PreferenceApplyStage::AppliedWithGroup
+            )
+        ));
     }
 }

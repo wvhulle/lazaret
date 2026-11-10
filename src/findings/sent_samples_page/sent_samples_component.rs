@@ -40,7 +40,7 @@ use crate::{
             ClamavReport, ClamavReportKind, ClamavReportRequest, SubmittedContent,
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::host_moment_formatters},
+        desktop::{flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters},
         quarantine_vault::{
             quarantine_entry_database::{QuarantineEntryRecord, QuarantineVault},
             quarantine_file_moves::QuarantineMoveFailure,
@@ -79,6 +79,7 @@ use crate::{
 };
 
 pub struct SentSamplesPageInit {
+    pub moment_formatters: &'static MomentFormatters,
     pub sandbox_kind: SandboxKind,
     pub activity_history: ActivityHistory,
     pub quarantine_vault: QuarantineVault,
@@ -90,6 +91,7 @@ enum RemoteRefreshRun {
 }
 
 pub struct SentSamplesPage {
+    moment_formatters: &'static MomentFormatters,
     sandbox_kind: SandboxKind,
     activity_history: ActivityHistory,
     quarantine_vault: QuarantineVault,
@@ -260,7 +262,7 @@ impl SentSamplesPage {
     }
 
     fn show_submitted_rows(&mut self) {
-        let moment_formatters = host_moment_formatters();
+        let moment_formatters = self.moment_formatters;
         let mut row_guard = self.submitted_rows.guard();
         row_guard.clear();
         self.submission_listing
@@ -647,8 +649,10 @@ impl Component for SentSamplesPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let model = Self {
+            moment_formatters,
             sandbox_kind,
             activity_history: page_init.activity_history,
             quarantine_vault: page_init.quarantine_vault,
@@ -816,6 +820,7 @@ impl Component for SentSamplesPage {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let moment_formatters = self.moment_formatters;
         match page_command {
             SentSamplesPageCommand::SubmissionsLoaded(load_outcome) => {
                 self.submission_listing = match load_outcome {
@@ -843,9 +848,10 @@ impl Component for SentSamplesPage {
                 }
                 Err(read_failure) => Self::report_upload_notice(
                     &sender,
-                    clamav_report_attempt_text(&ClamavReportAttempt::SampleUnreadable(
-                        read_failure,
-                    )),
+                    clamav_report_attempt_text(
+                        moment_formatters,
+                        &ClamavReportAttempt::SampleUnreadable(read_failure),
+                    ),
                 ),
             },
             SentSamplesPageCommand::ClamavReportFinished {
@@ -854,7 +860,7 @@ impl Component for SentSamplesPage {
             } => {
                 self.finish_upload(
                     &upload_key,
-                    clamav_report_attempt_text(&report_attempt),
+                    clamav_report_attempt_text(moment_formatters, &report_attempt),
                     &sender,
                 );
             }
@@ -864,7 +870,7 @@ impl Component for SentSamplesPage {
             } => {
                 self.finish_upload(
                     &upload_key,
-                    bazaar_upload_attempt_text(&upload_attempt),
+                    bazaar_upload_attempt_text(moment_formatters, &upload_attempt),
                     &sender,
                 );
             }
@@ -874,7 +880,7 @@ impl Component for SentSamplesPage {
             } => {
                 self.finish_upload(
                     &upload_key,
-                    virustotal_upload_attempt_text(&upload_attempt),
+                    virustotal_upload_attempt_text(moment_formatters, &upload_attempt),
                     &sender,
                 );
             }
