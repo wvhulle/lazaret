@@ -8,7 +8,7 @@ use tokio::task::JoinError;
 
 use crate::host_services::{
     desktop::flatpak_sandbox::{SandboxKind, readable_host_path},
-    systemd_bus::host_systemd_units::{UnitActivity, UnitState, probe_unit_state},
+    systemd_bus::host_systemd_units::{SystemBusAccess, UnitActivity, UnitState, probe_unit_state},
 };
 
 const CONFIG_CANDIDATES: &[&str] = &[
@@ -183,13 +183,13 @@ pub fn combined_service_state(classified_units: &[FreshclamServiceState]) -> Fre
         .unwrap_or(fallback_state)
 }
 
-pub async fn detect_freshclam_service() -> FreshclamServiceState {
+pub async fn detect_freshclam_service(system_bus: &SystemBusAccess) -> FreshclamServiceState {
     let classified_units =
         futures::future::join_all(FRESHCLAM_SERVICE_UNITS.map(|service_unit| async move {
             classify_service_state(
                 service_unit,
-                probe_unit_state(&format!("{service_unit}.service")).await,
-                probe_unit_state(&format!("{service_unit}.timer")).await,
+                probe_unit_state(system_bus, &format!("{service_unit}.service")).await,
+                probe_unit_state(system_bus, &format!("{service_unit}.timer")).await,
             )
         }))
         .await;

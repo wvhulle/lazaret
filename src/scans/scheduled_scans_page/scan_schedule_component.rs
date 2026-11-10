@@ -11,7 +11,8 @@ use crate::{
             stored_settings_watch::forward_setting_changes,
         },
         systemd_bus::host_systemd_units::{
-            SystemdBusFailure, TimerUnitSnapshot, UnitTimestamp, timer_unit_snapshot,
+            SystemBusAccess, SystemdBusFailure, TimerUnitSnapshot, UnitTimestamp, UserBusAccess,
+            timer_unit_snapshot,
         },
     },
     scans::scheduled_scans_page::{
@@ -34,6 +35,8 @@ use crate::{
 const SYSTEM_SCAN_TIMER: &str = "clamdscan.timer";
 
 pub struct ScanScheduleSection {
+    system_bus: SystemBusAccess,
+    user_bus: UserBusAccess,
     sandbox_kind: SandboxKind,
     stored_settings: gio::Settings,
     schedule_rows: Controller<PreferenceRowsGroup>,
@@ -216,14 +219,18 @@ pub const fn allows_applying_schedule(system_schedule_owner: &SystemScheduleOwne
 }
 
 impl ScanScheduleSection {
-    fn inspect_timers(sender: &ComponentSender<Self>) {
-        sender.oneshot_command(async {
+    fn inspect_timers(
+        system_bus: SystemBusAccess,
+        user_bus: UserBusAccess,
+        sender: &ComponentSender<Self>,
+    ) {
+        sender.oneshot_command(async move {
             ScanScheduleSectionCommand::SystemTimerInspected(system_schedule_owner(
-                timer_unit_snapshot(SYSTEM_SCAN_TIMER).await,
+                timer_unit_snapshot(&system_bus, SYSTEM_SCAN_TIMER).await,
             ))
         });
-        sender.oneshot_command(async {
-            ScanScheduleSectionCommand::TimerStateLoaded(read_schedule_timer_state().await)
+        sender.oneshot_command(async move {
+            ScanScheduleSectionCommand::TimerStateLoaded(read_schedule_timer_state(&user_bus).await)
         });
     }
 
@@ -240,9 +247,15 @@ impl ScanScheduleSection {
     }
 }
 
+pub struct ScanScheduleSectionInit {
+    pub sandbox_kind: SandboxKind,
+    pub system_bus: SystemBusAccess,
+    pub user_bus: UserBusAccess,
+}
+
 #[relm4::component(pub)]
 impl Component for ScanScheduleSection {
-    type Init = SandboxKind;
+    type Init = ScanScheduleSectionInit;
     type Input = ScanScheduleSectionInput;
     type Output = ();
     type CommandOutput = ScanScheduleSectionCommand;
@@ -302,7 +315,11 @@ impl Component for ScanScheduleSection {
     }
 
     fn init(
-        sandbox_kind: SandboxKind,
+        ScanScheduleSectionInit {
+            sandbox_kind,
+            system_bus,
+            user_bus,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -316,6 +333,8 @@ impl Component for ScanScheduleSection {
         let schedule_settings = StoredScheduleSettings::read_from(&stored_settings);
         let model = Self {
             sandbox_kind,
+            system_bus,
+            user_bus,
             schedule_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
                     row_specs: schedule_row_specs(),
@@ -332,7 +351,7 @@ impl Component for ScanScheduleSection {
         };
         let schedule_group = model.schedule_rows.widget();
         let widgets = view_output!();
-        Self::inspect_timers(&sender);
+        Self::inspect_timers(model.system_bus.clone(), model.user_bus.clone(), &sender);
         ComponentParts { model, widgets }
     }
 
@@ -357,10 +376,11 @@ impl Component for ScanScheduleSection {
                     return;
                 }
                 self.page_notice = ScheduleSectionNotice::NoNoticeShown;
+                let user_bus = self.user_bus.clone();
                 if !self.schedule_settings.schedule_enabled {
-                    sender.oneshot_command(async {
+                    sender.oneshot_command(async move {
                         ScanScheduleSectionCommand::ScheduleApplied(
-                            disable_scan_schedule(systemd_user_unit_directory()).await,
+                            disable_scan_schedule(&user_bus, systemd_user_unit_directory()).await,
                         )
                     });
                     return;
@@ -372,6 +392,7 @@ impl Component for ScanScheduleSection {
                 sender.oneshot_command(async move {
                     ScanScheduleSectionCommand::ScheduleApplied(
                         enable_scan_schedule(
+                            &user_bus,
                             sandbox_kind,
                             systemd_user_unit_directory(),
                             scan_schedule,
@@ -405,7 +426,7 @@ impl Component for ScanScheduleSection {
                     }
                 }
                 self.user_timer_view = UserTimerView::ReadingUserTimer;
-                Self::inspect_timers(&sender);
+                Self::inspect_timers(self.system_bus.clone(), self.user_bus.clone(), &sender);
             }
         }
     }

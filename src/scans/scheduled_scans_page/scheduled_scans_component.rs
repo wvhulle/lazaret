@@ -21,11 +21,12 @@ use crate::{
             ScanServiceEvidence, scan_service_evidence,
         },
         systemd_bus::host_systemd_units::{
-            UnitStartOutcome, service_unit_snapshot, signal_system_unit, start_system_unit,
+            SystemBusAccess, UnitStartOutcome, UserBusAccess, service_unit_snapshot,
+            signal_system_unit, start_system_unit,
         },
     },
     scans::scheduled_scans_page::{
-        scan_schedule_component::ScanScheduleSection,
+        scan_schedule_component::{ScanScheduleSection, ScanScheduleSectionInit},
         scheduled_scans_presentation::{ScheduledScanAction, scheduled_scans_page_steps},
         scheduled_scans_state::ScheduledScansPageOutput,
         system_scan_run::{
@@ -53,11 +54,14 @@ use crate::{
 };
 
 pub struct ScheduledScansPageInit {
+    pub system_bus: SystemBusAccess,
+    pub user_bus: UserBusAccess,
     pub activity_history: ActivityHistory,
     pub sandbox_kind: SandboxKind,
 }
 
 pub struct ScheduledScansPage {
+    system_bus: SystemBusAccess,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<ScheduledScanAction>>,
     distribution_family: DistributionFamily,
@@ -239,11 +243,14 @@ impl Component for ScheduledScansPage {
         ScheduledScansPageInit {
             activity_history,
             sandbox_kind,
+            system_bus,
+            user_bus,
         }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            system_bus: system_bus.clone(),
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
@@ -258,7 +265,13 @@ impl Component for ScheduledScansPage {
             distribution_family: detect_distribution_family(sandbox_kind),
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
-            schedule_section: ScanScheduleSection::builder().launch(sandbox_kind).detach(),
+            schedule_section: ScanScheduleSection::builder()
+                .launch(ScanScheduleSectionInit {
+                    sandbox_kind,
+                    system_bus: system_bus.clone(),
+                    user_bus,
+                })
+                .detach(),
             history_group: ActivityHistoryGroup::builder()
                 .launch(ActivityHistoryGroupInit {
                     activity_history,
@@ -323,12 +336,13 @@ impl Component for ScheduledScansPage {
             ScheduledScansPageInput::SystemScanRequested => {
                 match self.system_scan_control.run_requested() {
                     SystemScanStart::StartServiceUnit { service_unit } => {
+                        let system_bus = self.system_bus.clone();
                         sender.oneshot_command(async move {
-                            let start_outcome = start_system_unit(service_unit).await;
+                            let start_outcome = start_system_unit(&system_bus, service_unit).await;
                             ScheduledScansPageCommand::SystemScanFinished {
                                 start_outcome,
                                 scan_service: scan_service_evidence(
-                                    service_unit_snapshot(service_unit).await,
+                                    service_unit_snapshot(&system_bus, service_unit).await,
                                 ),
                             }
                         });
@@ -339,9 +353,11 @@ impl Component for ScheduledScansPage {
             ScheduledScansPageInput::SystemScanStopRequested => {
                 match self.system_scan_control.stop_requested() {
                     SystemScanStop::StopServiceUnit { service_unit } => {
+                        let system_bus = self.system_bus.clone();
                         sender.oneshot_command(async move {
                             ScheduledScansPageCommand::SystemScanStopSent {
                                 stop_outcome: signal_system_unit(
+                                    &system_bus,
                                     service_unit,
                                     rustix::process::Signal::TERM.as_raw(),
                                 )

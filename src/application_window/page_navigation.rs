@@ -70,7 +70,7 @@ use crate::{
             lazaret_schedule_is_enabled,
         },
         quarantine_vault::quarantine_entry_database::QuarantineVault,
-        systemd_bus::host_systemd_units::watched_unit_changes,
+        systemd_bus::host_systemd_units::{SystemBusAccess, UserBusAccess, watched_unit_changes},
     },
     scans::{
         manual_scan_page::{
@@ -122,6 +122,8 @@ use crate::{
 };
 
 pub struct PageNavigationInit {
+    pub system_bus: SystemBusAccess,
+    pub user_bus: UserBusAccess,
     pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub data_directory: PathBuf,
@@ -131,6 +133,8 @@ pub struct PageNavigationInit {
 }
 
 pub struct PageNavigation {
+    system_bus: SystemBusAccess,
+    user_bus: UserBusAccess,
     sandbox_kind: SandboxKind,
     visible_page: ApplicationPage,
     sidebar_column: Controller<SidebarNavigationColumn>,
@@ -547,9 +551,17 @@ impl PageNavigation {
         match gathering_start {
             GatheringStart::StartGathering => {
                 let lazaret_schedule_enabled = lazaret_schedule_is_enabled();
+                let system_bus = self.system_bus.clone();
+                let user_bus = self.user_bus.clone();
                 sender.oneshot_command(async move {
                     let protection_evidence = Box::new(
-                        gather_protection_evidence(sandbox_kind, lazaret_schedule_enabled).await,
+                        gather_protection_evidence(
+                            &user_bus,
+                            &system_bus,
+                            sandbox_kind,
+                            lazaret_schedule_enabled,
+                        )
+                        .await,
                     );
                     PageNavigationCommand::EvidenceGathered {
                         protection_evidence,
@@ -708,6 +720,8 @@ impl Component for PageNavigation {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let sandbox_kind = navigation_init.sandbox_kind;
+        let system_bus = navigation_init.system_bus;
+        let user_bus = navigation_init.user_bus;
         let quarantine_vault = navigation_init.quarantine_vault;
         let data_directory = navigation_init.data_directory;
         let activity_history =
@@ -765,6 +779,7 @@ impl Component for PageNavigation {
             .launch(DatabaseUpdatesPageInit {
                 activity_history: activity_history.clone(),
                 sandbox_kind,
+                system_bus: system_bus.clone(),
             })
             .forward(sender.input_sender(), forwarded_database_updates_output);
         let scan_engine_page = ScanEnginePage::builder()
@@ -777,6 +792,8 @@ impl Component for PageNavigation {
             .launch(ScheduledScansPageInit {
                 activity_history: activity_history.clone(),
                 sandbox_kind,
+                system_bus: system_bus.clone(),
+                user_bus: user_bus.clone(),
             })
             .forward(sender.input_sender(), forwarded_scheduled_scans_output);
         let sent_samples_page = SentSamplesPage::builder()
@@ -830,9 +847,11 @@ impl Component for PageNavigation {
             area_summaries: Vec::new(),
             _unit_watch: run_stream(
                 &sender,
-                watched_unit_changes(&WATCHED_SERVICE_UNITS)
+                watched_unit_changes(system_bus.clone(), &WATCHED_SERVICE_UNITS)
                     .map(|()| PageNavigationCommand::WatchedUnitChanged),
             ),
+            system_bus,
+            user_bus,
         };
         model.advance_evidence_refresh(EvidenceRefreshTrigger::RefreshRequested, &sender);
         let page_toast_overlay = model.toaster.overlay_widget();

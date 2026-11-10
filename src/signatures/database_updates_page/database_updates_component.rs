@@ -19,6 +19,7 @@ use crate::{
             flatpak_sandbox::SandboxKind,
             locale_formatting::host_moment_formatters,
         },
+        systemd_bus::host_systemd_units::SystemBusAccess,
     },
     shared_widgets::{
         activity_entries::{
@@ -66,11 +67,13 @@ enum TranscriptDialogView {
 }
 
 pub struct DatabaseUpdatesPageInit {
+    pub system_bus: SystemBusAccess,
     pub activity_history: ActivityHistory,
     pub sandbox_kind: SandboxKind,
 }
 
 pub struct DatabaseUpdatesPage {
+    system_bus: SystemBusAccess,
     sandbox_kind: SandboxKind,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<DatabaseUpdateAction>>,
@@ -175,9 +178,15 @@ impl DatabaseUpdatesPage {
         });
     }
 
-    fn refresh_host_status(sandbox_kind: SandboxKind, sender: &ComponentSender<Self>) {
+    fn refresh_host_status(
+        system_bus: SystemBusAccess,
+        sandbox_kind: SandboxKind,
+        sender: &ComponentSender<Self>,
+    ) {
         sender.oneshot_command(async move {
-            DatabaseUpdatesPageCommand::HostStatusLoaded(load_host_status(sandbox_kind).await)
+            DatabaseUpdatesPageCommand::HostStatusLoaded(
+                load_host_status(&system_bus, sandbox_kind).await,
+            )
         });
     }
 
@@ -191,7 +200,7 @@ impl DatabaseUpdatesPage {
             UpdateStartDecision::StartUpdateNow(update_plan) => {
                 let update_stream = run_stream_then(
                     sender,
-                    database_update_events(sandbox_kind, update_plan)
+                    database_update_events(self.system_bus.clone(), sandbox_kind, update_plan)
                         .ready_chunks(UPDATE_BATCH_SIZE)
                         .map(DatabaseUpdatesPageCommand::UpdateBatchArrived),
                     DatabaseUpdatesPageCommand::UpdateStreamFinished,
@@ -224,7 +233,7 @@ impl DatabaseUpdatesPage {
                 activity_history.record_activity(activity_entry).await,
             )
         });
-        Self::refresh_host_status(sandbox_kind, sender);
+        Self::refresh_host_status(self.system_bus.clone(), sandbox_kind, sender);
         self.show_status_steps();
         finished_effects
             .page_outputs
@@ -323,11 +332,13 @@ impl Component for DatabaseUpdatesPage {
         DatabaseUpdatesPageInit {
             activity_history,
             sandbox_kind,
+            system_bus,
         }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            system_bus,
             sandbox_kind,
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
@@ -368,7 +379,7 @@ impl Component for DatabaseUpdatesPage {
         let status_loading_page =
             &loading_status_page(&translated_messages::signatures::checking_signatures());
         let widgets = view_output!();
-        Self::refresh_host_status(sandbox_kind, &sender);
+        Self::refresh_host_status(model.system_bus.clone(), sandbox_kind, &sender);
         model.reload_history(&sender);
         ComponentParts { model, widgets }
     }

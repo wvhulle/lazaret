@@ -9,8 +9,8 @@ use jiff::civil::Weekday;
 use crate::host_services::{
     desktop::flatpak_sandbox::{SandboxKind, sandboxed_launcher_words},
     systemd_bus::host_systemd_units::{
-        TimerUnitSnapshot, UnitActivity, UnitTimestamp, disable_user_timer, enable_user_timer,
-        reload_user_manager, user_timer_snapshot,
+        TimerUnitSnapshot, UnitActivity, UnitTimestamp, UserBusAccess, disable_user_timer,
+        enable_user_timer, reload_user_manager, user_timer_snapshot,
     },
 };
 
@@ -239,6 +239,7 @@ pub fn current_launcher_words(sandbox_kind: SandboxKind) -> io::Result<Vec<Strin
 }
 
 pub async fn enable_scan_schedule(
+    user_bus: &UserBusAccess,
     sandbox_kind: SandboxKind,
     unit_directory: PathBuf,
     scan_schedule: ScanSchedule,
@@ -259,7 +260,7 @@ pub async fn enable_scan_schedule(
             )
         })
         .map_err(ScheduleApplyFailure::UnitFilesUnwritable)?;
-    enable_user_timer(TIMER_FILE_NAME).await?;
+    enable_user_timer(user_bus, TIMER_FILE_NAME).await?;
     Ok(())
 }
 
@@ -317,8 +318,11 @@ pub fn changed_units_of_current_schedule(
     )
 }
 
-pub async fn disable_scan_schedule(unit_directory: PathBuf) -> Result<(), ScheduleApplyFailure> {
-    disable_user_timer(TIMER_FILE_NAME).await?;
+pub async fn disable_scan_schedule(
+    user_bus: &UserBusAccess,
+    unit_directory: PathBuf,
+) -> Result<(), ScheduleApplyFailure> {
+    disable_user_timer(user_bus, TIMER_FILE_NAME).await?;
     [SERVICE_FILE_NAME, TIMER_FILE_NAME]
         .iter()
         .try_for_each(
@@ -329,7 +333,7 @@ pub async fn disable_scan_schedule(unit_directory: PathBuf) -> Result<(), Schedu
             },
         )
         .map_err(ScheduleApplyFailure::UnitFilesUnwritable)?;
-    reload_user_manager().await?;
+    reload_user_manager(user_bus).await?;
     Ok(())
 }
 
@@ -349,8 +353,8 @@ pub fn schedule_state_from_timer(timer_snapshot: TimerUnitSnapshot) -> ScheduleT
     }
 }
 
-pub async fn read_schedule_timer_state() -> ScheduleTimerState {
-    schedule_state_from_timer(user_timer_snapshot(TIMER_FILE_NAME).await)
+pub async fn read_schedule_timer_state(user_bus: &UserBusAccess) -> ScheduleTimerState {
+    schedule_state_from_timer(user_timer_snapshot(user_bus, TIMER_FILE_NAME).await)
 }
 
 #[cfg(test)]

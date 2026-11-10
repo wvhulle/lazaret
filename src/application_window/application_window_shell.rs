@@ -43,6 +43,7 @@ use crate::{
             quarantine_entry_database::QuarantineVault,
             quarantine_file_moves::QuarantineMoveFailure,
         },
+        systemd_bus::host_systemd_units::{SystemBusAccess, UserBusAccess},
     },
     preferences_dialog::preferences_dialog_component::{
         ONLINE_SERVICES_PAGE_NAME, PreferencesDialog, PreferencesDialogOutput,
@@ -221,6 +222,8 @@ async fn opened_window_content(
         page_navigation: PageNavigation::builder()
             .launch(PageNavigationInit {
                 sandbox_kind,
+                system_bus: SystemBusAccess::connect().await,
+                user_bus: UserBusAccess::connect().await,
                 quarantine_vault: locked_vault.quarantine_vault,
                 data_directory,
                 window_root: window_root.clone(),

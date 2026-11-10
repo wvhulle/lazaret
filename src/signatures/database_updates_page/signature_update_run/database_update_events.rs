@@ -16,7 +16,8 @@ use crate::{
         },
         desktop::flatpak_sandbox::{SandboxKind, host_program_command},
         systemd_bus::host_systemd_units::{
-            UnitStartOutcome, UnitState, probe_unit_state, signal_system_unit, start_system_unit,
+            SystemBusAccess, UnitStartOutcome, UnitState, probe_unit_state, signal_system_unit,
+            start_system_unit,
         },
         systemd_journal::unit_journal_reader::{
             UnitJournalReadFailure, read_journal_off_thread, unit_messages_since,
@@ -123,18 +124,22 @@ async fn service_output_events(
     )
 }
 
-async fn third_party_output_events(started_after: Timestamp) -> Vec<DatabaseUpdateEvent> {
+async fn third_party_output_events(
+    system_bus: &SystemBusAccess,
+    started_after: Timestamp,
+) -> Vec<DatabaseUpdateEvent> {
     if !matches!(
-        probe_unit_state(FANGFRISCH_SERVICE_UNIT).await,
+        probe_unit_state(system_bus, FANGFRISCH_SERVICE_UNIT).await,
         UnitState::UnitLoaded(_)
     ) {
         return Vec::new();
     }
-    let _fangfrisch_outcome = start_system_unit(FANGFRISCH_SERVICE_UNIT).await;
+    let _fangfrisch_outcome = start_system_unit(system_bus, FANGFRISCH_SERVICE_UNIT).await;
     service_output_events(FANGFRISCH_UNIT_NAME, started_after).await
 }
 
 pub fn database_update_events(
+    system_bus: SystemBusAccess,
     sandbox_kind: SandboxKind,
     update_plan: DatabaseUpdatePlan,
 ) -> impl Stream<Item = DatabaseUpdateEvent> + Send + 'static {
@@ -142,16 +147,22 @@ pub fn database_update_events(
     match update_plan {
         DatabaseUpdatePlan::SignalRunningDaemon { service_unit } => stream::once(async move {
             DatabaseUpdateEvent::UpdaterFinished(UpdaterFinish::RunningDaemonSignalled(
-                signal_system_unit(&format!("{service_unit}.service"), UPDATE_NOW_SIGNAL).await,
+                signal_system_unit(
+                    &system_bus,
+                    &format!("{service_unit}.service"),
+                    UPDATE_NOW_SIGNAL,
+                )
+                .await,
             ))
         })
         .boxed(),
         DatabaseUpdatePlan::StartServiceUnit { service_unit } => stream::once(async move {
-            let unit_outcome = start_system_unit(&format!("{service_unit}.service")).await;
+            let unit_outcome =
+                start_system_unit(&system_bus, &format!("{service_unit}.service")).await;
             service_output_events(service_unit, started_after)
                 .await
                 .into_iter()
-                .chain(third_party_output_events(started_after).await)
+                .chain(third_party_output_events(&system_bus, started_after).await)
                 .chain(std::iter::once(DatabaseUpdateEvent::UpdaterFinished(
                     UpdaterFinish::ServiceUnitRan(unit_outcome),
                 )))

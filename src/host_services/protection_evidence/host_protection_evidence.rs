@@ -54,8 +54,9 @@ use crate::{
         },
         systemd_bus::host_systemd_units::{
             ServiceFailureKind, ServiceLastResult, ServiceRunState, ServiceUnitSnapshot,
-            TimerUnitSnapshot, UnitActivity, UnitState, UnitTimestamp, probe_unit_state,
-            probe_user_unit_state, service_unit_snapshot, timer_unit_snapshot,
+            SystemBusAccess, TimerUnitSnapshot, UnitActivity, UnitState, UnitTimestamp,
+            UserBusAccess, probe_unit_state, probe_user_unit_state, service_unit_snapshot,
+            timer_unit_snapshot,
         },
         threat_intel::service_access::{OnlineServiceAccess, read_online_service_access},
     },
@@ -862,8 +863,11 @@ const fn updater_run_state(service_snapshot: &ServiceUnitSnapshot) -> ServiceRun
     }
 }
 
-async fn inspect_updater_unit(updater_unit: SignatureUpdaterUnit) -> Option<UpdaterEvidence> {
-    let service_snapshot = service_unit_snapshot(updater_unit.service_unit).await;
+async fn inspect_updater_unit(
+    system_bus: &SystemBusAccess,
+    updater_unit: SignatureUpdaterUnit,
+) -> Option<UpdaterEvidence> {
+    let service_snapshot = service_unit_snapshot(system_bus, updater_unit.service_unit).await;
     let run_state = updater_run_state(&service_snapshot);
     let last_result = updater_last_result(updater_unit.updater_program, service_snapshot)?;
     Some(UpdaterEvidence {
@@ -935,14 +939,17 @@ pub fn third_party_signature_files(database_directory: &Path) -> ThirdPartySigna
 }
 
 async fn inspect_signature_evidence(
+    system_bus: &SystemBusAccess,
     sandbox_kind: SandboxKind,
     engine_installation: &EngineInstallation,
 ) -> SignatureEvidence {
-    let updater_evidence = join_all(SIGNATURE_UPDATER_UNITS.map(inspect_updater_unit))
-        .await
-        .into_iter()
-        .flatten()
-        .collect();
+    let updater_evidence = join_all(
+        SIGNATURE_UPDATER_UNITS.map(|updater_unit| inspect_updater_unit(system_bus, updater_unit)),
+    )
+    .await
+    .into_iter()
+    .flatten()
+    .collect();
     SignatureEvidence {
         database_evidence: match engine_installation {
             EngineInstallation::VersionReported { version_banner } => {
@@ -965,7 +972,10 @@ async fn inspect_signature_evidence(
     }
 }
 
-async fn inspect_daemon_evidence(sandbox_kind: SandboxKind) -> DaemonEvidence {
+async fn inspect_daemon_evidence(
+    system_bus: &SystemBusAccess,
+    sandbox_kind: SandboxKind,
+) -> DaemonEvidence {
     let clamdscan_location =
         spawn_blocking(move || locate_trusted_program(sandbox_kind, ClamavProgram::ClamdClient))
             .await
@@ -985,7 +995,10 @@ async fn inspect_daemon_evidence(sandbox_kind: SandboxKind) -> DaemonEvidence {
             },
         };
     }
-    silent_daemon_evidence(&join_all(DAEMON_SERVICE_UNITS.map(probe_unit_state)).await)
+    silent_daemon_evidence(
+        &join_all(DAEMON_SERVICE_UNITS.map(|unit_name| probe_unit_state(system_bus, unit_name)))
+            .await,
+    )
 }
 
 fn first_unit_in_state(unit_states: &[UnitState], wanted_state: UnitState) -> Option<&'static str> {
@@ -1036,12 +1049,18 @@ pub fn on_access_scanner_from_states(unit_states: &[UnitState]) -> OnAccessScann
     }
 }
 
-async fn inspect_on_access_scanner() -> OnAccessScanner {
-    on_access_scanner_from_states(&join_all(ON_ACCESS_SERVICE_UNITS.map(probe_unit_state)).await)
+async fn inspect_on_access_scanner(system_bus: &SystemBusAccess) -> OnAccessScanner {
+    on_access_scanner_from_states(
+        &join_all(ON_ACCESS_SERVICE_UNITS.map(|unit_name| probe_unit_state(system_bus, unit_name)))
+            .await,
+    )
 }
 
-async fn inspect_on_access_evidence(sandbox_kind: SandboxKind) -> OnAccessEvidence {
-    let on_access_scanner = inspect_on_access_scanner().await;
+async fn inspect_on_access_evidence(
+    system_bus: &SystemBusAccess,
+    sandbox_kind: SandboxKind,
+) -> OnAccessEvidence {
+    let on_access_scanner = inspect_on_access_scanner(system_bus).await;
     let on_access_config = spawn_blocking(move || read_clamd_config(sandbox_kind))
         .await
         .map_or(
@@ -1083,17 +1102,21 @@ pub fn scan_service_evidence(service_snapshot: ServiceUnitSnapshot) -> ScanServi
     }
 }
 
-async fn inspect_scheduled_scan(lazaret_schedule_enabled: bool) -> ScheduledScanEvidence {
+async fn inspect_scheduled_scan(
+    system_bus: &SystemBusAccess,
+    lazaret_schedule_enabled: bool,
+) -> ScheduledScanEvidence {
     for system_scan_units in SYSTEM_SCAN_UNITS {
         let TimerUnitSnapshot::LoadedTimer {
             unit_activity,
             next_run,
             ..
-        } = timer_unit_snapshot(system_scan_units.timer_unit).await
+        } = timer_unit_snapshot(system_bus, system_scan_units.timer_unit).await
         else {
             continue;
         };
-        let service_snapshot = service_unit_snapshot(system_scan_units.service_unit).await;
+        let service_snapshot =
+            service_unit_snapshot(system_bus, system_scan_units.service_unit).await;
         return ScheduledScanEvidence::SystemTimer {
             service_unit: system_scan_units.service_unit,
             timer_state: match unit_activity {
@@ -1120,11 +1143,14 @@ pub fn lazaret_schedule_is_enabled() -> bool {
 }
 
 pub async fn gather_protection_evidence(
+    user_bus: &UserBusAccess,
+    system_bus: &SystemBusAccess,
     sandbox_kind: SandboxKind,
     lazaret_schedule_enabled: bool,
 ) -> ProtectionEvidence {
     let engine_installation = inspect_engine_installation(sandbox_kind).await;
-    let signature_evidence = inspect_signature_evidence(sandbox_kind, &engine_installation).await;
+    let signature_evidence =
+        inspect_signature_evidence(system_bus, sandbox_kind, &engine_installation).await;
     ProtectionEvidence {
         program_trust: spawn_blocking(move || inspect_program_trust(sandbox_kind))
             .await
@@ -1141,10 +1167,10 @@ pub async fn gather_protection_evidence(
         account_setting_findings: inspect_account_settings(sandbox_kind, lazaret_schedule_enabled),
         engine_installation,
         signature_evidence,
-        daemon_evidence: inspect_daemon_evidence(sandbox_kind).await,
-        on_access_evidence: inspect_on_access_evidence(sandbox_kind).await,
-        scheduled_scan_evidence: inspect_scheduled_scan(lazaret_schedule_enabled).await,
-        background_service_state: probe_user_unit_state(BACKGROUND_SERVICE_UNIT).await,
+        daemon_evidence: inspect_daemon_evidence(system_bus, sandbox_kind).await,
+        on_access_evidence: inspect_on_access_evidence(system_bus, sandbox_kind).await,
+        scheduled_scan_evidence: inspect_scheduled_scan(system_bus, lazaret_schedule_enabled).await,
+        background_service_state: probe_user_unit_state(user_bus, BACKGROUND_SERVICE_UNIT).await,
         process_attach_scope: inspect_process_attach_scope().await,
         online_service_access: read_online_service_access().await,
     }
