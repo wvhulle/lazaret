@@ -13,12 +13,12 @@ use crate::{
         clamav_programs::distribution_install_guides::{
             DistributionFamily, detect_distribution_family,
         },
-        desktop::locale_formatting::host_moment_formatters,
+        desktop::locale_formatting::{exact_local_time_text, host_moment_formatters},
         protection_evidence::host_protection_evidence::{
             ScanServiceEvidence, scan_service_evidence,
         },
         systemd_bus::host_systemd_units::{
-            UnitStartOutcome, service_unit_snapshot, start_system_unit,
+            UnitStartOutcome, service_unit_snapshot, signal_system_unit, start_system_unit,
         },
     },
     scans::scheduled_scans_page::{
@@ -26,7 +26,8 @@ use crate::{
         scheduled_scans_presentation::{ScheduledScanAction, scheduled_scans_page_steps},
         scheduled_scans_state::ScheduledScansPageOutput,
         system_scan_run::{
-            SystemScanControl, SystemScanStart, scan_found_threats, unit_run_toast_text,
+            SystemScanControl, SystemScanStart, SystemScanStop, scan_found_threats,
+            unit_run_toast_text, unit_stop_toast_text,
         },
     },
     shared_widgets::{
@@ -68,6 +69,7 @@ pub enum ScheduledScansPageInput {
     HistoryReloadRequested,
     StepRequested(TimelineStepRowOutput<ScheduledScanAction>),
     SystemScanRequested,
+    SystemScanStopRequested,
 }
 
 #[derive(Debug)]
@@ -75,6 +77,9 @@ pub enum ScheduledScansPageCommand {
     SystemScanFinished {
         start_outcome: UnitStartOutcome,
         scan_service: ScanServiceEvidence,
+    },
+    SystemScanStopSent {
+        stop_outcome: UnitStartOutcome,
     },
 }
 
@@ -147,6 +152,8 @@ impl Component for ScheduledScansPage {
                             connect_clicked => ScheduledScansPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
                             set_tooltip_text: Some(&translated_messages::scans::checking_scheduled_tooltip()),
                         },
                         #[watch]
@@ -170,23 +177,45 @@ impl Component for ScheduledScansPage {
 
                         adw::ActionRow {
                             set_use_markup: false,
+                            #[watch]
+                            set_visible: model.system_scan_control.shows_run_status(),
+                            #[watch]
+                            set_title: &model.system_scan_control.run_status_title(),
+                            #[watch]
+                            set_subtitle: &model
+                                .system_scan_control
+                                .run_started_at()
+                                .map(|started_at| translated_messages::scans::started_at(exact_local_time_text(started_at)))
+                                .unwrap_or_default(),
+
+                            add_prefix = &adw::Spinner {
+                                set_halign: gtk::Align::Center,
+                                set_valign: gtk::Align::Center,
+                            },
+
+                            add_suffix = &gtk::Button {
+                                set_label: &translated_messages::scans::stop_scan_label(),
+                                set_tooltip_text: Some(&translated_messages::scans::stop_scan_tooltip()),
+                                set_valign: gtk::Align::Center,
+                                add_css_class: "destructive-action",
+                                #[watch]
+                                set_sensitive: model.system_scan_control.accepts_stop(),
+                                connect_clicked => ScheduledScansPageInput::SystemScanStopRequested,
+                            },
+                        },
+
+                        adw::ActionRow {
+                            set_use_markup: false,
                             set_title: &translated_messages::scans::folders_scanned_title(),
                             #[watch]
                             set_subtitle: &model.system_scan_control.scanned_folders_text(),
 
-                            add_suffix = &gtk::Stack {
-                                add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
-                                    set_label: &translated_messages::scans::run_now_label(),
-                                    set_valign: gtk::Align::Center,
-                                    #[watch]
-                                    set_sensitive: model.system_scan_control.accepts_run(),
-                                    connect_clicked => ScheduledScansPageInput::SystemScanRequested,
-                                },
-                                add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
-                                    set_tooltip_text: Some(&translated_messages::scans::starting_scan_tooltip()),
-                                },
+                            add_suffix = &gtk::Button {
+                                set_label: &translated_messages::scans::run_now_label(),
+                                set_valign: gtk::Align::Center,
                                 #[watch]
-                                set_visible_child_name: busy_page_name(model.system_scan_control.run_is_starting()),
+                                set_sensitive: model.system_scan_control.accepts_run(),
+                                connect_clicked => ScheduledScansPageInput::SystemScanRequested,
                             },
                         },
                     },
@@ -299,6 +328,22 @@ impl Component for ScheduledScansPage {
                     SystemScanStart::NothingToStart => {}
                 }
             }
+            ScheduledScansPageInput::SystemScanStopRequested => {
+                match self.system_scan_control.stop_requested() {
+                    SystemScanStop::StopServiceUnit { service_unit } => {
+                        sender.oneshot_command(async move {
+                            ScheduledScansPageCommand::SystemScanStopSent {
+                                stop_outcome: signal_system_unit(
+                                    service_unit,
+                                    rustix::process::Signal::TERM.as_raw(),
+                                )
+                                .await,
+                            }
+                        });
+                    }
+                    SystemScanStop::NothingToStop => {}
+                }
+            }
         }
     }
 
@@ -318,6 +363,17 @@ impl Component for ScheduledScansPage {
                     .add_toast(system_scan_toast(&start_outcome, &scan_service));
                 let _shell_closed =
                     sender.output(ScheduledScansPageOutput::EvidenceRefreshRequested);
+            }
+            ScheduledScansPageCommand::SystemScanStopSent { stop_outcome } => {
+                if let Some(stop_failure_text) = unit_stop_toast_text(&stop_outcome) {
+                    self.system_scan_control.stop_refused();
+                    self.toaster.add_toast(
+                        adw::Toast::builder()
+                            .title(stop_failure_text)
+                            .use_markup(false)
+                            .build(),
+                    );
+                }
             }
         }
     }

@@ -307,6 +307,10 @@ impl FactoryComponent for QuarantineEntryDetail {
                     set_subtitle: &self.source_answer_text(circl_answer_text),
 
                     add_suffix = &adw::Spinner {
+
+                        set_halign: gtk::Align::Center,
+
+                        set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: self.reputation_check_running(),
                     },
@@ -319,6 +323,10 @@ impl FactoryComponent for QuarantineEntryDetail {
                     set_css_classes: self.keyed_source_styles(KnownServiceAccess::malware_bazaar_blocker),
 
                     add_suffix = &adw::Spinner {
+
+                        set_halign: gtk::Align::Center,
+
+                        set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: self.keyed_source_checking(KnownServiceAccess::malware_bazaar_blocker),
                     },
@@ -339,6 +347,10 @@ impl FactoryComponent for QuarantineEntryDetail {
                     set_css_classes: self.keyed_source_styles(KnownServiceAccess::virustotal_blocker),
 
                     add_suffix = &adw::Spinner {
+
+                        set_halign: gtk::Align::Center,
+
+                        set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: self.keyed_source_checking(KnownServiceAccess::virustotal_blocker),
                     },

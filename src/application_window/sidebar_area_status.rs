@@ -881,6 +881,7 @@ mod application_page_status_tests {
                 },
                 service_run_journal::ScanRunHistory,
             },
+            systemd_bus::host_systemd_units::ServiceRunState,
         },
         scans::removable_drives_page::drive_mount_checks::DeviceAutoScanSettings,
         signatures::database_updates_page::signature_update_run::updater_exit_status::SignatureUpdaterProgram,
@@ -1033,6 +1034,7 @@ mod application_page_status_tests {
                     service_unit: "clamav-freshclam.service",
                     last_result: UpdaterUnitResult::UpdaterError { exit_status: 1 },
                     last_completed_run: UpdaterRunHistory::NoCompletedUpdate,
+                    run_state: ServiceRunState::ServiceIdle,
                 }],
                 ..healthy_evidence().signature_evidence
             },
@@ -1065,6 +1067,7 @@ mod application_page_status_tests {
                     last_completed_run: UpdaterRunHistory::CompletedUpdate {
                         finished_at: REFERENCE_MOMENT - jiff::SignedDuration::from_hours(2),
                     },
+                    run_state: ServiceRunState::ServiceIdle,
                 }],
                 ..healthy_evidence().signature_evidence
             },
@@ -1088,6 +1091,7 @@ mod application_page_status_tests {
                 scan_service: ScanServiceEvidence::ServiceConfigured {
                     scan_targets: vec!["/tmp".to_owned()],
                     last_result: ScanUnitResult::NothingFound,
+                    scan_run_state: ServiceRunState::ServiceIdle,
                 },
                 last_completed_run: ScanRunHistory::NoCompletedScan,
             },

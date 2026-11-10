@@ -6,6 +6,7 @@ use relm4::{
 };
 
 use crate::{
+    shared_widgets::loading_indicators::inline_row_spinner,
     signatures::signature_sources_page::source_check_results::{
         AuditCheck, AuditStatus, CheckGuidance,
     },
@@ -118,7 +119,7 @@ fn checking_placeholder_row() -> adw::PreferencesRow {
         .title(translated_messages::signatures::checking_title())
         .css_classes(["dim-label"])
         .build();
-    checking_row.add_prefix(&adw::Spinner::new());
+    checking_row.add_prefix(&inline_row_spinner());
     checking_row.upcast()
 }
 

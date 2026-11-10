@@ -9,7 +9,7 @@ use crate::{
             },
             service_run_journal::{ScanRunFindings, ScanRunHistory},
         },
-        systemd_bus::host_systemd_units::UnitTimestamp,
+        systemd_bus::host_systemd_units::{ServiceRunState, UnitTimestamp},
     },
     shared_widgets::step_timeline::{
         step_evidence_builders::{
@@ -18,8 +18,8 @@ use crate::{
         },
         suggested_remedy_commands::SuggestedRemedy,
         timeline_step_contents::{
-            ActionConsequence, EvidenceMoment, SettledStep, StepActionButton, StepActionSlot,
-            StepEvidenceRow, TimelineStep,
+            ActionConsequence, CancelSlot, EvidenceMoment, RunningStep, SettledStep,
+            StepActionButton, StepActionSlot, StepEvidenceRow, TimelineStep,
         },
     },
     translated_messages,
@@ -216,6 +216,19 @@ fn system_timer_rows(
     ]
 }
 
+const fn scan_unit_is_running(scheduled_scan_evidence: &ScheduledScanEvidence) -> bool {
+    matches!(
+        scheduled_scan_evidence,
+        ScheduledScanEvidence::SystemTimer {
+            scan_service: ScanServiceEvidence::ServiceConfigured {
+                scan_run_state: ServiceRunState::ServiceRunning { .. },
+                ..
+            },
+            ..
+        }
+    )
+}
+
 pub fn scheduled_scan_step<StepAction: StepActionButton>(
     scheduled_scan_evidence: &ScheduledScanEvidence,
     daemon_answering: bool,
@@ -245,6 +258,17 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
             Vec::new()
         }
     };
+    if scan_unit_is_running(scheduled_scan_evidence) {
+        return TimelineStep::running(
+            translated_messages::scans::scheduled_scan(),
+            translated_messages::scans::scheduled_scan_catches_files(),
+            translated_messages::scans::scanning_title(),
+            RunningStep {
+                evidence_rows,
+                cancel_slot: CancelSlot::NotCancellable,
+            },
+        );
+    }
     TimelineStep::settled(
         translated_messages::scans::scheduled_scan(),
         translated_messages::scans::scheduled_scan_catches_files(),
@@ -287,7 +311,7 @@ mod scheduled_scans_presentation_tests {
                     REFERENCE_MOMENT, english_formatters, healthy_evidence,
                 },
             },
-            systemd_bus::host_systemd_units::ServiceFailureKind,
+            systemd_bus::host_systemd_units::{ServiceFailureKind, ServiceRunState},
             systemd_journal::unit_journal_reader::UnitJournalReadFailure,
         },
         shared_widgets::step_timeline::timeline_step_contents::StepNodeState,
@@ -355,6 +379,7 @@ mod scheduled_scans_presentation_tests {
             scan_service: ScanServiceEvidence::ServiceConfigured {
                 scan_targets: vec!["/tmp".to_owned()],
                 last_result: ScanUnitResult::NothingFound,
+                scan_run_state: ServiceRunState::ServiceIdle,
             },
             last_completed_run: ScanRunHistory::CompletedScan {
                 finished_at: REFERENCE_MOMENT - SignedDuration::from_hours(2),
@@ -366,6 +391,20 @@ mod scheduled_scans_presentation_tests {
             row_value(&scheduled_step, "Last scan"),
             "2 hours ago · nothing found"
         );
+        assert_eq!(row_value(&scheduled_step, "Folders scanned"), "/tmp");
+    }
+
+    #[test]
+    fn a_running_scan_unit_shows_the_step_in_progress_with_its_rows() {
+        let scheduled_step = step_of(system_timer_with(ScanServiceEvidence::ServiceConfigured {
+            scan_targets: vec!["/tmp".to_owned()],
+            last_result: ScanUnitResult::NothingFound,
+            scan_run_state: ServiceRunState::ServiceRunning {
+                started_at: UnitTimestamp::NeverRecorded,
+            },
+        }));
+        assert_eq!(scheduled_step.node_state(), StepNodeState::InProgress);
+        assert_eq!(scheduled_step.status_text, "Scanning");
         assert_eq!(row_value(&scheduled_step, "Folders scanned"), "/tmp");
     }
 
@@ -399,6 +438,7 @@ mod scheduled_scans_presentation_tests {
         let failed_evidence = system_timer_with(ScanServiceEvidence::ServiceConfigured {
             scan_targets: vec!["/tmp".to_owned()],
             last_result: ScanUnitResult::ScannerError { exit_status: 2 },
+            scan_run_state: ServiceRunState::ServiceIdle,
         });
         assert_eq!(
             step_of(failed_evidence.clone()).status_text,
@@ -450,6 +490,7 @@ mod scheduled_scans_presentation_tests {
             scan_service: ScanServiceEvidence::ServiceConfigured {
                 scan_targets: vec!["/tmp".to_owned()],
                 last_result: ScanUnitResult::NothingFound,
+                scan_run_state: ServiceRunState::ServiceIdle,
             },
             last_completed_run: ScanRunHistory::NoCompletedScan,
         });

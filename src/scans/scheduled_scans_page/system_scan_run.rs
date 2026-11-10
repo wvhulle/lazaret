@@ -1,3 +1,5 @@
+use jiff::Timestamp;
+
 use crate::{
     host_services::{
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
@@ -5,7 +7,9 @@ use crate::{
             DaemonEvidence, ProtectionEvidence, ScanServiceEvidence, ScanUnitResult,
             ScheduledScanEvidence,
         },
-        systemd_bus::host_systemd_units::{SystemdBusFailure, UnitStartOutcome},
+        systemd_bus::host_systemd_units::{
+            ServiceFailureKind, ServiceRunState, SystemdBusFailure, UnitStartOutcome, UnitTimestamp,
+        },
     },
     translated_messages,
 };
@@ -17,6 +21,7 @@ pub enum SystemScanAvailability {
         service_unit: &'static str,
         scanned_folders: Vec<String>,
         daemon_answering: bool,
+        scan_run_state: ServiceRunState,
     },
 }
 
@@ -26,7 +31,12 @@ pub fn system_scan_availability(
     match &protection_evidence.scheduled_scan_evidence {
         ScheduledScanEvidence::SystemTimer {
             service_unit,
-            scan_service: ScanServiceEvidence::ServiceConfigured { scan_targets, .. },
+            scan_service:
+                ScanServiceEvidence::ServiceConfigured {
+                    scan_targets,
+                    scan_run_state,
+                    ..
+                },
             ..
         } => SystemScanAvailability::SystemScanService {
             service_unit,
@@ -35,6 +45,7 @@ pub fn system_scan_availability(
                 protection_evidence.daemon_evidence,
                 DaemonEvidence::ClamdAnswering { .. }
             ),
+            scan_run_state: *scan_run_state,
         },
         ScheduledScanEvidence::SystemTimer { .. }
         | ScheduledScanEvidence::LazaretSchedule
@@ -45,13 +56,21 @@ pub fn system_scan_availability(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SystemScanRun {
     RunIdle,
-    RunStarting,
+    RunRequested,
+    UnitRunning { started_at: UnitTimestamp },
+    StopRequested { started_at: UnitTimestamp },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SystemScanStart {
     StartServiceUnit { service_unit: &'static str },
     NothingToStart,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SystemScanStop {
+    StopServiceUnit { service_unit: &'static str },
+    NothingToStop,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,8 +87,28 @@ impl SystemScanControl {
         }
     }
 
+    const fn unit_run_state(&self) -> ServiceRunState {
+        match self.scan_availability {
+            SystemScanAvailability::SystemScanService { scan_run_state, .. } => scan_run_state,
+            SystemScanAvailability::NoSystemScanService => ServiceRunState::ServiceIdle,
+        }
+    }
+
     pub fn evidence_gathered(&mut self, protection_evidence: &ProtectionEvidence) {
         self.scan_availability = system_scan_availability(protection_evidence);
+        self.scan_run = match (self.scan_run, self.unit_run_state()) {
+            (
+                SystemScanRun::StopRequested { .. },
+                ServiceRunState::ServiceRunning { started_at },
+            ) => SystemScanRun::StopRequested { started_at },
+            (_, ServiceRunState::ServiceRunning { started_at }) => {
+                SystemScanRun::UnitRunning { started_at }
+            }
+            (SystemScanRun::RunRequested, ServiceRunState::ServiceIdle) => {
+                SystemScanRun::RunRequested
+            }
+            (_, ServiceRunState::ServiceIdle) => SystemScanRun::RunIdle,
+        };
     }
 
     pub const fn run_requested(&mut self) -> SystemScanStart {
@@ -82,18 +121,29 @@ impl SystemScanControl {
                     ..
                 },
             ) => {
-                self.scan_run = SystemScanRun::RunStarting;
+                self.scan_run = SystemScanRun::RunRequested;
                 SystemScanStart::StartServiceUnit { service_unit }
             }
-            (SystemScanRun::RunStarting, _)
-            | (
-                SystemScanRun::RunIdle,
-                SystemScanAvailability::NoSystemScanService
-                | SystemScanAvailability::SystemScanService {
-                    daemon_answering: false,
-                    ..
-                },
-            ) => SystemScanStart::NothingToStart,
+            _ => SystemScanStart::NothingToStart,
+        }
+    }
+
+    pub const fn stop_requested(&mut self) -> SystemScanStop {
+        match (self.scan_run, &self.scan_availability) {
+            (
+                SystemScanRun::UnitRunning { started_at },
+                SystemScanAvailability::SystemScanService { service_unit, .. },
+            ) => {
+                self.scan_run = SystemScanRun::StopRequested { started_at };
+                SystemScanStop::StopServiceUnit { service_unit }
+            }
+            _ => SystemScanStop::NothingToStop,
+        }
+    }
+
+    pub const fn stop_refused(&mut self) {
+        if let SystemScanRun::StopRequested { started_at } = self.scan_run {
+            self.scan_run = SystemScanRun::UnitRunning { started_at };
         }
     }
 
@@ -108,8 +158,8 @@ impl SystemScanControl {
         )
     }
 
-    pub const fn run_is_starting(&self) -> bool {
-        matches!(self.scan_run, SystemScanRun::RunStarting)
+    pub const fn shows_run_status(&self) -> bool {
+        !matches!(self.scan_run, SystemScanRun::RunIdle)
     }
 
     pub const fn accepts_run(&self) -> bool {
@@ -123,6 +173,34 @@ impl SystemScanControl {
                 }
             )
         )
+    }
+
+    pub const fn accepts_stop(&self) -> bool {
+        matches!(self.scan_run, SystemScanRun::UnitRunning { .. })
+    }
+
+    pub fn run_status_title(&self) -> String {
+        match self.scan_run {
+            SystemScanRun::RunIdle => String::new(),
+            SystemScanRun::RunRequested => translated_messages::scans::starting_scan_tooltip(),
+            SystemScanRun::UnitRunning { .. } => translated_messages::scans::scanning_title(),
+            SystemScanRun::StopRequested { .. } => translated_messages::scans::stopping_scan(),
+        }
+    }
+
+    pub const fn run_started_at(&self) -> Option<Timestamp> {
+        match self.scan_run {
+            SystemScanRun::UnitRunning {
+                started_at: UnitTimestamp::RecordedAt { recorded_at },
+            }
+            | SystemScanRun::StopRequested {
+                started_at: UnitTimestamp::RecordedAt { recorded_at },
+            } => Some(recorded_at),
+            SystemScanRun::UnitRunning { .. }
+            | SystemScanRun::StopRequested { .. }
+            | SystemScanRun::RunRequested
+            | SystemScanRun::RunIdle => None,
+        }
     }
 
     pub fn scanned_folders_text(&self) -> String {
@@ -153,6 +231,22 @@ impl SystemScanControl {
     }
 }
 
+const fn scan_was_stopped(
+    start_outcome: &UnitStartOutcome,
+    scan_service: &ScanServiceEvidence,
+) -> bool {
+    matches!(start_outcome, UnitStartOutcome::JobEnded { .. })
+        && matches!(
+            scan_service,
+            ScanServiceEvidence::ServiceConfigured {
+                last_result: ScanUnitResult::ServiceFailed {
+                    failure_kind: ServiceFailureKind::KilledBySignal
+                },
+                ..
+            }
+        )
+}
+
 pub fn scan_found_threats(
     start_outcome: &UnitStartOutcome,
     scan_service: &ScanServiceEvidence,
@@ -178,12 +272,30 @@ fn systemd_failure_text(bus_failure: &SystemdBusFailure) -> String {
     }
 }
 
+pub fn unit_stop_toast_text(stop_outcome: &UnitStartOutcome) -> Option<String> {
+    match stop_outcome {
+        UnitStartOutcome::UnitFinished => None,
+        UnitStartOutcome::AuthorizationRefused => {
+            Some(translated_messages::scans::stop_authorization_refused())
+        }
+        UnitStartOutcome::BusFailure(bus_failure) => Some(
+            translated_messages::scans::not_stopped_error(systemd_failure_text(bus_failure)),
+        ),
+        UnitStartOutcome::JobEnded { job_result } => Some(
+            translated_messages::scans::not_stopped_error(sanitize_scanner_line(job_result)),
+        ),
+    }
+}
+
 pub fn unit_run_toast_text(
     start_outcome: &UnitStartOutcome,
     scan_service: &ScanServiceEvidence,
 ) -> String {
     if scan_found_threats(start_outcome, scan_service) {
         return translated_messages::scans::found_malware();
+    }
+    if scan_was_stopped(start_outcome, scan_service) {
+        return translated_messages::scans::scan_stopped();
     }
     match start_outcome {
         UnitStartOutcome::UnitFinished => translated_messages::scans::unit_finished(),
@@ -225,7 +337,8 @@ mod system_scan_run_tests {
             system_scan_control.run_requested(),
             SystemScanStart::StartServiceUnit { .. }
         ));
-        assert!(system_scan_control.run_is_starting());
+        assert!(system_scan_control.shows_run_status());
+        assert!(!system_scan_control.accepts_stop());
         assert!(!system_scan_control.accepts_run());
         assert_eq!(
             system_scan_control.run_requested(),
@@ -233,6 +346,75 @@ mod system_scan_run_tests {
         );
         system_scan_control.run_finished();
         assert!(system_scan_control.accepts_run());
+    }
+
+    fn evidence_with_scan_run_state(scan_run_state: ServiceRunState) -> ProtectionEvidence {
+        let mut running_evidence = healthy_evidence();
+        if let ScheduledScanEvidence::SystemTimer {
+            scan_service:
+                ScanServiceEvidence::ServiceConfigured {
+                    scan_run_state: shown_run_state,
+                    ..
+                },
+            ..
+        } = &mut running_evidence.scheduled_scan_evidence
+        {
+            *shown_run_state = scan_run_state;
+        }
+        running_evidence
+    }
+
+    const SCAN_STARTED_AT: Timestamp = Timestamp::constant(1_700_000_000, 0);
+
+    fn running_scan_evidence() -> ProtectionEvidence {
+        evidence_with_scan_run_state(ServiceRunState::ServiceRunning {
+            started_at: UnitTimestamp::RecordedAt {
+                recorded_at: SCAN_STARTED_AT,
+            },
+        })
+    }
+
+    #[test]
+    fn a_scan_the_timer_started_shows_as_running_and_can_be_stopped() {
+        let mut system_scan_control = control_with(&running_scan_evidence());
+        assert!(system_scan_control.shows_run_status());
+        assert!(!system_scan_control.accepts_run());
+        assert!(system_scan_control.accepts_stop());
+        assert_eq!(system_scan_control.run_status_title(), "Scanning");
+        assert_eq!(system_scan_control.run_started_at(), Some(SCAN_STARTED_AT));
+        assert_eq!(
+            system_scan_control.stop_requested(),
+            SystemScanStop::StopServiceUnit {
+                service_unit: "clamdscan.service"
+            }
+        );
+        assert!(!system_scan_control.accepts_stop());
+        system_scan_control.evidence_gathered(&running_scan_evidence());
+        assert_eq!(system_scan_control.run_status_title(), "Stopping the scan…");
+        system_scan_control.evidence_gathered(&healthy_evidence());
+        assert!(!system_scan_control.shows_run_status());
+        assert!(system_scan_control.accepts_run());
+    }
+
+    #[test]
+    fn a_refused_stop_leaves_the_scan_stoppable() {
+        let mut system_scan_control = control_with(&running_scan_evidence());
+        let _sent_stop = system_scan_control.stop_requested();
+        system_scan_control.stop_refused();
+        assert!(system_scan_control.accepts_stop());
+        assert_eq!(system_scan_control.run_started_at(), Some(SCAN_STARTED_AT));
+    }
+
+    #[test]
+    fn a_requested_run_waits_for_authorization_while_the_unit_is_still_idle() {
+        let mut system_scan_control = control_with(&healthy_evidence());
+        let _started_unit = system_scan_control.run_requested();
+        system_scan_control.evidence_gathered(&healthy_evidence());
+        assert_eq!(system_scan_control.run_status_title(), "Starting the scan…");
+        system_scan_control.evidence_gathered(&running_scan_evidence());
+        assert!(system_scan_control.accepts_stop());
+        system_scan_control.run_finished();
+        assert!(!system_scan_control.shows_run_status());
     }
 
     #[test]
@@ -285,6 +467,7 @@ mod system_scan_run_tests {
 
     fn loaded_scan_service(exit_status: i32) -> ScanServiceEvidence {
         scan_service_evidence(ServiceUnitSnapshot::LoadedService {
+            run_state: ServiceRunState::ServiceIdle,
             unit_activity: UnitActivity::UnitInactive,
             last_result: ServiceLastResult::ExitedWithStatus { exit_status },
             program_arguments: Vec::new(),
@@ -303,6 +486,40 @@ mod system_scan_run_tests {
         assert!(
             unit_run_toast_text(&failed_job, &loaded_scan_service(2))
                 .contains("did not finish cleanly")
+        );
+    }
+
+    #[test]
+    fn a_refused_stop_is_not_reported_as_a_failed_start() {
+        assert_eq!(unit_stop_toast_text(&UnitStartOutcome::UnitFinished), None);
+        assert_eq!(
+            unit_stop_toast_text(&UnitStartOutcome::AuthorizationRefused).as_deref(),
+            Some("Stopping the scan needs administrator authorization")
+        );
+        assert!(
+            unit_stop_toast_text(&UnitStartOutcome::BusFailure(
+                SystemdBusFailure::UnrecognizedLoadState
+            ))
+            .is_some_and(|stop_text| stop_text.starts_with("The scan could not be stopped"))
+        );
+    }
+
+    #[test]
+    fn a_scan_killed_by_a_signal_is_reported_as_stopped() {
+        let failed_job = UnitStartOutcome::JobEnded {
+            job_result: "failed".to_owned(),
+        };
+        let killed_service = scan_service_evidence(ServiceUnitSnapshot::LoadedService {
+            run_state: ServiceRunState::ServiceIdle,
+            unit_activity: UnitActivity::UnitInactive,
+            last_result: ServiceLastResult::FailedWithResult {
+                failure_kind: ServiceFailureKind::KilledBySignal,
+            },
+            program_arguments: Vec::new(),
+        });
+        assert_eq!(
+            unit_run_toast_text(&failed_job, &killed_service),
+            "The scan was stopped"
         );
     }
 

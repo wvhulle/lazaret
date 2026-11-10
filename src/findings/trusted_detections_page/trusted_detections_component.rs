@@ -122,6 +122,8 @@ impl Component for TrustedDetectionsPage {
                             connect_clicked => TrustedDetectionsPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
                             set_tooltip_text: Some(&translated_messages::findings::checking_trusted_tooltip()),
                         },
                         #[watch]

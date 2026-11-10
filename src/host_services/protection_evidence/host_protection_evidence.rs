@@ -53,9 +53,9 @@ use crate::{
             },
         },
         systemd_bus::host_systemd_units::{
-            ServiceFailureKind, ServiceLastResult, ServiceUnitSnapshot, TimerUnitSnapshot,
-            UnitActivity, UnitState, UnitTimestamp, probe_unit_state, probe_user_unit_state,
-            service_unit_snapshot, timer_unit_snapshot,
+            ServiceFailureKind, ServiceLastResult, ServiceRunState, ServiceUnitSnapshot,
+            TimerUnitSnapshot, UnitActivity, UnitState, UnitTimestamp, probe_unit_state,
+            probe_user_unit_state, service_unit_snapshot, timer_unit_snapshot,
         },
         threat_intel::service_access::{OnlineServiceAccess, read_online_service_access},
     },
@@ -200,6 +200,13 @@ pub struct UpdaterEvidence {
     pub service_unit: &'static str,
     pub last_result: UpdaterUnitResult,
     pub last_completed_run: UpdaterRunHistory,
+    pub run_state: ServiceRunState,
+}
+
+impl UpdaterEvidence {
+    pub const fn updater_is_running(&self) -> bool {
+        matches!(self.run_state, ServiceRunState::ServiceRunning { .. })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -408,6 +415,7 @@ pub enum ScanServiceEvidence {
     ServiceConfigured {
         scan_targets: Vec<String>,
         last_result: ScanUnitResult,
+        scan_run_state: ServiceRunState,
     },
     ServiceMissing,
     ServiceUnreadable,
@@ -838,15 +846,24 @@ fn updater_last_result(
     }
 }
 
+const fn updater_run_state(service_snapshot: &ServiceUnitSnapshot) -> ServiceRunState {
+    match service_snapshot {
+        ServiceUnitSnapshot::LoadedService { run_state, .. } => *run_state,
+        ServiceUnitSnapshot::ServiceNotFound | ServiceUnitSnapshot::SystemdUnreachable(_) => {
+            ServiceRunState::ServiceIdle
+        }
+    }
+}
+
 async fn inspect_updater_unit(updater_unit: SignatureUpdaterUnit) -> Option<UpdaterEvidence> {
-    let last_result = updater_last_result(
-        updater_unit.updater_program,
-        service_unit_snapshot(updater_unit.service_unit).await,
-    )?;
+    let service_snapshot = service_unit_snapshot(updater_unit.service_unit).await;
+    let run_state = updater_run_state(&service_snapshot);
+    let last_result = updater_last_result(updater_unit.updater_program, service_snapshot)?;
     Some(UpdaterEvidence {
         updater_program: updater_unit.updater_program,
         service_unit: updater_unit.service_unit,
         last_result,
+        run_state,
         last_completed_run: newest_update_run(
             updater_unit.updater_program,
             updater_unit.service_unit,
@@ -1035,10 +1052,12 @@ pub fn scan_service_evidence(service_snapshot: ServiceUnitSnapshot) -> ScanServi
         ServiceUnitSnapshot::LoadedService {
             last_result,
             program_arguments,
+            run_state,
             ..
         } => ScanServiceEvidence::ServiceConfigured {
             scan_targets: scan_targets_from_arguments(&program_arguments),
             last_result: classify_scan_unit_result(last_result),
+            scan_run_state: run_state,
         },
         ServiceUnitSnapshot::ServiceNotFound => ScanServiceEvidence::ServiceMissing,
         ServiceUnitSnapshot::SystemdUnreachable(_) => ScanServiceEvidence::ServiceUnreadable,
@@ -1170,11 +1189,13 @@ mod protection_evidence_tests {
         );
         assert_eq!(
             scan_service_evidence(ServiceUnitSnapshot::LoadedService {
+                run_state: ServiceRunState::ServiceIdle,
                 unit_activity: UnitActivity::UnitInactive,
                 last_result: ServiceLastResult::ResultSucceeded,
                 program_arguments: vec!["/bin/clamdscan".to_owned(), "/home".to_owned()],
             }),
             ScanServiceEvidence::ServiceConfigured {
+                scan_run_state: ServiceRunState::ServiceIdle,
                 scan_targets: vec!["/home".to_owned()],
                 last_result: ScanUnitResult::NothingFound,
             }

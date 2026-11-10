@@ -7,10 +7,13 @@ use relm4::{
 };
 
 use crate::{
-    shared_widgets::step_timeline::{
-        timeline_detail_row::{TimelineDetailRow, detail_rows_of},
-        timeline_step_contents::{
-            ButtonStyle, StepActionButton, StepNodeState, TimelineStep, TimelineStepRowOutput,
+    shared_widgets::{
+        loading_indicators::inline_row_spinner,
+        step_timeline::{
+            timeline_detail_row::{TimelineDetailRow, detail_rows_of},
+            timeline_step_contents::{
+                ButtonStyle, StepActionButton, StepNodeState, TimelineStep, TimelineStepRowOutput,
+            },
         },
     },
     translated_messages,
@@ -107,7 +110,7 @@ impl<StepAction: StepActionButton> FactoryComponent for TimelineStepRow<StepActi
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let status_image = gtk::Image::new();
-        let running_spinner = adw::Spinner::new();
+        let running_spinner = inline_row_spinner();
         let action_button = gtk::Button::builder().valign(gtk::Align::Center).build();
         let explanation_label = gtk::Label::builder()
             .use_markup(false)

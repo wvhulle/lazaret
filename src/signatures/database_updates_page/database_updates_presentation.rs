@@ -200,6 +200,17 @@ fn updater_row(
     updater_evidence: &UpdaterEvidence,
     moment_context: MomentContext,
 ) -> StepEvidenceRow {
+    if updater_evidence.updater_is_running() {
+        return StepEvidenceRow {
+            evidence_moment: EvidenceMoment::HappeningNow,
+            ..evidence_row(
+                translated_messages::signatures::updater_updated(
+                    updater_evidence.updater_program.program_name(),
+                ),
+                translated_messages::signatures::updater_running_now(),
+            )
+        };
+    }
     let evidence_moment = EvidenceMoment::from(updater_evidence.last_completed_run);
     let evidence_value = if updater_failed(updater_evidence) {
         translated_messages::signatures::last_update_failed()
@@ -385,6 +396,13 @@ fn signature_node_state(
     signature_condition(signature_evidence, reference_moment).node_state()
 }
 
+fn system_updater_running(signature_evidence: &SignatureEvidence) -> bool {
+    signature_evidence
+        .updater_evidence
+        .iter()
+        .any(UpdaterEvidence::updater_is_running)
+}
+
 pub fn signature_update_step(
     signature_evidence: &SignatureEvidence,
     signature_update: &SignatureUpdateView,
@@ -443,6 +461,14 @@ pub fn signature_update_step(
             translated_messages::signatures::update_cancelling(),
             CancelSlot::NotCancellable,
         ),
+        SignatureUpdateProgress::ReadyToUpdate | SignatureUpdateProgress::UpdateUnavailable
+            if system_updater_running(signature_evidence) =>
+        {
+            running_signature_step(
+                translated_messages::signatures::updating_signatures(),
+                CancelSlot::NotCancellable,
+            )
+        }
         SignatureUpdateProgress::ReadyToUpdate => settled_signature_step(
             EvidenceRowControl::RowButton(if evidence_state == SettledNodeState::Completed {
                 OfferedAction::plain(DatabaseUpdateAction::UpdateSignatures)
@@ -492,6 +518,7 @@ mod database_updates_presentation_tests {
                     REFERENCE_MOMENT, english_formatters, healthy_evidence,
                 },
             },
+            systemd_bus::host_systemd_units::{ServiceRunState, UnitTimestamp},
         },
         shared_widgets::step_timeline::timeline_step_contents::{StepNodeState, StepPhase},
         signatures::database_updates_page::signature_update_run::{
@@ -618,6 +645,28 @@ mod database_updates_presentation_tests {
     }
 
     #[test]
+    fn an_update_the_system_timer_started_shows_in_progress_without_update_now() {
+        let running_updater = SignatureEvidence {
+            updater_evidence: vec![UpdaterEvidence {
+                updater_program: SignatureUpdaterProgram::Freshclam,
+                service_unit: "clamav-freshclam.service",
+                last_result: UpdaterUnitResult::UpdateSucceeded,
+                last_completed_run: UpdaterRunHistory::NoCompletedUpdate,
+                run_state: ServiceRunState::ServiceRunning {
+                    started_at: UnitTimestamp::NeverRecorded,
+                },
+            }],
+            ..healthy_evidence().signature_evidence
+        };
+        let signature_step = ready_step_with(&running_updater);
+        assert_eq!(signature_step.node_state(), StepNodeState::InProgress);
+        assert_eq!(signature_step.status_text, "Updating signatures…");
+        assert!(signature_step.offered_actions().is_empty());
+        let updater_row = row_named(&signature_step, "Updated by freshclam");
+        assert_eq!(updater_row.evidence_moment, EvidenceMoment::HappeningNow);
+    }
+
+    #[test]
     fn a_failed_updater_or_stale_source_warns_even_with_fresh_definitions() {
         let failed_updater = SignatureEvidence {
             updater_evidence: vec![UpdaterEvidence {
@@ -625,6 +674,7 @@ mod database_updates_presentation_tests {
                 service_unit: "clamav-fangfrisch.service",
                 last_result: UpdaterUnitResult::UpdaterError { exit_status: 1 },
                 last_completed_run: UpdaterRunHistory::NoCompletedUpdate,
+                run_state: ServiceRunState::ServiceIdle,
             }],
             ..healthy_evidence().signature_evidence
         };

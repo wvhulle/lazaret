@@ -29,6 +29,13 @@ pub const fn busy_page_name(work_running: bool) -> &'static str {
     }
 }
 
+pub fn inline_row_spinner() -> adw::Spinner {
+    adw::Spinner::builder()
+        .halign(gtk::Align::Center)
+        .valign(gtk::Align::Center)
+        .build()
+}
+
 pub fn loading_status_page(loading_title: &str) -> adw::StatusPage {
     let status_page = adw::StatusPage::builder()
         .title(loading_title)
@@ -40,7 +47,7 @@ pub fn loading_status_page(loading_title: &str) -> adw::StatusPage {
 
 pub fn loading_placeholder_row(loading_title: &str) -> adw::ActionRow {
     let placeholder_row = empty_placeholder_row(loading_title);
-    placeholder_row.add_suffix(&adw::Spinner::new());
+    placeholder_row.add_suffix(&inline_row_spinner());
     placeholder_row
 }
 

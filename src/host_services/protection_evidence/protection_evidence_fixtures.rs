@@ -20,7 +20,9 @@ use crate::{
             process_attach_scope::ProcessAttachScope,
             service_run_journal::ScanRunHistory,
         },
-        systemd_bus::host_systemd_units::{UnitActivity, UnitState, UnitTimestamp},
+        systemd_bus::host_systemd_units::{
+            ServiceRunState, UnitActivity, UnitState, UnitTimestamp,
+        },
         threat_intel::service_access::{ApiKey, OnlineServiceAccess, ServiceAccess},
     },
 };
@@ -85,6 +87,7 @@ pub fn healthy_evidence() -> ProtectionEvidence {
             scan_service: ScanServiceEvidence::ServiceConfigured {
                 scan_targets: vec!["/tmp".to_owned(), "/var/tmp".to_owned()],
                 last_result: ScanUnitResult::NothingFound,
+                scan_run_state: ServiceRunState::ServiceIdle,
             },
             last_completed_run: ScanRunHistory::NoCompletedScan,
         },

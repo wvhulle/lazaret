@@ -56,6 +56,9 @@ pub trait SystemdUnit {
 
     #[zbus(property)]
     fn active_state(&self) -> zbus::Result<String>;
+
+    #[zbus(property, name = "InactiveExitTimestamp")]
+    fn inactive_exit_microseconds(&self) -> zbus::Result<u64>;
 }
 
 #[proxy(

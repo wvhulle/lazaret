@@ -75,10 +75,17 @@ pub enum ServiceFailureKind {
     UnrecognizedResult { result_name: String },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ServiceRunState {
+    ServiceIdle,
+    ServiceRunning { started_at: UnitTimestamp },
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ServiceUnitSnapshot {
     LoadedService {
         unit_activity: UnitActivity,
+        run_state: ServiceRunState,
         last_result: ServiceLastResult,
         program_arguments: Vec<String>,
     },
@@ -119,6 +126,18 @@ pub fn parse_unit_state(load_state: &str, active_state: &str) -> UnitState {
         "loaded" | "masked" => UnitState::UnitLoaded(UnitActivity::UnitInactive),
         "not-found" => UnitState::UnitNotFound,
         _other_state => UnitState::SystemdUnavailable,
+    }
+}
+
+pub fn parse_service_run_state(
+    active_state: &str,
+    inactive_exit_microseconds: u64,
+) -> ServiceRunState {
+    match active_state {
+        "activating" | "active" | "reloading" => ServiceRunState::ServiceRunning {
+            started_at: timestamp_from_microseconds(inactive_exit_microseconds),
+        },
+        _other_state => ServiceRunState::ServiceIdle,
     }
 }
 
@@ -228,12 +247,20 @@ async fn read_loaded_service(
     unit_path: &OwnedObjectPath,
     unit_activity: UnitActivity,
 ) -> zbus::Result<ServiceUnitSnapshot> {
+    let unit_proxy = SystemdUnitProxy::builder(system_bus().await?)
+        .path(unit_path)?
+        .build()
+        .await?;
     let service_proxy = SystemdServiceProxy::builder(system_bus().await?)
         .path(unit_path)?
         .build()
         .await?;
     Ok(ServiceUnitSnapshot::LoadedService {
         unit_activity,
+        run_state: parse_service_run_state(
+            &unit_proxy.active_state().await?,
+            unit_proxy.inactive_exit_microseconds().await?,
+        ),
         last_result: classify_service_result(
             &service_proxy.result().await?,
             service_proxy.exec_main_status().await?,

@@ -258,6 +258,8 @@ impl Component for DatabaseUpdatesPage {
                             connect_clicked => DatabaseUpdatesPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
                             set_tooltip_text: Some(&translated_messages::signatures::checking_database_tooltip()),
                         },
                         #[watch]

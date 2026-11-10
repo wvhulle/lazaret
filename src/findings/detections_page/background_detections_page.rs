@@ -742,6 +742,8 @@ impl Component for BackgroundDetectionsPage {
                             set_description: Some(&gtk::glib::markup_escape_text(&model.list_description())),
                             #[wrap(Some)]
                             set_header_suffix = &adw::Spinner {
+                                set_halign: gtk::Align::Center,
+                                set_valign: gtk::Align::Center,
                                 #[watch]
                                 set_visible: model.first_load == FirstLoad::StillLoading,
                             },
@@ -761,6 +763,8 @@ impl Component for BackgroundDetectionsPage {
                                     connect_clicked => BackgroundDetectionsPageInput::AlertsRefreshRequested,
                                 },
                                 add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
+                                    set_halign: gtk::Align::Center,
+                                    set_valign: gtk::Align::Center,
                                     set_tooltip_text: Some(&translated_messages::findings::checking_background_tooltip()),
                                 },
                                 #[watch]

@@ -7,9 +7,13 @@ use relm4::{
 
 use crate::{
     host_services::desktop::locale_formatting::exact_local_time_text,
-    shared_widgets::step_timeline::timeline_step_contents::{
-        ActionableEvidenceRow, EvidenceMoment, EvidenceRowControl, OfferedAction, StepActionButton,
-        StepChoiceRow, StepEvidenceRow, StepPhase, TimelineStep, TimelineStepRowOutput,
+    shared_widgets::{
+        loading_indicators::inline_row_spinner,
+        step_timeline::timeline_step_contents::{
+            ActionableEvidenceRow, EvidenceMoment, EvidenceRowControl, OfferedAction,
+            StepActionButton, StepChoiceRow, StepEvidenceRow, StepPhase, TimelineStep,
+            TimelineStepRowOutput,
+        },
     },
     translated_messages,
 };
@@ -60,7 +64,7 @@ pub fn detail_rows_of<StepAction: StepActionButton>(
 fn moment_prefix(evidence_moment: EvidenceMoment) -> Option<gtk::Widget> {
     let icon_name = match evidence_moment {
         EvidenceMoment::CurrentFact => return None,
-        EvidenceMoment::HappeningNow => return Some(adw::Spinner::new().upcast()),
+        EvidenceMoment::HappeningNow => return Some(inline_row_spinner().upcast()),
         EvidenceMoment::PastEvent { .. } | EvidenceMoment::NeverHappened => {
             "document-open-recent-symbolic"
         }

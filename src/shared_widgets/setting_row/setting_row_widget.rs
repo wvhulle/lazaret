@@ -715,6 +715,8 @@ impl FactoryComponent for SettingRow {
         let editor_slot = gtk::Box::builder().valign(gtk::Align::Center).build();
         editor_slot.append(&editor_box);
         let applying_spinner = adw::Spinner::builder()
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::Center)
             .tooltip_text(translated_messages::widgets::applying_restarting_clamav_tooltip())
             .visible(false)
             .build();
