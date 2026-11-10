@@ -29,12 +29,9 @@ use crate::{
 
 pub const REFERENCE_MOMENT: Timestamp = Timestamp::constant(1_794_200_000, 0);
 
-pub fn english_formatters() -> &'static MomentFormatters {
-    static ENGLISH_FORMATTERS: std::sync::OnceLock<MomentFormatters> = std::sync::OnceLock::new();
-    ENGLISH_FORMATTERS.get_or_init(|| {
-        MomentFormatters::try_for_locales(&icu::locale::locale!("en"), &icu::locale::locale!("en"))
-            .unwrap()
-    })
+pub fn english_formatters() -> MomentFormatters {
+    MomentFormatters::try_for_locales(&icu::locale::locale!("en"), &icu::locale::locale!("en"))
+        .unwrap()
 }
 
 pub fn healthy_evidence() -> ProtectionEvidence {

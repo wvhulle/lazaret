@@ -7,6 +7,7 @@ use relm4::{
 };
 
 use crate::{
+    application_window::sidebar_area_status::removable_drives_summary,
     host_services::{
         activity_history::activity_history_database::{
             ActivityHistory, ActivityHistoryFailure, ScanOrigin,
@@ -157,8 +158,9 @@ impl RemovableDrivesPage {
         let current_status = self.current_status();
         if current_status != self.reported_status {
             self.reported_status = current_status.clone();
-            let _shell_closed =
-                sender.output(RemovableDrivesPageOutput::StatusChanged(current_status));
+            let _shell_closed = sender.output(RemovableDrivesPageOutput::AreaSummaryChanged(
+                removable_drives_summary(&current_status),
+            ));
         }
     }
 
@@ -548,6 +550,9 @@ impl Component for RemovableDrivesPage {
         let found_threat_list = model.found_threat_rows.widget();
         let drive_event_list = model.drive_event_rows.widget();
         let scan_results_widget = model.scan_results_section.widget();
+        let _shell_closed = sender.output(RemovableDrivesPageOutput::AreaSummaryChanged(
+            removable_drives_summary(&model.reported_status),
+        ));
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }

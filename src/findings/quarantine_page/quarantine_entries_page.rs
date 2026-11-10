@@ -6,6 +6,7 @@ use relm4::{
 };
 
 use crate::{
+    application_window::sidebar_area_status::{AreaSummary, quarantine_summary},
     findings::quarantine_page::{
         quarantine_entry_detail::{
             QuarantineEntryDetail, QuarantineEntryDetailInput, QuarantineEntryDetailOutput,
@@ -14,8 +15,7 @@ use crate::{
             QuarantineEntryRow, QuarantineEntryRowInput, QuarantineEntryRowOutput,
         },
         quarantine_page_state::{
-            EntryOperationKind, QuarantineEntryCount, QuarantineListing, QuarantinePageState,
-            RecheckTally,
+            EntryOperationKind, QuarantineListing, QuarantinePageState, RecheckTally,
         },
     },
     host_services::{
@@ -212,7 +212,8 @@ pub enum QuarantineEntriesPageInput {
 
 #[derive(Debug)]
 pub enum QuarantineEntriesPageOutput {
-    EntriesCounted(QuarantineEntryCount),
+    EntriesReloaded,
+    AreaSummaryChanged(AreaSummary),
     SubmissionsChanged,
     ClamavReportConfirmed(ClamavReportRequest),
     SubmissionRequested { entry_id: i64 },
@@ -923,6 +924,9 @@ impl Component for QuarantineEntriesPage {
             &translated_messages::findings::loading_quarantine(),
             &empty_placeholder_row(&translated_messages::findings::quarantine_empty()),
         );
+        let _shell_closed = sender.output(QuarantineEntriesPageOutput::AreaSummaryChanged(
+            quarantine_summary(model.page_state.listing().entry_count()),
+        ));
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -1188,8 +1192,9 @@ impl Component for QuarantineEntriesPage {
                 self.page_state.record_loaded_entries(load_outcome);
                 self.show_matching_entries();
                 self.show_opened_entry();
-                let _shell_closed = sender.output(QuarantineEntriesPageOutput::EntriesCounted(
-                    self.page_state.listing().entry_count(),
+                let _shell_closed = sender.output(QuarantineEntriesPageOutput::EntriesReloaded);
+                let _shell_closed = sender.output(QuarantineEntriesPageOutput::AreaSummaryChanged(
+                    quarantine_summary(self.page_state.listing().entry_count()),
                 ));
             }
             QuarantineEntriesPageCommand::EntryOperationFinished {

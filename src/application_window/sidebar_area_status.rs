@@ -118,18 +118,6 @@ pub struct SidebarAreaSummary {
     pub area_summary: AreaSummary,
 }
 
-#[derive(Clone)]
-pub struct AreaSummaryContext {
-    pub alert_readiness: AlertReadiness,
-    pub unresolved_detections: usize,
-    pub quarantine_entry_count: QuarantineEntryCount,
-    pub removable_drives_status: RemovableDrivesStatus,
-    pub submission_tally: SubmissionTally,
-    pub home_directory: String,
-    pub moment_formatters: &'static MomentFormatters,
-    pub reference_moment: Timestamp,
-}
-
 const fn summary_of(area_status: AreaStatus, live_state_text: String) -> AreaSummary {
     AreaSummary {
         area_status,
@@ -159,10 +147,12 @@ fn worst_summary(
     )
 }
 
-fn relative_text(area_context: &AreaSummaryContext, moment: Timestamp) -> String {
-    area_context
-        .moment_formatters
-        .relative_moment_text(moment, area_context.reference_moment)
+fn relative_text(
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
+    moment: Timestamp,
+) -> String {
+    moment_formatters.relative_moment_text(moment, reference_moment)
 }
 
 fn third_party_provider_count(third_party_listing: &ThirdPartySignatureListing) -> usize {
@@ -178,12 +168,10 @@ fn third_party_provider_count(third_party_listing: &ThirdPartySignatureListing) 
 
 fn signature_sources_summary(
     signature_evidence: &SignatureEvidence,
-    area_context: &AreaSummaryContext,
+    reference_moment: Timestamp,
 ) -> AreaSummary {
-    let source_condition = third_party_source_condition(
-        &signature_evidence.third_party_listing,
-        area_context.reference_moment,
-    );
+    let source_condition =
+        third_party_source_condition(&signature_evidence.third_party_listing, reference_moment);
     let provider_count = third_party_provider_count(&signature_evidence.third_party_listing);
     let live_state_text = match &signature_evidence.third_party_listing {
         ThirdPartySignatureListing::FolderUnreadable(_) => {
@@ -221,7 +209,8 @@ fn latest_completed_update(signature_evidence: &SignatureEvidence) -> Option<Tim
 
 fn database_updates_text(
     signature_evidence: &SignatureEvidence,
-    area_context: &AreaSummaryContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> String {
     match signature_evidence.database_evidence {
         DatabaseEvidence::DatabaseMissing => translated_messages::window::database_missing(),
@@ -236,17 +225,19 @@ fn database_updates_text(
         {
             translated_messages::window::last_update_failed()
         }
-        DatabaseEvidence::BuiltAt { built_at } if built_at > area_context.reference_moment => {
+        DatabaseEvidence::BuiltAt { built_at } if built_at > reference_moment => {
             translated_messages::window::definitions_dated_future()
         }
         DatabaseEvidence::BuiltAt { built_at } => {
             match latest_completed_update(signature_evidence) {
                 Some(finished_at) => translated_messages::window::updated_label(relative_text(
-                    area_context,
+                    moment_formatters,
+                    reference_moment,
                     finished_at,
                 )),
                 None => translated_messages::window::definitions_label(relative_text(
-                    area_context,
+                    moment_formatters,
+                    reference_moment,
                     built_at,
                 )),
             }
@@ -276,13 +267,14 @@ fn updater_trust_summary(protection_evidence: &ProtectionEvidence) -> Option<Are
 
 fn database_updates_summary(
     protection_evidence: &ProtectionEvidence,
-    area_context: &AreaSummaryContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> AreaSummary {
     let signature_evidence = &protection_evidence.signature_evidence;
     worst_summary(
         condition_summary(
-            database_update_condition(signature_evidence, area_context.reference_moment),
-            database_updates_text(signature_evidence, area_context),
+            database_update_condition(signature_evidence, reference_moment),
+            database_updates_text(signature_evidence, moment_formatters, reference_moment),
         ),
         [updater_trust_summary(protection_evidence)],
     )
@@ -499,18 +491,14 @@ fn on_access_setup_summary(on_access_evidence: &OnAccessEvidence) -> Option<Area
 
 fn on_access_summary(
     protection_evidence: &ProtectionEvidence,
-    area_context: &AreaSummaryContext,
+    home_directory: &str,
 ) -> AreaSummary {
     let daemon_answering = daemon_is_answering(&protection_evidence.daemon_evidence);
     let on_access_evidence = &protection_evidence.on_access_evidence;
     worst_summary(
         condition_summary(
             on_access_condition(on_access_evidence, daemon_answering),
-            on_access_text(
-                on_access_evidence,
-                daemon_answering,
-                &area_context.home_directory,
-            ),
+            on_access_text(on_access_evidence, daemon_answering, home_directory),
         ),
         [
             on_access_setup_summary(on_access_evidence),
@@ -522,7 +510,8 @@ fn on_access_summary(
 fn scheduled_scan_text(
     scheduled_scan_evidence: &ScheduledScanEvidence,
     daemon_answering: bool,
-    area_context: &AreaSummaryContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> String {
     match scheduled_scan_evidence {
         ScheduledScanEvidence::SystemTimer { .. } if !daemon_answering => waiting_for_daemon_text(),
@@ -544,7 +533,8 @@ fn scheduled_scan_text(
             ScanServiceEvidence::ServiceConfigured { .. } => match next_run {
                 UnitTimestamp::RecordedAt { recorded_at } => {
                     translated_messages::window::next_scan(relative_text(
-                        area_context,
+                        moment_formatters,
+                        reference_moment,
                         *recorded_at,
                     ))
                 }
@@ -587,14 +577,20 @@ const fn excludes_broadly(account_finding: &AccountSettingFinding) -> bool {
 
 fn scheduled_scans_summary(
     protection_evidence: &ProtectionEvidence,
-    area_context: &AreaSummaryContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> AreaSummary {
     let daemon_answering = daemon_is_answering(&protection_evidence.daemon_evidence);
     let scheduled_scan_evidence = &protection_evidence.scheduled_scan_evidence;
     worst_summary(
         condition_summary(
             scheduled_scan_condition(scheduled_scan_evidence, daemon_answering),
-            scheduled_scan_text(scheduled_scan_evidence, daemon_answering, area_context),
+            scheduled_scan_text(
+                scheduled_scan_evidence,
+                daemon_answering,
+                moment_formatters,
+                reference_moment,
+            ),
         ),
         [account_finding_summary(
             &protection_evidence.account_setting_findings,
@@ -637,7 +633,7 @@ fn manual_scan_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary 
     )
 }
 
-fn removable_drives_summary(removable_drives_status: &RemovableDrivesStatus) -> AreaSummary {
+pub fn removable_drives_summary(removable_drives_status: &RemovableDrivesStatus) -> AreaSummary {
     match &removable_drives_status.device_scan_status {
         DeviceScanStatus::DeviceScanRunning { drive_name } => summary_of(
             AreaStatus::AreaHealthy,
@@ -700,11 +696,11 @@ fn process_attach_summary(process_attach_scope: ProcessAttachScope) -> Option<Ar
     .map(|live_state_text| condition_summary(attach_condition, live_state_text))
 }
 
-fn detections_summary(
+pub fn detections_summary(
     protection_evidence: &ProtectionEvidence,
-    area_context: &AreaSummaryContext,
+    unresolved_detections: usize,
+    alert_readiness: &AlertReadiness,
 ) -> AreaSummary {
-    let unresolved_detections = area_context.unresolved_detections;
     let decision_summary = if unresolved_detections == 0 {
         summary_of(
             AreaStatus::AreaHealthy,
@@ -719,13 +715,13 @@ fn detections_summary(
     worst_summary(
         decision_summary,
         [
-            alerts_summary(protection_evidence, &area_context.alert_readiness),
+            alerts_summary(protection_evidence, alert_readiness),
             process_attach_summary(protection_evidence.process_attach_scope),
         ],
     )
 }
 
-fn quarantine_summary(quarantine_entry_count: QuarantineEntryCount) -> AreaSummary {
+pub fn quarantine_summary(quarantine_entry_count: QuarantineEntryCount) -> AreaSummary {
     match quarantine_entry_count {
         QuarantineEntryCount::CountLoading => summary_of(
             AreaStatus::AreaUnknown,
@@ -778,7 +774,7 @@ fn trusted_detections_summary(trust_list_reading: &TrustListReading) -> AreaSumm
     condition_summary(trust_list_condition(trust_list_reading), live_state_text)
 }
 
-fn sent_samples_summary(submission_tally: SubmissionTally) -> AreaSummary {
+pub fn sent_samples_summary(submission_tally: SubmissionTally) -> AreaSummary {
     match submission_tally {
         SubmissionTally::TallyLoading => summary_of(
             AreaStatus::AreaUnknown,
@@ -811,47 +807,98 @@ fn sent_samples_summary(submission_tally: SubmissionTally) -> AreaSummary {
     }
 }
 
-pub fn area_summary(
-    application_page: ApplicationPage,
+pub fn evidence_area_summaries(
     protection_evidence: &ProtectionEvidence,
-    area_context: &AreaSummaryContext,
-) -> AreaSummary {
-    match application_page {
-        ApplicationPage::SignatureSources => {
-            signature_sources_summary(&protection_evidence.signature_evidence, area_context)
-        }
-        ApplicationPage::DatabaseUpdates => {
-            database_updates_summary(protection_evidence, area_context)
-        }
-        ApplicationPage::ScanEngine => scan_engine_summary(protection_evidence),
-        ApplicationPage::OnAccessScanning => on_access_summary(protection_evidence, area_context),
-        ApplicationPage::ScheduledScans => {
-            scheduled_scans_summary(protection_evidence, area_context)
-        }
-        ApplicationPage::ManualScan => manual_scan_summary(protection_evidence),
-        ApplicationPage::RemovableDrives => {
-            removable_drives_summary(&area_context.removable_drives_status)
-        }
-        ApplicationPage::Detections => detections_summary(protection_evidence, area_context),
-        ApplicationPage::Quarantine => quarantine_summary(area_context.quarantine_entry_count),
-        ApplicationPage::TrustedDetections => {
-            trusted_detections_summary(&protection_evidence.trust_list)
-        }
-        ApplicationPage::SentSamples => sent_samples_summary(area_context.submission_tally),
-    }
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
+    home_directory: &str,
+) -> Vec<SidebarAreaSummary> {
+    vec![
+        SidebarAreaSummary {
+            application_page: ApplicationPage::SignatureSources,
+            area_summary: signature_sources_summary(
+                &protection_evidence.signature_evidence,
+                reference_moment,
+            ),
+        },
+        SidebarAreaSummary {
+            application_page: ApplicationPage::DatabaseUpdates,
+            area_summary: database_updates_summary(
+                protection_evidence,
+                moment_formatters,
+                reference_moment,
+            ),
+        },
+        SidebarAreaSummary {
+            application_page: ApplicationPage::ScanEngine,
+            area_summary: scan_engine_summary(protection_evidence),
+        },
+        SidebarAreaSummary {
+            application_page: ApplicationPage::OnAccessScanning,
+            area_summary: on_access_summary(protection_evidence, home_directory),
+        },
+        SidebarAreaSummary {
+            application_page: ApplicationPage::ScheduledScans,
+            area_summary: scheduled_scans_summary(
+                protection_evidence,
+                moment_formatters,
+                reference_moment,
+            ),
+        },
+        SidebarAreaSummary {
+            application_page: ApplicationPage::ManualScan,
+            area_summary: manual_scan_summary(protection_evidence),
+        },
+        SidebarAreaSummary {
+            application_page: ApplicationPage::TrustedDetections,
+            area_summary: trusted_detections_summary(&protection_evidence.trust_list),
+        },
+    ]
 }
 
-pub fn all_area_summaries(
-    protection_evidence: &ProtectionEvidence,
-    area_context: &AreaSummaryContext,
-) -> Vec<SidebarAreaSummary> {
+fn sidebar_position(application_page: ApplicationPage) -> usize {
     ALL_APPLICATION_PAGES
-        .into_iter()
-        .map(|application_page| SidebarAreaSummary {
-            application_page,
-            area_summary: area_summary(application_page, protection_evidence, area_context),
-        })
-        .collect()
+        .iter()
+        .position(|listed_page| *listed_page == application_page)
+        .unwrap_or(ALL_APPLICATION_PAGES.len())
+}
+
+pub fn with_reported_summaries(
+    known_summaries: Vec<SidebarAreaSummary>,
+    reported_summaries: impl IntoIterator<Item = SidebarAreaSummary>,
+) -> Vec<SidebarAreaSummary> {
+    let mut merged_summaries = reported_summaries.into_iter().fold(
+        known_summaries,
+        |mut merged_summaries, reported_summary| {
+            merged_summaries.retain(|known_summary| {
+                known_summary.application_page != reported_summary.application_page
+            });
+            merged_summaries.push(reported_summary);
+            merged_summaries
+        },
+    );
+    merged_summaries
+        .sort_by_key(|sidebar_summary| sidebar_position(sidebar_summary.application_page));
+    merged_summaries
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AreaReportProgress {
+    EveryAreaReported,
+    AreasAwaited,
+}
+
+pub fn area_report_progress(area_summaries: &[SidebarAreaSummary]) -> AreaReportProgress {
+    let every_page_reported = ALL_APPLICATION_PAGES.iter().all(|application_page| {
+        area_summaries
+            .iter()
+            .any(|sidebar_summary| sidebar_summary.application_page == *application_page)
+    });
+    if every_page_reported {
+        AreaReportProgress::EveryAreaReported
+    } else {
+        AreaReportProgress::AreasAwaited
+    }
 }
 
 pub fn first_area_needing_attention(area_summaries: &[SidebarAreaSummary]) -> ApplicationPage {
@@ -887,38 +934,72 @@ mod application_page_status_tests {
         signatures::database_updates_page::signature_update_run::updater_exit_status::SignatureUpdaterProgram,
     };
 
-    fn idle_context() -> AreaSummaryContext {
-        AreaSummaryContext {
-            alert_readiness: AlertReadiness {
-                journal_access: JournalAccess::FollowingJournal,
-                notifications_enabled: true,
-            },
-            unresolved_detections: 0,
-            quarantine_entry_count: QuarantineEntryCount::EntriesCounted { entry_count: 0 },
-            removable_drives_status: RemovableDrivesStatus {
-                auto_scan_settings: DeviceAutoScanSettings {
-                    auto_scan_enabled: true,
-                    maximum_gigabytes: 32,
-                    skip_on_battery: true,
-                },
-                device_scan_status: DeviceScanStatus::NoDeviceScanYet,
-            },
-            submission_tally: SubmissionTally::TallyCounted {
-                submitted_count: 0,
-                awaiting_count: 0,
-                refused_count: 0,
-            },
-            home_directory: "/home/user".to_owned(),
-            moment_formatters: english_formatters(),
-            reference_moment: REFERENCE_MOMENT,
+    fn idle_alert_readiness() -> AlertReadiness {
+        AlertReadiness {
+            journal_access: JournalAccess::FollowingJournal,
+            notifications_enabled: true,
         }
+    }
+
+    const fn idle_drive_settings() -> DeviceAutoScanSettings {
+        DeviceAutoScanSettings {
+            auto_scan_enabled: true,
+            maximum_gigabytes: 32,
+            skip_on_battery: true,
+        }
+    }
+
+    fn idle_summaries(protection_evidence: &ProtectionEvidence) -> Vec<SidebarAreaSummary> {
+        with_reported_summaries(
+            evidence_area_summaries(
+                protection_evidence,
+                &english_formatters(),
+                REFERENCE_MOMENT,
+                "/home/user",
+            ),
+            [
+                SidebarAreaSummary {
+                    application_page: ApplicationPage::RemovableDrives,
+                    area_summary: removable_drives_summary(&RemovableDrivesStatus {
+                        auto_scan_settings: idle_drive_settings(),
+                        device_scan_status: DeviceScanStatus::NoDeviceScanYet,
+                    }),
+                },
+                SidebarAreaSummary {
+                    application_page: ApplicationPage::Detections,
+                    area_summary: detections_summary(
+                        protection_evidence,
+                        0,
+                        &idle_alert_readiness(),
+                    ),
+                },
+                SidebarAreaSummary {
+                    application_page: ApplicationPage::Quarantine,
+                    area_summary: quarantine_summary(QuarantineEntryCount::EntriesCounted {
+                        entry_count: 0,
+                    }),
+                },
+                SidebarAreaSummary {
+                    application_page: ApplicationPage::SentSamples,
+                    area_summary: sent_samples_summary(SubmissionTally::TallyCounted {
+                        submitted_count: 0,
+                        awaiting_count: 0,
+                        refused_count: 0,
+                    }),
+                },
+            ],
+        )
     }
 
     fn summary_for(
         application_page: ApplicationPage,
         protection_evidence: &ProtectionEvidence,
     ) -> AreaSummary {
-        area_summary(application_page, protection_evidence, &idle_context())
+        idle_summaries(protection_evidence)
+            .into_iter()
+            .find(|sidebar_summary| sidebar_summary.application_page == application_page)
+            .map(|sidebar_summary| sidebar_summary.area_summary)
+            .expect("every application page has an idle summary")
     }
 
     fn status_for(
@@ -940,7 +1021,7 @@ mod application_page_status_tests {
     #[test]
     fn a_healthy_host_is_healthy_in_every_area_with_its_live_state() {
         let protection_evidence = healthy_evidence();
-        let area_summaries = all_area_summaries(&protection_evidence, &idle_context());
+        let area_summaries = idle_summaries(&protection_evidence);
         assert!(area_summaries.iter().all(|sidebar_summary| {
             sidebar_summary.area_summary.area_status == AreaStatus::AreaHealthy
         }));
@@ -998,7 +1079,7 @@ mod application_page_status_tests {
             summary_for(ApplicationPage::ManualScan, &protection_evidence).live_state_text,
             "Uses the slower clamscan"
         );
-        let area_summaries = all_area_summaries(&protection_evidence, &idle_context());
+        let area_summaries = idle_summaries(&protection_evidence);
         assert_eq!(
             first_area_needing_attention(&area_summaries),
             ApplicationPage::ScanEngine
@@ -1048,10 +1129,7 @@ mod application_page_status_tests {
             }
         );
         assert_eq!(
-            first_area_needing_attention(&all_area_summaries(
-                &protection_evidence,
-                &idle_context()
-            )),
+            first_area_needing_attention(&idle_summaries(&protection_evidence)),
             ApplicationPage::DatabaseUpdates
         );
     }
@@ -1225,46 +1303,29 @@ mod application_page_status_tests {
 
     #[test]
     fn detections_and_quarantine_follow_their_counts() {
-        let area_context = AreaSummaryContext {
-            unresolved_detections: 2,
-            quarantine_entry_count: QuarantineEntryCount::EntriesCounted { entry_count: 1 },
-            ..idle_context()
-        };
         let protection_evidence = healthy_evidence();
         assert_eq!(
-            area_summary(
-                ApplicationPage::Detections,
-                &protection_evidence,
-                &area_context
-            ),
+            detections_summary(&protection_evidence, 2, &idle_alert_readiness()),
             AreaSummary {
                 area_status: AreaStatus::AreaNeedsReview,
                 live_state_text: "2 need a decision".to_owned(),
             }
         );
         assert_eq!(
-            area_summary(
-                ApplicationPage::Quarantine,
-                &protection_evidence,
-                &area_context
-            ),
+            quarantine_summary(QuarantineEntryCount::EntriesCounted { entry_count: 1 }),
             AreaSummary {
                 area_status: AreaStatus::AreaHealthy,
                 live_state_text: "1 item".to_owned(),
             }
         );
-        let unreadable_journal = AreaSummaryContext {
-            alert_readiness: AlertReadiness {
-                journal_access: JournalAccess::JournalUnreadable,
-                notifications_enabled: true,
-            },
-            ..area_context
-        };
         assert_eq!(
-            area_summary(
-                ApplicationPage::Detections,
+            detections_summary(
                 &protection_evidence,
-                &unreadable_journal
+                2,
+                &AlertReadiness {
+                    journal_access: JournalAccess::JournalUnreadable,
+                    notifications_enabled: true,
+                },
             )
             .area_status,
             AreaStatus::AreaFailing
@@ -1300,21 +1361,10 @@ mod application_page_status_tests {
         );
     }
 
-    fn sent_samples_summary_with(submission_tally: SubmissionTally) -> AreaSummary {
-        area_summary(
-            ApplicationPage::SentSamples,
-            &healthy_evidence(),
-            &AreaSummaryContext {
-                submission_tally,
-                ..idle_context()
-            },
-        )
-    }
-
     #[test]
     fn sent_samples_show_their_count_and_review_refusals() {
         let counted = |submitted_count, awaiting_count, refused_count| {
-            sent_samples_summary_with(SubmissionTally::TallyCounted {
+            sent_samples_summary(SubmissionTally::TallyCounted {
                 submitted_count,
                 awaiting_count,
                 refused_count,
@@ -1340,11 +1390,11 @@ mod application_page_status_tests {
             )
         );
         assert_eq!(
-            sent_samples_summary_with(SubmissionTally::TallyUnavailable).area_status,
+            sent_samples_summary(SubmissionTally::TallyUnavailable).area_status,
             AreaStatus::AreaFailing
         );
         assert_eq!(
-            sent_samples_summary_with(SubmissionTally::TallyLoading).area_status,
+            sent_samples_summary(SubmissionTally::TallyLoading).area_status,
             AreaStatus::AreaUnknown
         );
     }
@@ -1456,22 +1506,15 @@ mod application_page_status_tests {
         auto_scan_settings: DeviceAutoScanSettings,
         device_scan_status: DeviceScanStatus,
     ) -> AreaSummary {
-        area_summary(
-            ApplicationPage::RemovableDrives,
-            &healthy_evidence(),
-            &AreaSummaryContext {
-                removable_drives_status: RemovableDrivesStatus {
-                    auto_scan_settings,
-                    device_scan_status,
-                },
-                ..idle_context()
-            },
-        )
+        removable_drives_summary(&RemovableDrivesStatus {
+            auto_scan_settings,
+            device_scan_status,
+        })
     }
 
     #[test]
     fn removable_drives_show_the_auto_scan_choice_and_the_running_drive() {
-        let enabled_settings = idle_context().removable_drives_status.auto_scan_settings;
+        let enabled_settings = idle_drive_settings();
         assert_eq!(
             removable_drives_summary_with(
                 DeviceAutoScanSettings {
@@ -1517,7 +1560,7 @@ mod application_page_status_tests {
     fn a_device_scan_that_found_threats_needs_review() {
         assert_eq!(
             removable_drives_summary_with(
-                idle_context().removable_drives_status.auto_scan_settings,
+                idle_drive_settings(),
                 DeviceScanStatus::DeviceScanEnded {
                     drive_name: "CAMERA".to_owned(),
                     scan_result: ScanResultsStatus::ThreatsDetected,

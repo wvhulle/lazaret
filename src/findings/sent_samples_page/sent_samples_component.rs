@@ -13,7 +13,9 @@ use relm4::{
 };
 
 use crate::{
-    application_window::application_actions::ONLINE_SERVICES_ACTION,
+    application_window::{
+        application_actions::ONLINE_SERVICES_ACTION, sidebar_area_status::sent_samples_summary,
+    },
     findings::sent_samples_page::{
         quarantined_candidate_row::{QuarantinedCandidateRow, QuarantinedCandidateRowOutput},
         sent_samples_presentation::{
@@ -303,8 +305,8 @@ impl SentSamplesPage {
     }
 
     fn report_tally(&self, sender: &ComponentSender<Self>) {
-        let _shell_closed = sender.output(SentSamplesPageOutput::TallyChanged(
-            self.submission_listing.submission_tally(),
+        let _shell_closed = sender.output(SentSamplesPageOutput::AreaSummaryChanged(
+            sent_samples_summary(self.submission_listing.submission_tally()),
         ));
     }
 
@@ -675,6 +677,7 @@ impl Component for SentSamplesPage {
         let candidate_placeholder =
             &empty_placeholder_row(&empty_candidates_text(&model.candidate_listing));
         register_filter_actions(&root, &sender);
+        model.report_tally(&sender);
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }

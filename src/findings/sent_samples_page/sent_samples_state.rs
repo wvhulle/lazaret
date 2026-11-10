@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::{
+    application_window::sidebar_area_status::AreaSummary,
     findings::sent_samples_page::uploads_in_flight::{UploadActivity, UploadKey, UploadsInFlight},
     host_services::{
         activity_history::{
@@ -19,7 +20,7 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SentSamplesPageOutput {
-    TallyChanged(SubmissionTally),
+    AreaSummaryChanged(AreaSummary),
     UploadNoticeReady(String),
 }
 

@@ -42,7 +42,6 @@ use crate::{
             busy_page_name, loading_status_page,
         },
         step_timeline::{
-            step_evidence_builders::MomentContext,
             timeline_step_contents::TimelineStepRowOutput,
             timeline_step_row::{TimelineStepRow, show_timeline_steps},
         },
@@ -123,10 +122,8 @@ impl ScheduledScansPage {
             &mut self.status_rows,
             scheduled_scans_page_steps(
                 protection_evidence,
-                MomentContext {
-                    moment_formatters: host_moment_formatters(),
-                    reference_moment: *gathered_at,
-                },
+                host_moment_formatters(),
+                *gathered_at,
                 self.distribution_family,
             ),
         );

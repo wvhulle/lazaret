@@ -41,12 +41,6 @@ impl CheckedCondition {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct MomentContext {
-    pub moment_formatters: &'static MomentFormatters,
-    pub reference_moment: Timestamp,
-}
-
 pub fn daemon_awaited_text() -> String {
     translated_messages::widgets::daemon_awaited()
 }
@@ -59,17 +53,18 @@ pub fn timed_evidence_row(
     evidence_name: String,
     evidence_moment: EvidenceMoment,
     moment_details: String,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> StepEvidenceRow {
     StepEvidenceRow {
         evidence_moment,
         ..evidence_row(
             evidence_name,
             moment_value_text(
-                moment_context.moment_formatters,
+                moment_formatters,
                 evidence_moment,
                 moment_details,
-                moment_context.reference_moment,
+                reference_moment,
             ),
         )
     }

@@ -351,7 +351,7 @@ mod submissions_presentation_tests {
                     },
                 },
             }),
-            english_formatters(),
+            &english_formatters(),
         );
         assert_eq!(row_view.row_title, "invoice.exe");
         assert!(
@@ -386,7 +386,7 @@ mod submissions_presentation_tests {
                     refusal_reason: "file_expected".to_owned(),
                 },
             }),
-            english_formatters(),
+            &english_formatters(),
         );
         assert!(row_view.needs_attention);
         assert!(row_view.row_subtitle.contains("refused it: file_expected"));
@@ -403,7 +403,7 @@ mod submissions_presentation_tests {
                     engine_count: 68,
                 },
             }),
-            english_formatters(),
+            &english_formatters(),
         );
         assert!(
             row_view

@@ -24,7 +24,10 @@ use crate::{
             GatheringStart,
         },
         scan_slot_arbiter::{ScanSlot, ScanSlotEvent, ScanSlotReply, ScanSlotTransition},
-        sidebar_area_status::{AreaSummaryContext, SidebarAreaSummary, all_area_summaries},
+        sidebar_area_status::{
+            AreaReportProgress, AreaSummary, SidebarAreaSummary, area_report_progress,
+            evidence_area_summaries, with_reported_summaries,
+        },
         sidebar_navigation::sidebar_navigation_column::{
             SidebarNavigationColumn, SidebarNavigationColumnInput,
         },
@@ -34,23 +37,17 @@ use crate::{
         },
     },
     findings::{
-        detections_page::{
-            alert_delivery_presentation::AlertReadiness,
-            background_detections_page::{
-                BackgroundDetectionsPage, BackgroundDetectionsPageInit,
-                BackgroundDetectionsPageInput, BackgroundDetectionsPageOutput,
-            },
+        detections_page::background_detections_page::{
+            BackgroundDetectionsPage, BackgroundDetectionsPageInit, BackgroundDetectionsPageInput,
+            BackgroundDetectionsPageOutput,
         },
-        quarantine_page::{
-            quarantine_entries_page::{
-                QuarantineEntriesPage, QuarantineEntriesPageInit, QuarantineEntriesPageInput,
-                QuarantineEntriesPageOutput,
-            },
-            quarantine_page_state::QuarantineEntryCount,
+        quarantine_page::quarantine_entries_page::{
+            QuarantineEntriesPage, QuarantineEntriesPageInit, QuarantineEntriesPageInput,
+            QuarantineEntriesPageOutput,
         },
         sent_samples_page::{
             sent_samples_component::{SentSamplesPage, SentSamplesPageInit, SentSamplesPageInput},
-            sent_samples_state::{SentSamplesPageOutput, SubmissionTally},
+            sent_samples_state::SentSamplesPageOutput,
         },
         trusted_detections_page::trusted_detections_component::{
             TrustedDetectionsPage, TrustedDetectionsPageInput, TrustedDetectionsPageOutput,
@@ -64,13 +61,12 @@ use crate::{
         desktop::{
             application_directories::application_config_directory,
             failure_journal_log::log_failure_to_journal, locale_formatting::host_moment_formatters,
-            running_instance_forwarding::paths_from_bytes, stored_settings::application_settings,
+            running_instance_forwarding::paths_from_bytes,
         },
-        detection_journal::detection_journal_follower::JournalAccess,
         lazaret_database::locked_database_connection::lazaret_database_path,
         protection_evidence::host_protection_evidence::{
-            ProtectionEvidence, WATCHED_SERVICE_UNITS, detection_notifications_are_enabled,
-            gather_protection_evidence, lazaret_schedule_is_enabled,
+            ProtectionEvidence, WATCHED_SERVICE_UNITS, gather_protection_evidence,
+            lazaret_schedule_is_enabled,
         },
         quarantine_vault::quarantine_entry_database::QuarantineVault,
         systemd_bus::host_systemd_units::watched_unit_changes,
@@ -85,13 +81,10 @@ use crate::{
             on_access_state::OnAccessPageOutput,
         },
         removable_drives_page::{
-            drive_mount_checks::DeviceAutoScanSettings,
             removable_drives_component::{
                 RemovableDrivesPage, RemovableDrivesPageInit, RemovableDrivesPageInput,
             },
-            removable_drives_state::{
-                DeviceScanStatus, RemovableDrivesPageOutput, RemovableDrivesStatus,
-            },
+            removable_drives_state::RemovableDrivesPageOutput,
         },
         scan_engine_page::{
             scan_engine_component::{ScanEnginePage, ScanEnginePageInput},
@@ -131,11 +124,6 @@ pub struct PageNavigationInit {
     pub startup_scan_targets: Vec<PathBuf>,
 }
 
-enum AreaSummaries {
-    SummariesPending,
-    SummariesComputed(Vec<SidebarAreaSummary>),
-}
-
 pub struct PageNavigation {
     visible_page: ApplicationPage,
     sidebar_column: Controller<SidebarNavigationColumn>,
@@ -144,7 +132,6 @@ pub struct PageNavigation {
     scan_page: Controller<ScanPage>,
     removable_drives_page: Controller<RemovableDrivesPage>,
     scan_slot: ScanSlot,
-    removable_drives_status: RemovableDrivesStatus,
     toaster: Toaster,
     quarantine_page: Controller<QuarantineEntriesPage>,
     activity_history: ActivityHistory,
@@ -156,13 +143,9 @@ pub struct PageNavigation {
     detections_page: Controller<BackgroundDetectionsPage>,
     trusted_detections_page: Controller<TrustedDetectionsPage>,
     sent_samples_page: Controller<SentSamplesPage>,
-    submission_tally: SubmissionTally,
     evidence_refresh: EvidenceRefresh,
     gathered_evidence: GatheredEvidence,
-    journal_access: JournalAccess,
-    unresolved_detections: usize,
-    quarantine_entry_count: QuarantineEntryCount,
-    area_summaries: AreaSummaries,
+    area_summaries: Vec<SidebarAreaSummary>,
     _unit_watch: RunningStream,
 }
 
@@ -179,16 +162,14 @@ pub enum PageNavigationInput {
     QuarantineEntriesChanged,
     ActivityRecorded,
     SignaturesUpdated,
-    JournalAccessChanged(JournalAccess),
     UnresolvedDetectionsChanged(usize),
-    QuarantineEntriesCounted(QuarantineEntryCount),
+    QuarantineEntriesReloaded,
+    AreaSummaryReported(SidebarAreaSummary),
     EvidenceRefreshRequested,
     ManualScanActivityChanged(PageScanActivity),
     DeviceScanSlotRequested { drive_name: String },
     DeviceScanEnded,
-    RemovableDrivesStatusChanged(RemovableDrivesStatus),
     SubmissionsChanged,
-    SubmissionsTallied(SubmissionTally),
     ClamavReportConfirmed(ClamavReportRequest),
     UploadNoticeReceived(String),
     EntrySubmissionRequested { entry_id: i64 },
@@ -262,8 +243,8 @@ fn forwarded_removable_drives_output(
             PageNavigationInput::DeviceScanSlotRequested { drive_name }
         }
         RemovableDrivesPageOutput::DeviceScanEnded => PageNavigationInput::DeviceScanEnded,
-        RemovableDrivesPageOutput::StatusChanged(removable_drives_status) => {
-            PageNavigationInput::RemovableDrivesStatusChanged(removable_drives_status)
+        RemovableDrivesPageOutput::AreaSummaryChanged(area_summary) => {
+            reported_area_summary(ApplicationPage::RemovableDrives, area_summary)
         }
         RemovableDrivesPageOutput::QuarantineEntriesChanged => {
             PageNavigationInput::QuarantineEntriesChanged
@@ -273,6 +254,16 @@ fn forwarded_removable_drives_output(
             PageNavigationInput::ClamavReportConfirmed(report_request)
         }
     }
+}
+
+const fn reported_area_summary(
+    application_page: ApplicationPage,
+    area_summary: AreaSummary,
+) -> PageNavigationInput {
+    PageNavigationInput::AreaSummaryReported(SidebarAreaSummary {
+        application_page,
+        area_summary,
+    })
 }
 
 fn device_scan_started_toast(drive_name: &str) -> adw::Toast {
@@ -302,8 +293,8 @@ fn forwarded_detections_output(
         BackgroundDetectionsPageOutput::QuarantineReloadNeeded => {
             PageNavigationInput::QuarantineEntriesChanged
         }
-        BackgroundDetectionsPageOutput::JournalAccessChanged(journal_access) => {
-            PageNavigationInput::JournalAccessChanged(journal_access)
+        BackgroundDetectionsPageOutput::AreaSummaryChanged(area_summary) => {
+            reported_area_summary(ApplicationPage::Detections, area_summary)
         }
         BackgroundDetectionsPageOutput::EvidenceRefreshRequested => {
             PageNavigationInput::EvidenceRefreshRequested
@@ -330,8 +321,8 @@ fn forwarded_sent_samples_output(
     sent_samples_output: SentSamplesPageOutput,
 ) -> PageNavigationInput {
     match sent_samples_output {
-        SentSamplesPageOutput::TallyChanged(submission_tally) => {
-            PageNavigationInput::SubmissionsTallied(submission_tally)
+        SentSamplesPageOutput::AreaSummaryChanged(area_summary) => {
+            reported_area_summary(ApplicationPage::SentSamples, area_summary)
         }
         SentSamplesPageOutput::UploadNoticeReady(notice_text) => {
             PageNavigationInput::UploadNoticeReceived(notice_text)
@@ -465,26 +456,29 @@ impl PageNavigation {
         else {
             return;
         };
-        self.area_summaries = AreaSummaries::SummariesComputed(all_area_summaries(
+        let evidence_summaries = evidence_area_summaries(
             protection_evidence,
-            &AreaSummaryContext {
-                alert_readiness: AlertReadiness {
-                    journal_access: self.journal_access.clone(),
-                    notifications_enabled: detection_notifications_are_enabled(),
-                },
-                unresolved_detections: self.unresolved_detections,
-                quarantine_entry_count: self.quarantine_entry_count,
-                removable_drives_status: self.removable_drives_status.clone(),
-                submission_tally: self.submission_tally,
-                home_directory: glib::home_dir().to_string_lossy().into_owned(),
-                moment_formatters: host_moment_formatters(),
-                reference_moment: *gathered_at,
-            },
-        ));
+            host_moment_formatters(),
+            *gathered_at,
+            &glib::home_dir().to_string_lossy(),
+        );
+        self.show_area_summaries(evidence_summaries);
+    }
+
+    fn show_area_summaries(
+        &mut self,
+        reported_summaries: impl IntoIterator<Item = SidebarAreaSummary>,
+    ) {
+        self.area_summaries =
+            with_reported_summaries(std::mem::take(&mut self.area_summaries), reported_summaries);
         self.sidebar_column
             .emit(SidebarNavigationColumnInput::AreaSummariesChanged(
-                self.computed_area_summaries().to_vec(),
+                self.area_summaries.clone(),
             ));
+        match area_report_progress(&self.area_summaries) {
+            AreaReportProgress::EveryAreaReported => self.apply_start_page_choice(),
+            AreaReportProgress::AreasAwaited => {}
+        }
     }
 
     fn select_visible_page(&mut self, application_page: ApplicationPage) {
@@ -502,17 +496,10 @@ impl PageNavigation {
         } = start_page_after_evidence(
             self.start_page_state,
             self.visible_page,
-            self.computed_area_summaries(),
+            &self.area_summaries,
         );
         self.select_visible_page(shown_page);
         self.start_page_state = next_state;
-    }
-
-    fn computed_area_summaries(&self) -> &[SidebarAreaSummary] {
-        match &self.area_summaries {
-            AreaSummaries::SummariesPending => &[],
-            AreaSummaries::SummariesComputed(area_summaries) => area_summaries,
-        }
     }
 
     fn advance_evidence_refresh(
@@ -723,8 +710,11 @@ impl Component for PageNavigation {
             .forward(
                 sender.input_sender(),
                 |quarantine_output| match quarantine_output {
-                    QuarantineEntriesPageOutput::EntriesCounted(quarantine_entry_count) => {
-                        PageNavigationInput::QuarantineEntriesCounted(quarantine_entry_count)
+                    QuarantineEntriesPageOutput::EntriesReloaded => {
+                        PageNavigationInput::QuarantineEntriesReloaded
+                    }
+                    QuarantineEntriesPageOutput::AreaSummaryChanged(area_summary) => {
+                        reported_area_summary(ApplicationPage::Quarantine, area_summary)
                     }
                     QuarantineEntriesPageOutput::SubmissionsChanged => {
                         PageNavigationInput::SubmissionsChanged
@@ -802,10 +792,6 @@ impl Component for PageNavigation {
             scan_page,
             removable_drives_page,
             scan_slot: ScanSlot::SlotFree,
-            removable_drives_status: RemovableDrivesStatus {
-                auto_scan_settings: DeviceAutoScanSettings::read_from(&application_settings()),
-                device_scan_status: DeviceScanStatus::NoDeviceScanYet,
-            },
             toaster: Toaster::default(),
             quarantine_page,
             activity_history,
@@ -817,13 +803,9 @@ impl Component for PageNavigation {
             detections_page,
             trusted_detections_page,
             sent_samples_page,
-            submission_tally: SubmissionTally::TallyLoading,
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
-            journal_access: JournalAccess::FollowingJournal,
-            unresolved_detections: 0,
-            quarantine_entry_count: QuarantineEntryCount::CountLoading,
-            area_summaries: AreaSummaries::SummariesPending,
+            area_summaries: Vec::new(),
             _unit_watch: run_stream(
                 &sender,
                 watched_unit_changes(&WATCHED_SERVICE_UNITS)
@@ -901,19 +883,14 @@ impl Component for PageNavigation {
                 self.removable_drives_page
                     .emit(RemovableDrivesPageInput::HistoryReloadRequested);
             }
-            PageNavigationInput::JournalAccessChanged(journal_access) => {
-                self.journal_access = journal_access.clone();
-                self.refresh_area_summaries();
-            }
-            PageNavigationInput::QuarantineEntriesCounted(quarantine_entry_count) => {
-                self.quarantine_entry_count = quarantine_entry_count;
+            PageNavigationInput::QuarantineEntriesReloaded => {
                 self.sent_samples_page
                     .emit(SentSamplesPageInput::QuarantineEntriesChanged);
-                self.refresh_area_summaries();
+            }
+            PageNavigationInput::AreaSummaryReported(sidebar_summary) => {
+                self.show_area_summaries([sidebar_summary]);
             }
             PageNavigationInput::UnresolvedDetectionsChanged(unresolved_detections) => {
-                self.unresolved_detections = unresolved_detections;
-                self.refresh_area_summaries();
                 let _window_closed = sender.output(
                     PageNavigationOutput::UnresolvedDetectionsChanged(unresolved_detections),
                 );
@@ -939,17 +916,9 @@ impl Component for PageNavigation {
             PageNavigationInput::DeviceScanEnded => {
                 let _slot_reply = self.apply_scan_slot_event(ScanSlotEvent::DeviceScanEnded);
             }
-            PageNavigationInput::RemovableDrivesStatusChanged(removable_drives_status) => {
-                self.removable_drives_status = removable_drives_status;
-                self.refresh_area_summaries();
-            }
             PageNavigationInput::SubmissionsChanged => {
                 self.sent_samples_page
                     .emit(SentSamplesPageInput::SubmissionsChanged);
-            }
-            PageNavigationInput::SubmissionsTallied(submission_tally) => {
-                self.submission_tally = submission_tally;
-                self.refresh_area_summaries();
             }
             PageNavigationInput::EntrySubmissionRequested { entry_id } => {
                 self.show_page(ApplicationPage::SentSamples);
@@ -1029,7 +998,6 @@ impl Component for PageNavigation {
                     gathered_at,
                 };
                 self.refresh_area_summaries();
-                self.apply_start_page_choice();
                 self.signature_sources_page
                     .emit(SignatureSourcesPageInput::EvidenceGathered(
                         self.gathered_evidence.clone(),

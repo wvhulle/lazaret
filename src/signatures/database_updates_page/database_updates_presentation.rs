@@ -8,7 +8,7 @@ use crate::{
                 provider_of_signature_file, signature_file_source_name,
             },
         },
-        desktop::locale_formatting::byte_size_text,
+        desktop::locale_formatting::{MomentFormatters, byte_size_text},
         protection_evidence::{
             clamav_engine_evidence::DatabaseEvidence,
             host_protection_evidence::{
@@ -23,8 +23,8 @@ use crate::{
         step_timeline::{
             program_trust_steps::{TrustedProgramGroup, program_trust_step},
             step_evidence_builders::{
-                CheckedCondition, MomentContext, evidence_row, plain_rows, remedy_commands,
-                timed_evidence_row, unknown_run_text,
+                CheckedCondition, evidence_row, plain_rows, remedy_commands, timed_evidence_row,
+                unknown_run_text,
             },
             suggested_remedy_commands::SuggestedRemedy,
             timeline_step_contents::{
@@ -152,17 +152,14 @@ pub fn signature_condition(
 
 fn database_status_text(
     database_evidence: &DatabaseEvidence,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> String {
     match database_evidence {
-        DatabaseEvidence::BuiltAt { built_at } if *built_at <= moment_context.reference_moment => {
+        DatabaseEvidence::BuiltAt { built_at } if *built_at <= reference_moment => {
             translated_messages::signatures::definitions_built_date(
-                moment_context
-                    .moment_formatters
-                    .relative_moment_text(*built_at, moment_context.reference_moment),
-                moment_context
-                    .moment_formatters
-                    .calendar_date_text(*built_at),
+                moment_formatters.relative_moment_text(*built_at, reference_moment),
+                moment_formatters.calendar_date_text(*built_at),
             )
         }
         DatabaseEvidence::BuiltAt { .. } | DatabaseEvidence::AgeUndetermined => {
@@ -198,7 +195,8 @@ impl From<UpdaterRunHistory> for EvidenceMoment {
 
 fn updater_row(
     updater_evidence: &UpdaterEvidence,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> StepEvidenceRow {
     if updater_evidence.updater_is_running() {
         return StepEvidenceRow {
@@ -229,13 +227,15 @@ fn updater_row(
         ),
         evidence_moment,
         evidence_value,
-        moment_context,
+        moment_formatters,
+        reference_moment,
     )
 }
 
 fn third_party_file_row(
     signature_file: &ThirdPartySignatureFile,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> StepEvidenceRow {
     let file_size_text = byte_size_text(signature_file.file_size);
     timed_evidence_row(
@@ -261,18 +261,22 @@ fn third_party_file_row(
                 )
             }
         },
-        moment_context,
+        moment_formatters,
+        reference_moment,
     )
 }
 
 fn third_party_rows(
     third_party_listing: &ThirdPartySignatureListing,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> Vec<StepEvidenceRow> {
     match third_party_listing {
         ThirdPartySignatureListing::FilesListed(signature_files) => signature_files
             .iter()
-            .map(|signature_file| third_party_file_row(signature_file, moment_context))
+            .map(|signature_file| {
+                third_party_file_row(signature_file, moment_formatters, reference_moment)
+            })
             .collect(),
         ThirdPartySignatureListing::FolderUnreadable(read_failure) => vec![evidence_row(
             translated_messages::signatures::other_signature_sources(),
@@ -292,7 +296,8 @@ fn update_progress_of(signature_update: &SignatureUpdateView) -> SignatureUpdate
 
 fn manual_update_row(
     signature_update: &SignatureUpdateView,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> StepEvidenceRow {
     let last_manual_update = match signature_update {
         SignatureUpdateView::HostStatusLoading => &LastManualUpdate::NotRunThisSession,
@@ -317,7 +322,8 @@ fn manual_update_row(
         translated_messages::signatures::manual_update(),
         evidence_moment,
         evidence_value,
-        moment_context,
+        moment_formatters,
+        reference_moment,
     )
 }
 
@@ -365,15 +371,17 @@ fn signature_mechanism_details() -> String {
 
 fn signature_status_rows(
     signature_evidence: &SignatureEvidence,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> Vec<StepEvidenceRow> {
     signature_evidence
         .updater_evidence
         .iter()
-        .map(|updater_evidence| updater_row(updater_evidence, moment_context))
+        .map(|updater_evidence| updater_row(updater_evidence, moment_formatters, reference_moment))
         .chain(third_party_rows(
             &signature_evidence.third_party_listing,
-            moment_context,
+            moment_formatters,
+            reference_moment,
         ))
         .collect()
 }
@@ -406,15 +414,20 @@ fn system_updater_running(signature_evidence: &SignatureEvidence) -> bool {
 pub fn signature_update_step(
     signature_evidence: &SignatureEvidence,
     signature_update: &SignatureUpdateView,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
     distribution_family: DistributionFamily,
 ) -> DatabaseUpdateStep {
-    let evidence_state = signature_node_state(signature_evidence, moment_context.reference_moment);
+    let evidence_state = signature_node_state(signature_evidence, reference_moment);
     let update_progress = update_progress_of(signature_update);
-    let manual_row = manual_update_row(signature_update, moment_context);
+    let manual_row = manual_update_row(signature_update, moment_formatters, reference_moment);
     let other_rows = updater_output_rows(&update_progress)
         .into_iter()
-        .chain(signature_status_rows(signature_evidence, moment_context))
+        .chain(signature_status_rows(
+            signature_evidence,
+            moment_formatters,
+            reference_moment,
+        ))
         .chain(update_host_rows(signature_update))
         .collect::<Vec<_>>();
     let running_signature_step = |status_text: String, cancel_slot| {
@@ -434,7 +447,11 @@ pub fn signature_update_step(
         TimelineStep::settled(
             signature_step_title(),
             signature_mechanism_details(),
-            database_status_text(&signature_evidence.database_evidence, moment_context),
+            database_status_text(
+                &signature_evidence.database_evidence,
+                moment_formatters,
+                reference_moment,
+            ),
             SettledStep {
                 evidence_rows: std::iter::once(ActionableEvidenceRow {
                     shown_evidence: manual_row.clone(),
@@ -489,7 +506,8 @@ pub fn signature_update_step(
 pub fn database_update_steps(
     protection_evidence: &ProtectionEvidence,
     signature_update: &SignatureUpdateView,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
     distribution_family: DistributionFamily,
 ) -> Vec<DatabaseUpdateStep> {
     program_trust_step(
@@ -500,7 +518,8 @@ pub fn database_update_steps(
     .chain([signature_update_step(
         &protection_evidence.signature_evidence,
         signature_update,
-        moment_context,
+        moment_formatters,
+        reference_moment,
         distribution_family,
     )])
     .collect()
@@ -535,13 +554,6 @@ mod database_updates_presentation_tests {
         })
     }
 
-    fn reference_context() -> MomentContext {
-        MomentContext {
-            moment_formatters: english_formatters(),
-            reference_moment: REFERENCE_MOMENT,
-        }
-    }
-
     fn update_step_with(
         signature_evidence: &SignatureEvidence,
         update_progress: SignatureUpdateProgress,
@@ -549,7 +561,8 @@ mod database_updates_presentation_tests {
         signature_update_step(
             signature_evidence,
             &known_update_host(update_progress),
-            reference_context(),
+            &english_formatters(),
+            REFERENCE_MOMENT,
             DistributionFamily::NixosFamily,
         )
     }
@@ -597,7 +610,8 @@ mod database_updates_presentation_tests {
                 ..healthy_evidence()
             },
             &known_update_host(SignatureUpdateProgress::ReadyToUpdate),
-            reference_context(),
+            &english_formatters(),
+            REFERENCE_MOMENT,
             DistributionFamily::NixosFamily,
         )
     }

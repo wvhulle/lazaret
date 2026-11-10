@@ -1,7 +1,9 @@
+use jiff::Timestamp;
+
 use crate::{
     host_services::{
         clamav_programs::distribution_install_guides::DistributionFamily,
-        desktop::locale_formatting::exact_local_time_text,
+        desktop::locale_formatting::{MomentFormatters, exact_local_time_text},
         protection_evidence::{
             host_protection_evidence::{
                 ProtectionEvidence, ScanServiceEvidence, ScanUnitResult, ScheduledScanEvidence,
@@ -13,8 +15,8 @@ use crate::{
     },
     shared_widgets::step_timeline::{
         step_evidence_builders::{
-            CheckedCondition, MomentContext, daemon_awaited_text, evidence_row, plain_rows,
-            remedy_commands, timed_evidence_row, unknown_run_text,
+            CheckedCondition, daemon_awaited_text, evidence_row, plain_rows, remedy_commands,
+            timed_evidence_row, unknown_run_text,
         },
         suggested_remedy_commands::SuggestedRemedy,
         timeline_step_contents::{
@@ -70,7 +72,11 @@ fn next_run_text(next_run: UnitTimestamp) -> String {
     }
 }
 
-fn next_run_row(next_run: UnitTimestamp, moment_context: MomentContext) -> StepEvidenceRow {
+fn next_run_row(
+    next_run: UnitTimestamp,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
+) -> StepEvidenceRow {
     let evidence_value = match next_run {
         UnitTimestamp::RecordedAt { .. } => String::new(),
         UnitTimestamp::NeverRecorded => translated_messages::scans::not_scheduled(),
@@ -79,13 +85,15 @@ fn next_run_row(next_run: UnitTimestamp, moment_context: MomentContext) -> StepE
         translated_messages::scans::next_scan(),
         EvidenceMoment::from(next_run),
         evidence_value,
-        moment_context,
+        moment_formatters,
+        reference_moment,
     )
 }
 
 fn last_run_row(
     last_completed_run: ScanRunHistory,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> StepEvidenceRow {
     let evidence_value = match last_completed_run {
         ScanRunHistory::CompletedScan {
@@ -103,7 +111,8 @@ fn last_run_row(
         translated_messages::scans::last_scan(),
         EvidenceMoment::from(last_completed_run),
         evidence_value,
-        moment_context,
+        moment_formatters,
+        reference_moment,
     )
 }
 
@@ -194,10 +203,13 @@ fn system_timer_rows(
     timer_state: &TimerState,
     scan_service: &ScanServiceEvidence,
     last_completed_run: ScanRunHistory,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
 ) -> Vec<StepEvidenceRow> {
     let next_scan_row = match timer_state {
-        TimerState::TimerActive { next_run } => next_run_row(*next_run, moment_context),
+        TimerState::TimerActive { next_run } => {
+            next_run_row(*next_run, moment_formatters, reference_moment)
+        }
         TimerState::TimerInactive => evidence_row(
             translated_messages::scans::next_scan(),
             translated_messages::scans::not_scheduled_timer_active(),
@@ -205,7 +217,7 @@ fn system_timer_rows(
     };
     vec![
         next_scan_row,
-        last_run_row(last_completed_run, moment_context),
+        last_run_row(last_completed_run, moment_formatters, reference_moment),
         StepEvidenceRow {
             evidence_moment: EvidenceMoment::SettingValue,
             ..evidence_row(
@@ -232,7 +244,8 @@ const fn scan_unit_is_running(scheduled_scan_evidence: &ScheduledScanEvidence) -
 pub fn scheduled_scan_step<StepAction: StepActionButton>(
     scheduled_scan_evidence: &ScheduledScanEvidence,
     daemon_answering: bool,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
     distribution_family: DistributionFamily,
     header_action: StepActionSlot<StepAction>,
 ) -> TimelineStep<StepAction> {
@@ -246,7 +259,8 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
             timer_state,
             scan_service,
             *last_completed_run,
-            moment_context,
+            moment_formatters,
+            reference_moment,
         ),
         ScheduledScanEvidence::LazaretSchedule | ScheduledScanEvidence::NoSchedule => Vec::new(),
     };
@@ -286,13 +300,15 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
 
 pub fn scheduled_scans_page_steps(
     protection_evidence: &ProtectionEvidence,
-    moment_context: MomentContext,
+    moment_formatters: &MomentFormatters,
+    reference_moment: Timestamp,
     distribution_family: DistributionFamily,
 ) -> Vec<ScheduledScanStep> {
     vec![scheduled_scan_step(
         &protection_evidence.scheduled_scan_evidence,
         daemon_is_answering(&protection_evidence.daemon_evidence),
-        moment_context,
+        moment_formatters,
+        reference_moment,
         distribution_family,
         StepActionSlot::NoAction,
     )]
@@ -317,17 +333,11 @@ mod scheduled_scans_presentation_tests {
         shared_widgets::step_timeline::timeline_step_contents::StepNodeState,
     };
 
-    fn reference_context() -> MomentContext {
-        MomentContext {
-            moment_formatters: english_formatters(),
-            reference_moment: REFERENCE_MOMENT,
-        }
-    }
-
     fn page_step_with(protection_evidence: &ProtectionEvidence) -> ScheduledScanStep {
         scheduled_scans_page_steps(
             protection_evidence,
-            reference_context(),
+            &english_formatters(),
+            REFERENCE_MOMENT,
             DistributionFamily::NixosFamily,
         )
         .remove(0)

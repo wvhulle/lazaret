@@ -3,6 +3,7 @@ use std::{path::PathBuf, time::Instant};
 use jiff::Timestamp;
 
 use crate::{
+    application_window::sidebar_area_status::AreaSummary,
     host_services::{
         clamav_programs::clamav_report_submission::ClamavReportRequest,
         clamav_scanner::{
@@ -167,7 +168,7 @@ pub struct RemovableDrivesStatus {
 pub enum RemovableDrivesPageOutput {
     ScanSlotRequested { drive_name: String },
     DeviceScanEnded,
-    StatusChanged(RemovableDrivesStatus),
+    AreaSummaryChanged(AreaSummary),
     QuarantineEntriesChanged,
     ActivityRecorded,
     ClamavReportConfirmed(ClamavReportRequest),

@@ -12,6 +12,7 @@ use crate::{
     application_window::{
         application_actions::{ONLINE_SERVICES_ACTION_NAME, PreferencesAction},
         protection_evidence_refresh::{EvidenceRefresh, GatheredEvidence},
+        sidebar_area_status::{AreaSummary, detections_summary},
     },
     findings::detections_page::{
         alert_delivery_presentation::{AlertReadiness, AlertStepAction, alert_group_steps},
@@ -116,7 +117,7 @@ pub enum BackgroundDetectionsPageInput {
 pub enum BackgroundDetectionsPageOutput {
     UnresolvedCountChanged(usize),
     QuarantineReloadNeeded,
-    JournalAccessChanged(JournalAccess),
+    AreaSummaryChanged(AreaSummary),
     EvidenceRefreshRequested,
     SubmissionRequestedForFile(PathBuf),
 }
@@ -511,6 +512,26 @@ impl BackgroundDetectionsPage {
         );
     }
 
+    fn report_area_summary(&self, sender: &ComponentSender<Self>) {
+        let GatheredEvidence::Gathered {
+            protection_evidence,
+            ..
+        } = &self.gathered_evidence
+        else {
+            return;
+        };
+        let _shell_closed = sender.output(BackgroundDetectionsPageOutput::AreaSummaryChanged(
+            detections_summary(
+                protection_evidence,
+                unresolved_detection_count(&self.displayed_detections),
+                &AlertReadiness {
+                    journal_access: self.journal_access.clone(),
+                    notifications_enabled: detection_notifications_are_enabled(),
+                },
+            ),
+        ));
+    }
+
     fn run_alert_action(chosen_action: AlertStepAction, root: &adw::ToastOverlay) {
         match chosen_action {
             AlertStepAction::OpenPreferences => {
@@ -889,6 +910,7 @@ impl Component for BackgroundDetectionsPage {
                 }
                 self.gathered_evidence = gathered_evidence;
                 self.show_alert_steps();
+                self.report_area_summary(&sender);
             }
             BackgroundDetectionsPageInput::AlertStepRequested(
                 TimelineStepRowOutput::ActionChosen(chosen_action),
@@ -922,11 +944,9 @@ impl Component for BackgroundDetectionsPage {
                 self.refresh_after_sightings(&newly_opened, &sender);
             }
             BackgroundDetectionsPageCommand::JournalAccessChanged(journal_access) => {
-                self.journal_access = journal_access.clone();
+                self.journal_access = journal_access;
                 self.show_alert_steps();
-                let _shell_closed = sender.output(
-                    BackgroundDetectionsPageOutput::JournalAccessChanged(journal_access),
-                );
+                self.report_area_summary(&sender);
             }
             BackgroundDetectionsPageCommand::JournalCursorUnreadable(cursor_failure) => {
                 send_detection_alerts(&[DetectionAlert::MissedDetectionsUncountable]);
@@ -951,6 +971,7 @@ impl Component for BackgroundDetectionsPage {
                     sender.output(BackgroundDetectionsPageOutput::UnresolvedCountChanged(
                         unresolved_detection_count(&self.displayed_detections),
                     ));
+                self.report_area_summary(&sender);
             }
             BackgroundDetectionsPageCommand::LoadingFailed(history_failure) => {
                 self.toaster.add_toast(plain_text_toast(
