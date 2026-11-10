@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, rc::Rc};
 
 use futures::stream;
 use relm4::{
@@ -17,7 +17,9 @@ use crate::{
         application_actions::ONLINE_SERVICES_ACTION, sidebar_area_status::sent_samples_summary,
     },
     findings::sent_samples_page::{
-        quarantined_candidate_row::{QuarantinedCandidateRow, QuarantinedCandidateRowOutput},
+        quarantined_candidate_row::{
+            QuarantinedCandidateRow, QuarantinedCandidateRowInit, QuarantinedCandidateRowOutput,
+        },
         sent_samples_presentation::{
             candidate_row_view, empty_candidates_text, empty_submissions_text, filter_summary_text,
             progress_filter_label, refresh_summary_text, service_filter_label, submitted_row_view,
@@ -28,7 +30,7 @@ use crate::{
             choice_position, entry_upload_key, offered_target_activities,
         },
         submission_target_dialog::{ChosenTarget, TargetChoiceRequest, present_target_choice},
-        submitted_entry_row::{SubmittedEntryRow, SubmittedEntryRowOutput},
+        submitted_entry_row::{SubmittedEntryRow, SubmittedEntryRowInit, SubmittedEntryRowOutput},
         uploads_in_flight::{UploadKey, UploadsInFlight, upload_refusal_text},
     },
     host_services::{
@@ -76,10 +78,12 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct SentSamplesPageInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub sandbox_kind: SandboxKind,
     pub activity_history: ActivityHistory,
     pub quarantine_vault: QuarantineVault,
@@ -91,7 +95,8 @@ enum RemoteRefreshRun {
 }
 
 pub struct SentSamplesPage {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     sandbox_kind: SandboxKind,
     activity_history: ActivityHistory,
     quarantine_vault: QuarantineVault,
@@ -187,20 +192,28 @@ fn filter_choice_section(action_name: &str, choice_labels: Vec<String>) -> gio::
     choice_section
 }
 
-fn submission_filter_menu() -> gio::Menu {
+fn submission_filter_menu(message_catalog: &MessageCatalog) -> gio::Menu {
     let filter_menu = gio::Menu::new();
     filter_menu.append_section(
-        Some(&translated_messages::findings::service_label()),
+        Some(&translated_messages::findings::service_label(
+            message_catalog,
+        )),
         &filter_choice_section(
             "submissions.service-filter",
-            SERVICE_FILTER_CHOICES.map(service_filter_label).to_vec(),
+            SERVICE_FILTER_CHOICES
+                .map(|service_filter| service_filter_label(message_catalog, service_filter))
+                .to_vec(),
         ),
     );
     filter_menu.append_section(
-        Some(&translated_messages::findings::status_label()),
+        Some(&translated_messages::findings::status_label(
+            message_catalog,
+        )),
         &filter_choice_section(
             "submissions.progress-filter",
-            PROGRESS_FILTER_CHOICES.map(progress_filter_label).to_vec(),
+            PROGRESS_FILTER_CHOICES
+                .map(|progress_filter| progress_filter_label(message_catalog, progress_filter))
+                .to_vec(),
         ),
     );
     filter_menu
@@ -262,7 +275,8 @@ impl SentSamplesPage {
     }
 
     fn show_submitted_rows(&mut self) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let mut row_guard = self.submitted_rows.guard();
         row_guard.clear();
         self.submission_listing
@@ -272,21 +286,33 @@ impl SentSamplesPage {
                 self.submission_filters.admits_submission(listed_submission)
             })
             .for_each(|listed_submission| {
-                row_guard.push_back(submitted_row_view(listed_submission, moment_formatters));
+                row_guard.push_back(SubmittedEntryRowInit {
+                    row_view: submitted_row_view(
+                        &message_catalog,
+                        listed_submission,
+                        &moment_formatters,
+                    ),
+                    message_catalog: Rc::clone(&message_catalog),
+                });
             });
     }
 
     fn show_candidate_rows(&mut self) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let mut row_guard = self.candidate_rows.guard();
         row_guard.clear();
         self.candidate_listing
             .listed_candidates()
             .iter()
             .for_each(|listed_candidate| {
-                row_guard.push_back(candidate_row_view(
-                    listed_candidate,
-                    &self.uploads_in_flight,
-                ));
+                row_guard.push_back(QuarantinedCandidateRowInit {
+                    row_view: candidate_row_view(
+                        &message_catalog,
+                        listed_candidate,
+                        &self.uploads_in_flight,
+                    ),
+                    message_catalog: Rc::clone(&message_catalog),
+                });
             });
     }
 
@@ -309,8 +335,9 @@ impl SentSamplesPage {
     }
 
     fn report_tally(&self, sender: &ComponentSender<Self>) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let _shell_closed = sender.output(SentSamplesPageOutput::AreaSummaryChanged(
-            sent_samples_summary(self.submission_listing.submission_tally()),
+            sent_samples_summary(&message_catalog, self.submission_listing.submission_tally()),
         ));
     }
 
@@ -320,14 +347,16 @@ impl SentSamplesPage {
         root: &adw::ToastOverlay,
         sender: &ComponentSender<Self>,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let entry_targets = offered_target_activities(entry_record, &self.uploads_in_flight);
         if entry_targets.is_empty() {
             self.toaster.add_toast(plain_text_toast(
-                &translated_messages::findings::quarantine_record_no_usable(),
+                &translated_messages::findings::quarantine_record_no_usable(&message_catalog),
             ));
             return;
         }
         present_target_choice(
+            &message_catalog,
             root,
             TargetChoiceRequest {
                 entry_id: entry_record.entry_id,
@@ -346,18 +375,19 @@ impl SentSamplesPage {
         root: &adw::ToastOverlay,
         sender: &ComponentSender<Self>,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let Some(entry_record) = self
             .candidate_listing
             .candidate_with_id(chosen_target.entry_id)
         else {
             self.toaster.add_toast(plain_text_toast(
-                &translated_messages::findings::file_no_longer_quarantine(),
+                &translated_messages::findings::file_no_longer_quarantine(&message_catalog),
             ));
             return;
         };
         let unsendable_toast = || {
             self.toaster.add_toast(plain_text_toast(
-                &translated_messages::findings::service_not_take_detection(),
+                &translated_messages::findings::service_not_take_detection(&message_catalog),
             ));
         };
         let clamav_report_proposal = |report_kind| ClamavReportProposal {
@@ -376,6 +406,7 @@ impl SentSamplesPage {
             SubmissionTarget::ClamavFalsePositive => {
                 match entry_record.threat_identity.matched_signature_name() {
                     Some(signature_name) => present_clamav_report_confirmation(
+                        &message_catalog,
                         root,
                         clamav_report_proposal(ClamavReportKind::FalsePositive {
                             detection_name: signature_name.to_owned(),
@@ -387,6 +418,7 @@ impl SentSamplesPage {
                 }
             }
             SubmissionTarget::ClamavMissedMalware => present_clamav_report_confirmation(
+                &message_catalog,
                 root,
                 clamav_report_proposal(ClamavReportKind::MissedMalware),
                 sender.input_sender().clone(),
@@ -396,6 +428,7 @@ impl SentSamplesPage {
                 match bazaar_eligibility(&entry_record.threat_identity) {
                     BazaarEligibility::EligibleSignature { signature_name } => {
                         present_sample_upload_confirmation(
+                            &message_catalog,
                             root,
                             sample_upload_proposal(UploadService::MalwareBazaarUpload {
                                 signature_name,
@@ -409,6 +442,7 @@ impl SentSamplesPage {
                 }
             }
             SubmissionTarget::VirusTotalSample => present_sample_upload_confirmation(
+                &message_catalog,
                 root,
                 sample_upload_proposal(UploadService::VirusTotalUpload),
                 sender.input_sender().clone(),
@@ -443,13 +477,17 @@ impl SentSamplesPage {
         upload_key: UploadKey,
         sender: &ComponentSender<Self>,
     ) -> Option<UploadKey> {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match self.uploads_in_flight.start_upload(upload_key) {
             Ok(admitted_key) => {
                 self.show_candidate_rows();
                 Some(admitted_key)
             }
             Err(upload_refusal) => {
-                Self::report_upload_notice(sender, upload_refusal_text(&upload_refusal));
+                Self::report_upload_notice(
+                    sender,
+                    upload_refusal_text(&message_catalog, &upload_refusal),
+                );
                 None
             }
         }
@@ -460,6 +498,7 @@ impl SentSamplesPage {
         upload_proposal: &SampleUploadProposal,
         sender: &ComponentSender<Self>,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let entry_id = upload_proposal.entry_id;
         let upload_target = match upload_proposal.upload_service {
             UploadService::MalwareBazaarUpload { .. } => SubmissionTarget::MalwareBazaarSample,
@@ -472,7 +511,7 @@ impl SentSamplesPage {
         else {
             Self::report_upload_notice(
                 sender,
-                translated_messages::findings::file_no_usable_hash(),
+                translated_messages::findings::file_no_usable_hash(&message_catalog),
             );
             return;
         };
@@ -558,14 +597,14 @@ impl Component for SentSamplesPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&translated_messages::findings::check_malwarebazaar_virustotal_tooltip()),
-                            update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::check_malwarebazaar_virustotal_tooltip())],
+                            set_tooltip_text: Some(&translated_messages::findings::check_malwarebazaar_virustotal_tooltip(&model.message_catalog)),
+                            update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::check_malwarebazaar_virustotal_tooltip(&model.message_catalog))],
                             connect_clicked => SentSamplesPageInput::RemoteRefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&translated_messages::findings::checking_sent_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::findings::checking_sent_tooltip(&model.message_catalog)),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.remote_refresh_running()),
@@ -575,12 +614,12 @@ impl Component for SentSamplesPage {
                 #[wrap(Some)]
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
-                        set_title: &translated_messages::findings::send_file_title(),
-                        set_description: Some(&translated_messages::findings::nothing_leaves_computer_description()),
+                        set_title: &translated_messages::findings::send_file_title(&model.message_catalog),
+                        set_description: Some(&translated_messages::findings::nothing_leaves_computer_description(&model.message_catalog)),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::Button {
-                            set_label: &translated_messages::findings::report_missed_malware_label(),
-                            set_tooltip_text: Some(&translated_messages::findings::send_clamav_malicious_tooltip()),
+                            set_label: &translated_messages::findings::report_missed_malware_label(&model.message_catalog),
+                            set_tooltip_text: Some(&translated_messages::findings::send_clamav_malicious_tooltip(&model.message_catalog)),
                             set_valign: gtk::Align::Center,
                             add_css_class: "flat",
                             connect_clicked => SentSamplesPageInput::MissedMalwareReportRequested,
@@ -594,23 +633,23 @@ impl Component for SentSamplesPage {
                             #[local_ref]
                             set_placeholder = candidate_placeholder -> adw::ActionRow {
                                 #[watch]
-                                set_title: &empty_candidates_text(&model.candidate_listing),
+                                set_title: &empty_candidates_text(&model.message_catalog, &model.candidate_listing),
                             },
                         },
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &translated_messages::findings::sent_title(),
-                        set_description: Some(&translated_messages::findings::lazaret_sent_became_description()),
+                        set_title: &translated_messages::findings::sent_title(&model.message_catalog),
+                        set_description: Some(&translated_messages::findings::lazaret_sent_became_description(&model.message_catalog)),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::MenuButton {
-                            set_named_menu_model: &submission_filter_menu(),
+                            set_named_menu_model: &submission_filter_menu(&model.message_catalog),
                             set_always_show_arrow: true,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&translated_messages::findings::filter_sent_samples_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::findings::filter_sent_samples_tooltip(&model.message_catalog)),
                             add_css_class: "flat",
                             #[watch]
-                            set_label: &filter_summary_text(&model.submission_filters),
+                            set_label: &filter_summary_text(&model.message_catalog, &model.submission_filters),
                             #[watch]
                             set_visible: model.submission_listing.has_submissions(),
                         },
@@ -623,15 +662,15 @@ impl Component for SentSamplesPage {
                             #[local_ref]
                             set_placeholder = submitted_placeholder -> adw::ActionRow {
                                 #[watch]
-                                set_title: &empty_submissions_text(&model.submission_listing),
+                                set_title: &empty_submissions_text(&model.message_catalog, &model.submission_listing),
                             },
                         },
                     },
 
                     add = &adw::PreferencesGroup {
                         adw::ActionRow {
-                            set_title: &translated_messages::findings::online_services_title(),
-                            set_subtitle: &translated_messages::findings::each_service_receives_subtitle(),
+                            set_title: &translated_messages::findings::online_services_title(&model.message_catalog),
+                            set_subtitle: &translated_messages::findings::each_service_receives_subtitle(&model.message_catalog),
                             set_subtitle_lines: 0,
                             set_activatable: true,
                             set_action_name: Some(ONLINE_SERVICES_ACTION),
@@ -649,9 +688,11 @@ impl Component for SentSamplesPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = page_init.message_catalog;
         let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             moment_formatters,
             sandbox_kind,
             activity_history: page_init.activity_history,
@@ -682,10 +723,14 @@ impl Component for SentSamplesPage {
         model.reload_candidates(&sender);
         let submitted_list = model.submitted_rows.widget();
         let candidate_list = model.candidate_rows.widget();
-        let submitted_placeholder =
-            &empty_placeholder_row(&empty_submissions_text(&model.submission_listing));
-        let candidate_placeholder =
-            &empty_placeholder_row(&empty_candidates_text(&model.candidate_listing));
+        let submitted_placeholder = &empty_placeholder_row(&empty_submissions_text(
+            &message_catalog,
+            &model.submission_listing,
+        ));
+        let candidate_placeholder = &empty_placeholder_row(&empty_candidates_text(
+            &message_catalog,
+            &model.candidate_listing,
+        ));
         register_filter_actions(&root, &sender);
         model.report_tally(&sender);
         let widgets = view_output!();
@@ -698,6 +743,7 @@ impl Component for SentSamplesPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_input {
             SentSamplesPageInput::PageShown => {
                 self.reload_submissions(&sender);
@@ -741,7 +787,7 @@ impl Component for SentSamplesPage {
                 match self.candidate_listing.candidate_with_id(entry_id) {
                     Some(entry_record) => self.offer_targets_for(entry_record, root, &sender),
                     None => self.toaster.add_toast(plain_text_toast(
-                        &translated_messages::findings::file_no_longer_quarantine(),
+                        &translated_messages::findings::file_no_longer_quarantine(&message_catalog),
                     )),
                 }
             }
@@ -749,7 +795,7 @@ impl Component for SentSamplesPage {
                 match self.candidate_listing.newest_candidate_from(&original_path) {
                     Some(entry_record) => self.offer_targets_for(entry_record, root, &sender),
                     None => self.toaster.add_toast(plain_text_toast(
-                        &translated_messages::findings::file_no_longer_quarantine(),
+                        &translated_messages::findings::file_no_longer_quarantine(&message_catalog),
                     )),
                 }
             }
@@ -774,7 +820,8 @@ impl Component for SentSamplesPage {
                 deliver_local_outcome(
                     sender.input_sender().clone(),
                     chosen_file_to_submit(
-                        translated_messages::findings::choose_file_clamav_misses(),
+                        Rc::clone(&message_catalog),
+                        translated_messages::findings::choose_file_clamav_misses(&message_catalog),
                     ),
                     |chosen_file| match chosen_file {
                         ChosenSubmissionFile::FileChosen(chosen_path) => {
@@ -792,6 +839,7 @@ impl Component for SentSamplesPage {
             }
             SentSamplesPageInput::MissedMalwareFileChosen(chosen_path) => {
                 present_clamav_report_confirmation(
+                    &message_catalog,
                     root,
                     ClamavReportProposal {
                         report_kind: ClamavReportKind::MissedMalware,
@@ -820,7 +868,8 @@ impl Component for SentSamplesPage {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         match page_command {
             SentSamplesPageCommand::SubmissionsLoaded(load_outcome) => {
                 self.submission_listing = match load_outcome {
@@ -849,7 +898,8 @@ impl Component for SentSamplesPage {
                 Err(read_failure) => Self::report_upload_notice(
                     &sender,
                     clamav_report_attempt_text(
-                        moment_formatters,
+                        &message_catalog,
+                        &moment_formatters,
                         &ClamavReportAttempt::SampleUnreadable(read_failure),
                     ),
                 ),
@@ -860,7 +910,11 @@ impl Component for SentSamplesPage {
             } => {
                 self.finish_upload(
                     &upload_key,
-                    clamav_report_attempt_text(moment_formatters, &report_attempt),
+                    clamav_report_attempt_text(
+                        &message_catalog,
+                        &moment_formatters,
+                        &report_attempt,
+                    ),
                     &sender,
                 );
             }
@@ -870,7 +924,11 @@ impl Component for SentSamplesPage {
             } => {
                 self.finish_upload(
                     &upload_key,
-                    bazaar_upload_attempt_text(moment_formatters, &upload_attempt),
+                    bazaar_upload_attempt_text(
+                        &message_catalog,
+                        &moment_formatters,
+                        &upload_attempt,
+                    ),
                     &sender,
                 );
             }
@@ -880,13 +938,20 @@ impl Component for SentSamplesPage {
             } => {
                 self.finish_upload(
                     &upload_key,
-                    virustotal_upload_attempt_text(moment_formatters, &upload_attempt),
+                    virustotal_upload_attempt_text(
+                        &message_catalog,
+                        &moment_formatters,
+                        &upload_attempt,
+                    ),
                     &sender,
                 );
             }
             SentSamplesPageCommand::RemoteRefreshFinished(refresh_summary) => {
                 self.remote_refresh = RemoteRefreshRun::RefreshIdle;
-                self.finish_sending(&refresh_summary_text(&refresh_summary), &sender);
+                self.finish_sending(
+                    &refresh_summary_text(&message_catalog, &refresh_summary),
+                    &sender,
+                );
             }
         }
     }

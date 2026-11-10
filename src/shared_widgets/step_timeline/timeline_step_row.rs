@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender, RelmWidgetExt, adw,
     adw::prelude::*,
@@ -17,9 +19,11 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct TimelineStepRow<StepAction> {
+    pub message_catalog: Rc<MessageCatalog>,
     timeline_step: TimelineStep<StepAction>,
     expanded: bool,
     details_changed: bool,
@@ -49,11 +53,12 @@ impl<StepAction: StepActionButton> TimelineStepRow<StepAction> {
     }
 
     fn has_detail_rows(&self) -> bool {
-        !detail_rows_of(&self.timeline_step).is_empty()
+        !detail_rows_of(&self.message_catalog, &self.timeline_step).is_empty()
     }
 }
 
 fn show_header_button<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     action_button: &gtk::Button,
     timeline_step: &TimelineStep<StepAction>,
 ) {
@@ -61,7 +66,7 @@ fn show_header_button<StepAction: StepActionButton>(
         action_button.set_visible(false);
         return;
     };
-    action_button.set_label(&header_offer.offered_action.button_label());
+    action_button.set_label(&header_offer.offered_action.button_label(message_catalog));
     action_button.set_visible(true);
     let button_style = header_offer.button_style();
     [ButtonStyle::DestructiveButton, ButtonStyle::SuggestedButton]
@@ -73,22 +78,31 @@ fn show_header_button<StepAction: StepActionButton>(
         });
 }
 
+pub struct TimelineStepRowInit<StepAction> {
+    pub timeline_step: TimelineStep<StepAction>,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 impl<StepAction: StepActionButton> FactoryComponent for TimelineStepRow<StepAction> {
     type ParentWidget = adw::PreferencesGroup;
     type CommandOutput = ();
     type Input = TimelineStepRowInput<StepAction>;
     type Output = TimelineStepRowOutput<StepAction>;
-    type Init = TimelineStep<StepAction>;
+    type Init = TimelineStepRowInit<StepAction>;
     type Root = adw::ExpanderRow;
     type Widgets = TimelineStepRowWidgets<StepAction>;
     type Index = DynamicIndex;
 
     fn init_model(
-        timeline_step: TimelineStep<StepAction>,
+        TimelineStepRowInit {
+            timeline_step,
+            message_catalog,
+        }: Self::Init,
         _step_index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             expanded: timeline_step.node_state().needs_attention(),
             timeline_step,
             details_changed: true,
@@ -125,7 +139,9 @@ impl<StepAction: StepActionButton> FactoryComponent for TimelineStepRow<StepActi
             .build();
         let explanation_button = gtk::MenuButton::builder()
             .icon_name("help-about-symbolic")
-            .tooltip_text(translated_messages::widgets::why_matters_tooltip())
+            .tooltip_text(translated_messages::widgets::why_matters_tooltip(
+                &self.message_catalog,
+            ))
             .valign(gtk::Align::Center)
             .css_classes(["flat"])
             .popover(&gtk::Popover::builder().child(&explanation_label).build())
@@ -184,6 +200,7 @@ impl<StepAction: StepActionButton> FactoryComponent for TimelineStepRow<StepActi
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: FactorySender<Self>) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let expander_row = &widgets.expander_row;
         expander_row.set_title(&self.timeline_step.step_title);
         expander_row.set_subtitle(&self.timeline_step.status_text);
@@ -206,11 +223,15 @@ impl<StepAction: StepActionButton> FactoryComponent for TimelineStepRow<StepActi
             .set_visible(!self.timeline_step.mechanism_details.is_empty());
         widgets.status_image.set_visible(!self.is_running());
         widgets.running_spinner.set_visible(self.is_running());
-        show_header_button(&widgets.action_button, &self.timeline_step);
+        show_header_button(
+            &message_catalog,
+            &widgets.action_button,
+            &self.timeline_step,
+        );
         if self.details_changed {
             let mut detail_guard = widgets.detail_rows.guard();
             detail_guard.clear();
-            detail_rows_of(&self.timeline_step)
+            detail_rows_of(&self.message_catalog, &self.timeline_step)
                 .into_iter()
                 .for_each(|detail_row| {
                     detail_guard.push_back(detail_row);
@@ -220,6 +241,7 @@ impl<StepAction: StepActionButton> FactoryComponent for TimelineStepRow<StepActi
 }
 
 pub fn show_timeline_steps<StepAction: StepActionButton>(
+    message_catalog: &Rc<MessageCatalog>,
     step_rows: &mut FactoryVecDeque<TimelineStepRow<StepAction>>,
     timeline_steps: Vec<TimelineStep<StepAction>>,
 ) {
@@ -236,7 +258,10 @@ pub fn show_timeline_steps<StepAction: StepActionButton>(
         let mut row_guard = step_rows.guard();
         row_guard.clear();
         timeline_steps.into_iter().for_each(|timeline_step| {
-            row_guard.push_back(timeline_step);
+            row_guard.push_back(TimelineStepRowInit {
+                timeline_step,
+                message_catalog: Rc::clone(message_catalog),
+            });
         });
     }
 }

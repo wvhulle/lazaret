@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use fluent_bundle::{FluentArgs, FluentResource, concurrent::FluentBundle};
 use fluent_langneg::{NegotiationStrategy, negotiate_languages};
 use unic_langid::LanguageIdentifier;
@@ -13,8 +11,39 @@ pub(crate) struct BundledLanguageCatalog {
 
 include!(concat!(env!("OUT_DIR"), "/generated_messages.rs"));
 
-static FALLBACK_LANGUAGE_CHAIN: LazyLock<Vec<FluentBundle<FluentResource>>> =
-    LazyLock::new(|| fallback_language_chain(&host_language_tags("LC_MESSAGES")));
+pub(crate) struct MessageCatalog {
+    language_chain: Vec<FluentBundle<FluentResource>>,
+}
+
+impl std::fmt::Debug for MessageCatalog {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("MessageCatalog")
+            .field("language_count", &self.language_chain.len())
+            .finish()
+    }
+}
+
+impl MessageCatalog {
+    pub(crate) fn for_language_tags(requested_tags: &[String]) -> Self {
+        Self {
+            language_chain: fallback_language_chain(requested_tags),
+        }
+    }
+
+    pub(crate) fn for_host_messages_locale() -> Self {
+        Self::for_language_tags(&host_language_tags("LC_MESSAGES"))
+    }
+
+    pub(crate) fn translated_text(
+        &self,
+        message_id: &str,
+        message_arguments: Option<&FluentArgs<'_>>,
+    ) -> String {
+        formatted_in_chain(&self.language_chain, message_id, message_arguments)
+            .unwrap_or_else(|| message_id.to_owned())
+    }
+}
 
 fn parsed_language(language_tag: &str) -> LanguageIdentifier {
     language_tag
@@ -93,13 +122,10 @@ fn formatted_in_chain(
     })
 }
 
-pub(crate) fn translated_message_text(
-    message_id: &str,
-    message_arguments: Option<&FluentArgs<'_>>,
-) -> String {
-    formatted_in_chain(&FALLBACK_LANGUAGE_CHAIN, message_id, message_arguments)
-        .unwrap_or_else(|| message_id.to_owned())
-}
-
 #[cfg(test)]
 mod translated_message_tests;
+
+#[cfg(test)]
+pub(crate) fn english_catalog() -> MessageCatalog {
+    MessageCatalog::for_language_tags(&[])
+}

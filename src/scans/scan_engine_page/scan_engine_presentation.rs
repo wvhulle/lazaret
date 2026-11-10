@@ -25,13 +25,14 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScanEngineAction {}
 
 impl StepActionButton for ScanEngineAction {
-    fn button_label(&self) -> String {
+    fn button_label(&self, _message_catalog: &MessageCatalog) -> String {
         match *self {}
     }
 
@@ -42,15 +43,15 @@ impl StepActionButton for ScanEngineAction {
 
 pub type ScanEngineStep = TimelineStep<ScanEngineAction>;
 
-fn probe_failure_text(probe_failure: &ProbeFailure) -> String {
+fn probe_failure_text(message_catalog: &MessageCatalog, probe_failure: &ProbeFailure) -> String {
     match probe_failure {
         ProbeFailure::ProgramPrintedFailure { program_stderr } => {
             sanitize_scanner_line(program_stderr)
         }
         ProbeFailure::ProgramStartFailed { start_failure_kind } => {
-            translated_messages::scans::program_start_failed(start_failure_kind)
+            translated_messages::scans::program_start_failed(message_catalog, start_failure_kind)
         }
-        ProbeFailure::ProbeTimedOut => translated_messages::scans::probe_timed_out(),
+        ProbeFailure::ProbeTimedOut => translated_messages::scans::probe_timed_out(message_catalog),
     }
 }
 
@@ -63,14 +64,21 @@ pub const fn engine_condition(engine_installation: &EngineInstallation) -> Check
     }
 }
 
-fn engine_status_text(engine_installation: &EngineInstallation) -> String {
+fn engine_status_text(
+    message_catalog: &MessageCatalog,
+    engine_installation: &EngineInstallation,
+) -> String {
     match engine_installation {
         EngineInstallation::VersionReported { version_banner } => version_banner.clone(),
         EngineInstallation::ScannerRefused { refused_path } => {
-            translated_messages::scans::scanner_refused(refused_path)
+            translated_messages::scans::scanner_refused(message_catalog, refused_path)
         }
-        EngineInstallation::VersionUnverified(probe_failure) => probe_failure_text(probe_failure),
-        EngineInstallation::EngineMissing => translated_messages::scans::engine_missing(),
+        EngineInstallation::VersionUnverified(probe_failure) => {
+            probe_failure_text(message_catalog, probe_failure)
+        }
+        EngineInstallation::EngineMissing => {
+            translated_messages::scans::engine_missing(message_catalog)
+        }
     }
 }
 
@@ -91,14 +99,15 @@ fn engine_guidance_commands(
 }
 
 pub fn engine_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     engine_installation: &EngineInstallation,
     distribution_family: DistributionFamily,
     header_action: StepActionSlot<StepAction>,
 ) -> TimelineStep<StepAction> {
     TimelineStep::settled(
-        translated_messages::scans::clamav_installed(),
-        translated_messages::scans::clamav_engine_recognizes_malware(),
-        engine_status_text(engine_installation),
+        translated_messages::scans::clamav_installed(message_catalog),
+        translated_messages::scans::clamav_engine_recognizes_malware(message_catalog),
+        engine_status_text(message_catalog, engine_installation),
         SettledStep {
             header_action,
             ..SettledStep::without_offers(engine_condition(engine_installation).node_state())
@@ -124,7 +133,10 @@ pub const fn daemon_condition(daemon_evidence: &DaemonEvidence) -> CheckedCondit
     }
 }
 
-fn daemon_status_text(daemon_evidence: &DaemonEvidence) -> String {
+fn daemon_status_text(
+    message_catalog: &MessageCatalog,
+    daemon_evidence: &DaemonEvidence,
+) -> String {
     match daemon_evidence {
         DaemonEvidence::ClamdAnswering {
             loaded_signatures:
@@ -132,41 +144,54 @@ fn daemon_status_text(daemon_evidence: &DaemonEvidence) -> String {
                     loaded_version,
                     disk_version,
                 },
-        } => translated_messages::scans::clamd_still_uses_signatures(loaded_version, disk_version),
-        DaemonEvidence::ClamdAnswering { .. } => translated_messages::scans::clamd_answering(),
+        } => translated_messages::scans::clamd_still_uses_signatures(
+            message_catalog,
+            loaded_version,
+            disk_version,
+        ),
+        DaemonEvidence::ClamdAnswering { .. } => {
+            translated_messages::scans::clamd_answering(message_catalog)
+        }
         DaemonEvidence::UnitActiveNotAnswering { service_unit } => {
-            translated_messages::scans::unit_active_not_answering(service_unit)
+            translated_messages::scans::unit_active_not_answering(message_catalog, service_unit)
         }
-        DaemonEvidence::UnitStateUnknown => translated_messages::scans::unit_state_unknown_daemon(),
+        DaemonEvidence::UnitStateUnknown => {
+            translated_messages::scans::unit_state_unknown_daemon(message_catalog)
+        }
         DaemonEvidence::UnitStopped { service_unit } => {
-            translated_messages::scans::unit_stopped_daemon(service_unit)
+            translated_messages::scans::unit_stopped_daemon(message_catalog, service_unit)
         }
-        DaemonEvidence::NeverSetUp => translated_messages::scans::never_set_up_daemon(),
+        DaemonEvidence::NeverSetUp => {
+            translated_messages::scans::never_set_up_daemon(message_catalog)
+        }
     }
 }
 
-fn loaded_signature_rows(daemon_evidence: &DaemonEvidence) -> Vec<StepEvidenceRow> {
+fn loaded_signature_rows(
+    message_catalog: &MessageCatalog,
+    daemon_evidence: &DaemonEvidence,
+) -> Vec<StepEvidenceRow> {
     let loaded_value = match daemon_evidence {
         DaemonEvidence::ClamdAnswering {
             loaded_signatures: LoadedSignatures::MatchesDisk,
-        } => translated_messages::scans::same_version_disk(),
+        } => translated_messages::scans::same_version_disk(message_catalog),
         DaemonEvidence::ClamdAnswering {
             loaded_signatures:
                 LoadedSignatures::BehindDisk {
                     loaded_version,
                     disk_version,
                 },
-        } => translated_messages::scans::loaded_disk(loaded_version, disk_version),
+        } => translated_messages::scans::loaded_disk(message_catalog, loaded_version, disk_version),
         DaemonEvidence::ClamdAnswering {
             loaded_signatures: LoadedSignatures::ComparisonUnavailable,
-        } => translated_messages::scans::unknown_loaded_stored_versions(),
+        } => translated_messages::scans::unknown_loaded_stored_versions(message_catalog),
         DaemonEvidence::UnitActiveNotAnswering { .. }
         | DaemonEvidence::UnitStopped { .. }
         | DaemonEvidence::UnitStateUnknown
         | DaemonEvidence::NeverSetUp => return Vec::new(),
     };
     vec![evidence_row(
-        translated_messages::scans::loaded_signatures(),
+        translated_messages::scans::loaded_signatures(message_catalog),
         loaded_value,
     )]
 }
@@ -187,16 +212,17 @@ fn daemon_guidance_commands(
 }
 
 pub fn daemon_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     daemon_evidence: &DaemonEvidence,
     distribution_family: DistributionFamily,
     header_action: StepActionSlot<StepAction>,
 ) -> TimelineStep<StepAction> {
     TimelineStep::settled(
-        translated_messages::scans::daemon_running(),
-        translated_messages::scans::clamd_keeps_signatures_loaded(),
-        daemon_status_text(daemon_evidence),
+        translated_messages::scans::daemon_running(message_catalog),
+        translated_messages::scans::clamd_keeps_signatures_loaded(message_catalog),
+        daemon_status_text(message_catalog, daemon_evidence),
         SettledStep {
-            evidence_rows: plain_rows(loaded_signature_rows(daemon_evidence)),
+            evidence_rows: plain_rows(loaded_signature_rows(message_catalog, daemon_evidence)),
             header_action,
             ..SettledStep::without_offers(daemon_condition(daemon_evidence).node_state())
         },
@@ -227,50 +253,64 @@ pub const fn socket_condition(
     }
 }
 
-fn socket_status_text(socket_ownership: &ClamdSocketOwnership) -> String {
+fn socket_status_text(
+    message_catalog: &MessageCatalog,
+    socket_ownership: &ClamdSocketOwnership,
+) -> String {
     match socket_ownership {
         ClamdSocketOwnership::SocketProtected { socket_path } => {
-            translated_messages::scans::socket_protected(shown_socket_path(socket_path))
+            translated_messages::scans::socket_protected(
+                message_catalog,
+                shown_socket_path(socket_path),
+            )
         }
         ClamdSocketOwnership::SocketReplaceable {
             socket_path,
             replaceable_path,
         } => translated_messages::scans::socket_replaceable(
+            message_catalog,
             shown_socket_path(replaceable_path),
             shown_socket_path(socket_path),
         ),
         ClamdSocketOwnership::SocketMissing { socket_path } => {
-            translated_messages::scans::socket_missing(shown_socket_path(socket_path))
+            translated_messages::scans::socket_missing(
+                message_catalog,
+                shown_socket_path(socket_path),
+            )
         }
         ClamdSocketOwnership::SocketNotCheckable => {
-            translated_messages::scans::socket_not_checkable()
+            translated_messages::scans::socket_not_checkable(message_catalog)
         }
     }
 }
 
-fn socket_step_title() -> String {
-    translated_messages::scans::clamd_socket_protected()
+fn socket_step_title(message_catalog: &MessageCatalog) -> String {
+    translated_messages::scans::clamd_socket_protected(message_catalog)
 }
 
-fn socket_mechanism_details() -> String {
-    translated_messages::scans::socket_mechanism()
+fn socket_mechanism_details(message_catalog: &MessageCatalog) -> String {
+    translated_messages::scans::socket_mechanism(message_catalog)
 }
 
-pub fn socket_step(clamd_socket_view: &ClamdSocketView, daemon_answering: bool) -> ScanEngineStep {
+pub fn socket_step(
+    message_catalog: &MessageCatalog,
+    clamd_socket_view: &ClamdSocketView,
+    daemon_answering: bool,
+) -> ScanEngineStep {
     match clamd_socket_view {
         ClamdSocketView::SocketInspecting => TimelineStep::running(
-            socket_step_title(),
-            socket_mechanism_details(),
-            translated_messages::scans::socket_inspecting(),
+            socket_step_title(message_catalog),
+            socket_mechanism_details(message_catalog),
+            translated_messages::scans::socket_inspecting(message_catalog),
             RunningStep {
                 evidence_rows: Vec::new(),
                 cancel_slot: CancelSlot::NotCancellable,
             },
         ),
         ClamdSocketView::SocketInspected(socket_ownership) => TimelineStep::settled(
-            socket_step_title(),
-            socket_mechanism_details(),
-            socket_status_text(socket_ownership),
+            socket_step_title(message_catalog),
+            socket_mechanism_details(message_catalog),
+            socket_status_text(message_catalog, socket_ownership),
             SettledStep::without_offers(
                 socket_condition(socket_ownership, daemon_answering).node_state(),
             ),
@@ -279,32 +319,38 @@ pub fn socket_step(clamd_socket_view: &ClamdSocketView, daemon_answering: bool) 
 }
 
 pub fn scan_engine_steps(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     protection_evidence: &ProtectionEvidence,
     clamd_socket_view: &ClamdSocketView,
     distribution_family: DistributionFamily,
 ) -> Vec<ScanEngineStep> {
     std::iter::once(engine_step(
+        message_catalog,
         &protection_evidence.engine_installation,
         distribution_family,
         StepActionSlot::NoAction,
     ))
     .chain(program_trust_step(
+        message_catalog,
         &protection_evidence.program_trust,
         TrustedProgramGroup::ScannerPrograms,
     ))
     .chain([
         daemon_step(
+            message_catalog,
             &protection_evidence.daemon_evidence,
             distribution_family,
             StepActionSlot::NoAction,
         ),
         socket_step(
+            message_catalog,
             clamd_socket_view,
             daemon_is_answering(&protection_evidence.daemon_evidence),
         ),
     ])
     .chain(runtime_reduction_step(
+        message_catalog,
         moment_formatters,
         &protection_evidence.runtime_reductions,
         ReducedSettingGroup::EngineSettings,
@@ -336,10 +382,12 @@ mod scan_engine_presentation_tests {
     }
 
     fn engine_steps_with(
+        message_catalog: &MessageCatalog,
         moment_formatters: &MomentFormatters,
         protection_evidence: &ProtectionEvidence,
     ) -> Vec<ScanEngineStep> {
         scan_engine_steps(
+            message_catalog,
             moment_formatters,
             protection_evidence,
             &protected_socket(),
@@ -354,8 +402,12 @@ mod scan_engine_presentation_tests {
             .collect()
     }
 
-    fn daemon_step_state(daemon_evidence: DaemonEvidence) -> StepNodeState {
+    fn daemon_step_state(
+        message_catalog: &MessageCatalog,
+        daemon_evidence: DaemonEvidence,
+    ) -> StepNodeState {
         daemon_step::<ScanEngineAction>(
+            message_catalog,
             &daemon_evidence,
             DistributionFamily::NixosFamily,
             StepActionSlot::NoAction,
@@ -365,8 +417,10 @@ mod scan_engine_presentation_tests {
 
     #[test]
     fn a_healthy_engine_completes_every_step_in_order() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
-        let engine_steps = engine_steps_with(moment_formatters, &healthy_evidence());
+        let engine_steps =
+            engine_steps_with(message_catalog, moment_formatters, &healthy_evidence());
         assert_eq!(
             step_titles(&engine_steps),
             vec![
@@ -384,7 +438,9 @@ mod scan_engine_presentation_tests {
 
     #[test]
     fn an_active_daemon_that_does_not_answer_suggests_a_restart() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let daemon_step = daemon_step::<ScanEngineAction>(
+            message_catalog,
             &DaemonEvidence::UnitActiveNotAnswering {
                 service_unit: "clamav-daemon.service",
             },
@@ -402,14 +458,16 @@ mod scan_engine_presentation_tests {
             vec!["sudo systemctl restart clamav-daemon".to_owned()]
         );
         assert_eq!(
-            daemon_step_state(DaemonEvidence::UnitStateUnknown),
+            daemon_step_state(message_catalog, DaemonEvidence::UnitStateUnknown),
             StepNodeState::NeedsReview
         );
     }
 
     #[test]
     fn the_loaded_signature_version_is_compared_with_the_disk() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let behind_step = daemon_step::<ScanEngineAction>(
+            message_catalog,
             &DaemonEvidence::ClamdAnswering {
                 loaded_signatures: LoadedSignatures::BehindDisk {
                     loaded_version: "27100".to_owned(),
@@ -425,6 +483,7 @@ mod scan_engine_presentation_tests {
             "27100, while 27102 is on disk"
         );
         let stopped_step = daemon_step::<ScanEngineAction>(
+            message_catalog,
             &DaemonEvidence::UnitStopped {
                 service_unit: "clamav-daemon.service",
             },
@@ -437,7 +496,9 @@ mod scan_engine_presentation_tests {
 
     #[test]
     fn a_missing_engine_suggests_installing_it() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let missing_step = engine_step::<ScanEngineAction>(
+            message_catalog,
             &EngineInstallation::EngineMissing,
             DistributionFamily::DebianFamily,
             StepActionSlot::NoAction,
@@ -448,8 +509,10 @@ mod scan_engine_presentation_tests {
 
     #[test]
     fn only_a_replaceable_scanner_adds_a_trust_step() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let refused_scanner = engine_steps_with(
+            message_catalog,
             moment_formatters,
             &ProtectionEvidence {
                 program_trust: ProgramTrustInspection::ProgramsChecked(vec![
@@ -467,6 +530,7 @@ mod scan_engine_presentation_tests {
         );
         assert_eq!(refused_scanner[1].node_state(), StepNodeState::HasFailed);
         let refused_updater = engine_steps_with(
+            message_catalog,
             moment_formatters,
             &ProtectionEvidence {
                 program_trust: ProgramTrustInspection::ProgramsChecked(vec![
@@ -483,6 +547,7 @@ mod scan_engine_presentation_tests {
 
     #[test]
     fn only_engine_key_reductions_appear_on_the_engine_page() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let reductions_of = |setting_key: &str| ProtectionEvidence {
             runtime_reductions: RuntimeReductions::SettingsReduced {
@@ -497,6 +562,7 @@ mod scan_engine_presentation_tests {
         };
         assert_eq!(
             step_titles(&engine_steps_with(
+                message_catalog,
                 moment_formatters,
                 &reductions_of("DetectPUA")
             ))
@@ -504,14 +570,21 @@ mod scan_engine_presentation_tests {
             Some(&"Protection reduced on purpose")
         );
         assert_eq!(
-            engine_steps_with(moment_formatters, &reductions_of("OnAccessPrevention")).len(),
+            engine_steps_with(
+                message_catalog,
+                moment_formatters,
+                &reductions_of("OnAccessPrevention")
+            )
+            .len(),
             3
         );
     }
 
     #[test]
     fn a_socket_your_account_can_replace_fails_and_a_missing_one_waits_on_the_daemon() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let replaceable_step = socket_step(
+            message_catalog,
             &ClamdSocketView::SocketInspected(ClamdSocketOwnership::SocketReplaceable {
                 socket_path: PathBuf::from("/tmp/clamd.ctl"),
                 replaceable_path: PathBuf::from("/tmp"),
@@ -524,15 +597,15 @@ mod scan_engine_presentation_tests {
                 socket_path: PathBuf::from("/run/clamav/clamd.ctl"),
             });
         assert_eq!(
-            socket_step(&missing_socket, false).node_state(),
+            socket_step(message_catalog, &missing_socket, false).node_state(),
             StepNodeState::AwaitingPrerequisite
         );
         assert_eq!(
-            socket_step(&missing_socket, true).node_state(),
+            socket_step(message_catalog, &missing_socket, true).node_state(),
             StepNodeState::NeedsReview
         );
         assert_eq!(
-            socket_step(&ClamdSocketView::SocketInspecting, true).node_state(),
+            socket_step(message_catalog, &ClamdSocketView::SocketInspecting, true).node_state(),
             StepNodeState::InProgress
         );
     }

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use futures::{StreamExt, stream};
 use relm4::{
     Component, ComponentParts, ComponentSender, adw,
@@ -34,8 +36,8 @@ use crate::{
         component_streams::run_stream_to_completion,
         scan_runs::scan_results_section::{
             detected_threat_row::{
-                DetectedThreatRow, DetectedThreatRowInput, DetectedThreatRowOutput,
-                ThreatQuarantineState,
+                DetectedThreatRow, DetectedThreatRowInit, DetectedThreatRowInput,
+                DetectedThreatRowOutput, ThreatQuarantineState,
             },
             scan_problem_row::{ScanProblemRow, problem_rows_of},
             scan_results_state::{
@@ -47,6 +49,7 @@ use crate::{
         trust_confirmation_dialog::present_trust_confirmation,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const EXPORT_FILE_NAME: &str = "lazaret_scan_results.txt";
@@ -70,12 +73,14 @@ impl AlertChoice for QuarantineDialogChoice {
 }
 
 pub struct ScanResultsSectionInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub dismiss_label: String,
 }
 
 pub struct ScanResultsSection {
+    pub message_catalog: Rc<MessageCatalog>,
     sandbox_kind: SandboxKind,
     dismiss_label: String,
     results_view: ScanResultsView,
@@ -163,8 +168,9 @@ impl ScanResultsSection {
     }
 
     fn quarantine_all_label(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let remaining_threats = self.remaining_threat_count();
-        translated_messages::widgets::quarantine_all(remaining_threats)
+        translated_messages::widgets::quarantine_all(&message_catalog, remaining_threats)
     }
 
     fn confirm_quarantine(
@@ -174,21 +180,24 @@ impl ScanResultsSection {
         root: &gtk::Box,
         sender: &ComponentSender<Self>,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let confirmation_dialog = adw::AlertDialog::new(
-            Some(&translated_messages::widgets::move_quarantine()),
+            Some(&translated_messages::widgets::move_quarantine(
+                &message_catalog,
+            )),
             Some(&format!(
                 "{confirmation_body}\n{}",
-                translated_messages::widgets::removes_each_original_file()
+                translated_messages::widgets::removes_each_original_file(&message_catalog)
             )),
         );
         add_dismissing_choice::<QuarantineDialogChoice>(
             &confirmation_dialog,
-            &translated_messages::widgets::cancel_scan(),
+            &translated_messages::widgets::cancel_scan(&message_catalog),
         );
         add_alert_choice(
             &confirmation_dialog,
             QuarantineDialogChoice::QuarantineChosen,
-            &translated_messages::widgets::quarantine_label(),
+            &translated_messages::widgets::quarantine_label(&message_catalog),
         );
         confirmation_dialog.set_response_appearance(
             QuarantineDialogChoice::QuarantineChosen.response_id(),
@@ -255,6 +264,7 @@ impl ScanResultsSection {
     }
 
     fn show_results(&mut self, results_view: ScanResultsView) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         self.results_generation += 1;
         let mut threat_guard = self.threat_rows.guard();
         threat_guard.clear();
@@ -263,12 +273,15 @@ impl ScanResultsSection {
             .iter()
             .cloned()
             .for_each(|detected_threat| {
-                threat_guard.push_back(detected_threat);
+                threat_guard.push_back(DetectedThreatRowInit {
+                    detected_threat,
+                    message_catalog: Rc::clone(&message_catalog),
+                });
             });
         drop(threat_guard);
         let mut problem_guard = self.problem_rows.guard();
         problem_guard.clear();
-        problem_rows_of(&results_view)
+        problem_rows_of(&self.message_catalog, &results_view)
             .into_iter()
             .for_each(|problem_row| {
                 problem_guard.push_back(problem_row);
@@ -308,7 +321,7 @@ impl Component for ScanResultsSection {
                     set_wrap: true,
                     set_justify: gtk::Justification::Center,
                     #[watch]
-                    set_label: &model.results_view.headline_text(),
+                    set_label: &model.results_view.headline_text(&model.message_catalog),
                 },
 
                 gtk::Label {
@@ -316,7 +329,7 @@ impl Component for ScanResultsSection {
                     set_wrap: true,
                     set_justify: gtk::Justification::Center,
                     #[watch]
-                    set_label: &model.results_view.summary_text(),
+                    set_label: &model.results_view.summary_text(&model.message_catalog),
                 },
             },
 
@@ -342,7 +355,7 @@ impl Component for ScanResultsSection {
             },
 
             adw::PreferencesGroup {
-                set_title: &translated_messages::widgets::detected_threats_title(),
+                set_title: &translated_messages::widgets::detected_threats_title(&model.message_catalog),
                 #[watch]
                 set_visible: !model.threat_rows.is_empty(),
 
@@ -354,7 +367,7 @@ impl Component for ScanResultsSection {
             },
 
             adw::PreferencesGroup {
-                set_title: &translated_messages::widgets::problems_title(),
+                set_title: &translated_messages::widgets::problems_title(&model.message_catalog),
                 #[watch]
                 set_visible: model.results_view.has_problems(),
 
@@ -373,11 +386,13 @@ impl Component for ScanResultsSection {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let ScanResultsSectionInit {
+            message_catalog,
             quarantine_vault,
             dismiss_label,
             sandbox_kind,
         } = section_init;
         let model = Self {
+            message_catalog,
             sandbox_kind,
             dismiss_label,
             results_view: ScanResultsView::empty_results(),
@@ -402,15 +417,18 @@ impl Component for ScanResultsSection {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let sandbox_kind = self.sandbox_kind;
         match panel_input {
             ScanResultsSectionInput::ResultsShown(results_view) => self.show_results(results_view),
             ScanResultsSectionInput::QuarantineThreatRequested(row_index) => {
                 if let Some(threat_row) = self.threat_rows.get(row_index.current_index()) {
-                    let confirmation_body =
-                        translated_messages::widgets::move_path_quarantine(sanitize_scanner_line(
+                    let confirmation_body = translated_messages::widgets::move_path_quarantine(
+                        &message_catalog,
+                        sanitize_scanner_line(
                             &threat_row.detected_threat.file_path.to_string_lossy(),
-                        ));
+                        ),
+                    );
                     self.confirm_quarantine(vec![row_index], confirmation_body, root, &sender);
                 }
             }
@@ -422,8 +440,10 @@ impl Component for ScanResultsSection {
                     .filter(|threat_row| threat_row.can_request_quarantine())
                     .map(|threat_row| threat_row.row_index.clone())
                     .collect();
-                let confirmation_body =
-                    translated_messages::widgets::move_count_detected_file(remaining_threats);
+                let confirmation_body = translated_messages::widgets::move_count_detected_file(
+                    &message_catalog,
+                    remaining_threats,
+                );
                 self.confirm_quarantine(confirmed_rows, confirmation_body, root, &sender);
             }
             ScanResultsSectionInput::QuarantineConfirmed(confirmed_rows) => {
@@ -434,7 +454,7 @@ impl Component for ScanResultsSection {
                     root.clipboard()
                         .set_text(&threat_row.detected_threat.file_path.to_string_lossy());
                     let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                        translated_messages::widgets::path_copied_clipboard(),
+                        translated_messages::widgets::path_copied_clipboard(&message_catalog),
                     ));
                 }
             }
@@ -445,9 +465,9 @@ impl Component for ScanResultsSection {
                         exclusion_entry_for_threat(&threat_row.detected_threat.file_path),
                     );
                     let exclusion_message = if newly_excluded {
-                        translated_messages::widgets::file_skipped_future_scans()
+                        translated_messages::widgets::file_skipped_future_scans(&message_catalog)
                     } else {
-                        translated_messages::widgets::exclusion_already_exists()
+                        translated_messages::widgets::exclusion_already_exists(&message_catalog)
                     };
                     let _page_closed =
                         sender.output(ScanResultsSectionOutput::ToastRequested(exclusion_message));
@@ -473,6 +493,7 @@ impl Component for ScanResultsSection {
             }
             ScanResultsSectionInput::IgnoreSignatureRequested(trust_choice) => {
                 present_trust_confirmation(
+                    &message_catalog,
                     sandbox_kind,
                     root,
                     trust_choice,
@@ -489,6 +510,7 @@ impl Component for ScanResultsSection {
             }
             ScanResultsSectionInput::FalsePositiveReportRequested(report_proposal) => {
                 present_clamav_report_confirmation(
+                    &message_catalog,
                     root,
                     report_proposal,
                     sender.input_sender().clone(),
@@ -502,19 +524,23 @@ impl Component for ScanResultsSection {
             }
             ScanResultsSectionInput::CopyReportRequested => {
                 root.clipboard()
-                    .set_text(&format_scan_report(&self.results_view));
+                    .set_text(&format_scan_report(&message_catalog, &self.results_view));
                 let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                    translated_messages::widgets::results_copied_clipboard(),
+                    translated_messages::widgets::results_copied_clipboard(&message_catalog),
                 ));
             }
             ScanResultsSectionInput::ResultsDismissRequested => {
                 let _page_closed = sender.output(ScanResultsSectionOutput::ResultsDismissRequested);
             }
             ScanResultsSectionInput::ExportReportRequested => {
-                let exported_report = format_scan_report(&self.results_view);
+                let exported_report = format_scan_report(&message_catalog, &self.results_view);
                 deliver_local_outcome(
                     sender.command_sender().clone(),
-                    exported_text(EXPORT_FILE_NAME.to_owned(), exported_report),
+                    exported_text(
+                        Rc::clone(&message_catalog),
+                        EXPORT_FILE_NAME.to_owned(),
+                        exported_report,
+                    ),
                     |export_outcome| {
                         Some(ScanResultsSectionCommand::ReportExportFinished(
                             export_outcome,
@@ -531,6 +557,7 @@ impl Component for ScanResultsSection {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let sandbox_kind = self.sandbox_kind;
         match panel_command {
             ScanResultsSectionCommand::ThreatFileFingerprinted {
@@ -538,6 +565,7 @@ impl Component for ScanResultsSection {
                 fingerprint_outcome: Ok(file_fingerprint),
             } => {
                 present_trust_confirmation(
+                    &message_catalog,
                     sandbox_kind,
                     root,
                     TrustChoice::TrustFile {
@@ -554,12 +582,12 @@ impl Component for ScanResultsSection {
                 ..
             } => {
                 let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                    fingerprint_failure_text(&fingerprint_failure),
+                    fingerprint_failure_text(&message_catalog, &fingerprint_failure),
                 ));
             }
             ScanResultsSectionCommand::TrustChangeFinished(trust_outcome) => {
                 let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                    trust_outcome_text(&trust_outcome),
+                    trust_outcome_text(&message_catalog, &trust_outcome),
                 ));
             }
             ScanResultsSectionCommand::ThreatQuarantineFinished {
@@ -584,7 +612,7 @@ impl Component for ScanResultsSection {
             }
             ScanResultsSectionCommand::ReportExportFinished(TextExportOutcome::TextSaved) => {
                 let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                    translated_messages::widgets::results_exported(),
+                    translated_messages::widgets::results_exported(&message_catalog),
                 ));
             }
             ScanResultsSectionCommand::ReportExportFinished(TextExportOutcome::ExportCancelled) => {
@@ -593,7 +621,7 @@ impl Component for ScanResultsSection {
                 export_failure,
             )) => {
                 let _page_closed = sender.output(ScanResultsSectionOutput::ToastRequested(
-                    describe_export_failure(&export_failure),
+                    describe_export_failure(&message_catalog, &export_failure),
                 ));
             }
         }

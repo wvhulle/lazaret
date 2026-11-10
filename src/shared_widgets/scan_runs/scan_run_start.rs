@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Instant};
+use std::{path::PathBuf, rc::Rc, time::Instant};
 
 use futures::{StreamExt, future::ready, stream};
 use jiff::Timestamp;
@@ -46,6 +46,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const PROGRESS_BATCH_SIZE: usize = 256;
@@ -150,7 +151,10 @@ where
     )
 }
 
-pub fn finished_results_view(finished_scan: &FinishedScan) -> ScanResultsView {
+pub fn finished_results_view(
+    message_catalog: &Rc<MessageCatalog>,
+    finished_scan: &FinishedScan,
+) -> ScanResultsView {
     let scan_outcome = &finished_scan.scan_run.scan_outcome;
     ScanResultsView {
         results_status: results_status(scan_outcome, finished_scan.scan_ending),
@@ -160,8 +164,8 @@ pub fn finished_results_view(finished_scan: &FinishedScan) -> ScanResultsView {
         excluded_entry_count: scan_outcome.excluded_entry_count,
         elapsed_time: finished_scan.elapsed_time,
         detected_threats: scan_outcome.threat_findings.attributed_threats().to_vec(),
-        problem_path_groups: problem_path_groups(scan_outcome),
-        notice_lines: unlisted_notice_lines(scan_outcome),
+        problem_path_groups: problem_path_groups(message_catalog, scan_outcome),
+        notice_lines: unlisted_notice_lines(message_catalog, scan_outcome),
         noteworthy_output: scan_outcome.noteworthy_output.clone(),
     }
 }
@@ -173,23 +177,23 @@ pub fn finished_results_status(finished_scan: &FinishedScan) -> ScanResultsStatu
     )
 }
 
-pub fn notify_finished_scan(finished_scan: &FinishedScan) {
+pub fn notify_finished_scan(message_catalog: &MessageCatalog, finished_scan: &FinishedScan) {
     let notification_title = match finished_results_status(finished_scan) {
         ScanResultsStatus::ThreatsDetected => {
-            translated_messages::widgets::threats_detected_finished()
+            translated_messages::widgets::threats_detected_finished(message_catalog)
         }
         ScanResultsStatus::NoThreatsDetected => {
-            translated_messages::widgets::no_threats_detected_finished()
+            translated_messages::widgets::no_threats_detected_finished(message_catalog)
         }
         ScanResultsStatus::FinishedWithProblems => {
-            translated_messages::widgets::finished_problems_notify()
+            translated_messages::widgets::finished_problems_notify(message_catalog)
         }
         ScanResultsStatus::ScanCancelled => return,
     };
     notify_outside_the_window(
         "scan-finished",
         &notification_title,
-        &scan_summary_text(&finished_scan.scan_run.scan_outcome),
+        &scan_summary_text(message_catalog, &finished_scan.scan_run.scan_outcome),
     );
 }
 

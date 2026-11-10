@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, rc::Rc};
 
 use futures::StreamExt;
 use jiff::Timestamp;
@@ -29,7 +29,7 @@ use crate::{
             evidence_area_summaries, with_reported_summaries,
         },
         sidebar_navigation::sidebar_navigation_column::{
-            SidebarNavigationColumn, SidebarNavigationColumnInput,
+            SidebarNavigationColumn, SidebarNavigationColumnInit, SidebarNavigationColumnInput,
         },
         start_page_choice::{
             StartPageRequest, StartPageState, StartPageTransition, initial_start_page,
@@ -115,14 +115,17 @@ use crate::{
             database_updates_state::DatabaseUpdatesPageOutput,
         },
         signature_sources_page::signature_sources_component::{
-            SignatureSourcesPage, SignatureSourcesPageInput, SignatureSourcesPageOutput,
+            SignatureSourcesPage, SignatureSourcesPageInit, SignatureSourcesPageInput,
+            SignatureSourcesPageOutput,
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct PageNavigationInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub system_bus: SystemBusAccess,
     pub user_bus: UserBusAccess,
     pub sandbox_kind: SandboxKind,
@@ -134,7 +137,8 @@ pub struct PageNavigationInit {
 }
 
 pub struct PageNavigation {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     system_bus: SystemBusAccess,
     user_bus: UserBusAccess,
     sandbox_kind: SandboxKind,
@@ -215,11 +219,12 @@ pub enum PageNavigationOutput {
 }
 
 fn page_root(
+    message_catalog: &MessageCatalog,
     application_page: ApplicationPage,
     page_widget: &impl IsA<gtk::Widget>,
 ) -> adw::NavigationPage {
     adw::NavigationPage::builder()
-        .title(application_page.page_title())
+        .title(application_page.page_title(message_catalog))
         .tag(application_page.page_name())
         .child(page_widget)
         .build()
@@ -279,15 +284,16 @@ const fn reported_area_summary(
     })
 }
 
-fn device_scan_started_toast(drive_name: &str) -> adw::Toast {
+fn device_scan_started_toast(message_catalog: &MessageCatalog, drive_name: &str) -> adw::Toast {
     let started_toast = adw::Toast::builder()
         .title(translated_messages::window::scanning_drive_title(
+            message_catalog,
             drive_name,
         ))
         .use_markup(false)
         .build();
     started_toast.set_button_label(Some(
-        &translated_messages::window::open_removable_drives_button(),
+        &translated_messages::window::open_removable_drives_button(message_catalog),
     ));
     started_toast.set_action_name(Some("win.show-page"));
     started_toast.set_action_target_value(Some(
@@ -462,7 +468,8 @@ fn register_page_actions(
 
 impl PageNavigation {
     fn refresh_area_summaries(&mut self) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let GatheredEvidence::Gathered {
             protection_evidence,
             gathered_at,
@@ -471,8 +478,9 @@ impl PageNavigation {
             return;
         };
         let evidence_summaries = evidence_area_summaries(
+            &message_catalog,
             protection_evidence,
-            moment_formatters,
+            &moment_formatters,
             *gathered_at,
             &glib::home_dir().to_string_lossy(),
         );
@@ -660,43 +668,43 @@ impl Component for PageNavigation {
                     #[wrap(Some)]
                     set_content = &adw::NavigationPage {
                         #[watch]
-                        set_title: &model.visible_page.page_title(),
+                        set_title: &model.visible_page.page_title(&model.message_catalog),
 
                         #[name = "page_stack"]
                         gtk::Stack {
 
-                            add_titled[Some(ApplicationPage::Detections.page_name()), &ApplicationPage::Detections.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::Detections, model.detections_page.widget()),
+                            add_titled[Some(ApplicationPage::Detections.page_name()), &ApplicationPage::Detections.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::Detections, model.detections_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::ManualScan.page_name()), &ApplicationPage::ManualScan.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::ManualScan, model.scan_page.widget()),
+                            add_titled[Some(ApplicationPage::ManualScan.page_name()), &ApplicationPage::ManualScan.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::ManualScan, model.scan_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::RemovableDrives.page_name()), &ApplicationPage::RemovableDrives.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::RemovableDrives, model.removable_drives_page.widget()),
+                            add_titled[Some(ApplicationPage::RemovableDrives.page_name()), &ApplicationPage::RemovableDrives.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::RemovableDrives, model.removable_drives_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::Quarantine.page_name()), &ApplicationPage::Quarantine.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::Quarantine, model.quarantine_page.widget()),
+                            add_titled[Some(ApplicationPage::Quarantine.page_name()), &ApplicationPage::Quarantine.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::Quarantine, model.quarantine_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::TrustedDetections.page_name()), &ApplicationPage::TrustedDetections.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::TrustedDetections, model.trusted_detections_page.widget()),
+                            add_titled[Some(ApplicationPage::TrustedDetections.page_name()), &ApplicationPage::TrustedDetections.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::TrustedDetections, model.trusted_detections_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::SentSamples.page_name()), &ApplicationPage::SentSamples.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::SentSamples, model.sent_samples_page.widget()),
+                            add_titled[Some(ApplicationPage::SentSamples.page_name()), &ApplicationPage::SentSamples.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::SentSamples, model.sent_samples_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::SignatureSources.page_name()), &ApplicationPage::SignatureSources.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::SignatureSources, model.signature_sources_page.widget()),
+                            add_titled[Some(ApplicationPage::SignatureSources.page_name()), &ApplicationPage::SignatureSources.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::SignatureSources, model.signature_sources_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::DatabaseUpdates.page_name()), &ApplicationPage::DatabaseUpdates.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::DatabaseUpdates, model.database_updates_page.widget()),
+                            add_titled[Some(ApplicationPage::DatabaseUpdates.page_name()), &ApplicationPage::DatabaseUpdates.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::DatabaseUpdates, model.database_updates_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::ScanEngine.page_name()), &ApplicationPage::ScanEngine.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::ScanEngine, model.scan_engine_page.widget()),
+                            add_titled[Some(ApplicationPage::ScanEngine.page_name()), &ApplicationPage::ScanEngine.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::ScanEngine, model.scan_engine_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::OnAccessScanning.page_name()), &ApplicationPage::OnAccessScanning.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::OnAccessScanning, model.on_access_page.widget()),
+                            add_titled[Some(ApplicationPage::OnAccessScanning.page_name()), &ApplicationPage::OnAccessScanning.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::OnAccessScanning, model.on_access_page.widget()),
                             },
-                            add_titled[Some(ApplicationPage::ScheduledScans.page_name()), &ApplicationPage::ScheduledScans.page_title()] = &adw::NavigationView {
-                                add: &page_root(ApplicationPage::ScheduledScans, model.scheduled_scans_page.widget()),
+                            add_titled[Some(ApplicationPage::ScheduledScans.page_name()), &ApplicationPage::ScheduledScans.page_title(&model.message_catalog)] = &adw::NavigationView {
+                                add: &page_root(&model.message_catalog, ApplicationPage::ScheduledScans, model.scheduled_scans_page.widget()),
                             },
 
                             #[watch]
@@ -722,6 +730,7 @@ impl Component for PageNavigation {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = navigation_init.message_catalog;
         let moment_formatters = navigation_init.moment_formatters;
         let sandbox_kind = navigation_init.sandbox_kind;
         let system_bus = navigation_init.system_bus;
@@ -732,7 +741,8 @@ impl Component for PageNavigation {
             ActivityHistory::at_database_path(lazaret_database_path(&data_directory));
         let quarantine_page = QuarantineEntriesPage::builder()
             .launch(QuarantineEntriesPageInit {
-                moment_formatters,
+                message_catalog: Rc::clone(&message_catalog),
+                moment_formatters: Rc::clone(&moment_formatters),
                 sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
@@ -759,7 +769,8 @@ impl Component for PageNavigation {
             );
         let scan_page = ScanPage::builder()
             .launch(ScanPageInit {
-                moment_formatters,
+                message_catalog: Rc::clone(&message_catalog),
+                moment_formatters: Rc::clone(&moment_formatters),
                 sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
@@ -775,7 +786,8 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_scan_output);
         let removable_drives_page = RemovableDrivesPage::builder()
             .launch(RemovableDrivesPageInit {
-                moment_formatters,
+                message_catalog: Rc::clone(&message_catalog),
+                moment_formatters: Rc::clone(&moment_formatters),
                 sandbox_kind,
                 quarantine_vault: quarantine_vault.clone(),
                 activity_history: activity_history.clone(),
@@ -784,7 +796,8 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_removable_drives_output);
         let database_updates_page = DatabaseUpdatesPage::builder()
             .launch(DatabaseUpdatesPageInit {
-                moment_formatters,
+                message_catalog: Rc::clone(&message_catalog),
+                moment_formatters: Rc::clone(&moment_formatters),
                 activity_history: activity_history.clone(),
                 sandbox_kind,
                 system_bus: system_bus.clone(),
@@ -792,19 +805,22 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_database_updates_output);
         let scan_engine_page = ScanEnginePage::builder()
             .launch(ScanEnginePageInit {
+                message_catalog: Rc::clone(&message_catalog),
                 sandbox_kind,
-                moment_formatters,
+                moment_formatters: Rc::clone(&moment_formatters),
             })
             .forward(sender.input_sender(), forwarded_scan_engine_output);
         let on_access_page = OnAccessPage::builder()
             .launch(OnAccessPageInit {
+                message_catalog: Rc::clone(&message_catalog),
                 sandbox_kind,
-                moment_formatters,
+                moment_formatters: Rc::clone(&moment_formatters),
             })
             .forward(sender.input_sender(), forwarded_on_access_output);
         let scheduled_scans_page = ScheduledScansPage::builder()
             .launch(ScheduledScansPageInit {
-                moment_formatters,
+                message_catalog: Rc::clone(&message_catalog),
+                moment_formatters: Rc::clone(&moment_formatters),
                 activity_history: activity_history.clone(),
                 sandbox_kind,
                 system_bus: system_bus.clone(),
@@ -813,7 +829,8 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_scheduled_scans_output);
         let sent_samples_page = SentSamplesPage::builder()
             .launch(SentSamplesPageInit {
-                moment_formatters,
+                message_catalog: Rc::clone(&message_catalog),
+                moment_formatters: Rc::clone(&moment_formatters),
                 sandbox_kind,
                 activity_history: activity_history.clone(),
                 quarantine_vault: quarantine_vault.clone(),
@@ -821,7 +838,8 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_sent_samples_output);
         let detections_page = BackgroundDetectionsPage::builder()
             .launch(BackgroundDetectionsPageInit {
-                moment_formatters,
+                message_catalog: Rc::clone(&message_catalog),
+                moment_formatters: Rc::clone(&moment_formatters),
                 sandbox_kind,
                 activity_history: activity_history.clone(),
                 quarantine_vault,
@@ -829,23 +847,31 @@ impl Component for PageNavigation {
             .forward(sender.input_sender(), forwarded_detections_output);
         let trusted_detections_page = TrustedDetectionsPage::builder()
             .launch(TrustedDetectionsPageInit {
+                message_catalog: Rc::clone(&message_catalog),
                 sandbox_kind,
-                moment_formatters,
+                moment_formatters: Rc::clone(&moment_formatters),
             })
             .forward(sender.input_sender(), forwarded_trusted_detections_output);
         let signature_sources_page = SignatureSourcesPage::builder()
-            .launch(sandbox_kind)
+            .launch(SignatureSourcesPageInit {
+                sandbox_kind,
+                message_catalog: Rc::clone(&message_catalog),
+            })
             .forward(sender.input_sender(), forwarded_signature_sources_output);
         let StartPageTransition {
             shown_page: initial_page,
             next_state: initial_start_state,
         } = initial_start_page(navigation_init.startup_page);
         let mut model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             moment_formatters,
             sandbox_kind,
             visible_page: initial_page,
             sidebar_column: SidebarNavigationColumn::builder()
-                .launch(initial_page)
+                .launch(SidebarNavigationColumnInit {
+                    selected_page: initial_page,
+                    message_catalog: Rc::clone(&message_catalog),
+                })
                 .detach(),
             start_page_state: initial_start_state,
             shows_content_when_narrow: false,
@@ -892,6 +918,7 @@ impl Component for PageNavigation {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match navigation_input {
             PageNavigationInput::PageShown(application_page) => self.show_page(application_page),
             PageNavigationInput::NarrowContentToggled(shows_content) => {
@@ -972,7 +999,7 @@ impl Component for PageNavigation {
                     && self.visible_page != ApplicationPage::RemovableDrives
                 {
                     self.toaster
-                        .add_toast(device_scan_started_toast(&drive_name));
+                        .add_toast(device_scan_started_toast(&message_catalog, &drive_name));
                 }
             }
             PageNavigationInput::DeviceScanEnded => {
@@ -997,7 +1024,10 @@ impl Component for PageNavigation {
             PageNavigationInput::HistoryExportRequested => {
                 deliver_local_outcome(
                     sender.input_sender().clone(),
-                    alert_choice(history_export_dialog(), root.clone().upcast()),
+                    alert_choice(
+                        history_export_dialog(&message_catalog),
+                        root.clone().upcast(),
+                    ),
                     |export_choice| match export_choice {
                         HistoryExportChoice::FormatChosen(export_format) => Some(
                             PageNavigationInput::HistoryExportFormatChosen(export_format),
@@ -1018,7 +1048,10 @@ impl Component for PageNavigation {
             PageNavigationInput::HistoryClearRequested => {
                 deliver_local_outcome(
                     sender.input_sender().clone(),
-                    alert_choice(clear_history_dialog(), root.clone().upcast()),
+                    alert_choice(
+                        clear_history_dialog(&message_catalog),
+                        root.clone().upcast(),
+                    ),
                     |clear_choice| match clear_choice {
                         ClearHistoryChoice::ClearAllChosen => {
                             Some(PageNavigationInput::HistoryClearConfirmed)
@@ -1050,6 +1083,7 @@ impl Component for PageNavigation {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match navigation_command {
             PageNavigationCommand::EvidenceGathered {
                 protection_evidence,
@@ -1112,14 +1146,15 @@ impl Component for PageNavigation {
                 export_format,
                 load_outcome,
             } => match load_outcome
-                .map_err(|load_failure| describe_history_failure(&load_failure))
+                .map_err(|load_failure| describe_history_failure(&message_catalog, &load_failure))
                 .and_then(|activity_entries| {
-                    exported_history_file(export_format, &activity_entries)
+                    exported_history_file(&message_catalog, export_format, &activity_entries)
                         .map_err(|json_failure| json_failure.to_string())
                 }) {
                 Ok(history_file) => deliver_local_outcome(
                     sender.command_sender().clone(),
                     exported_text(
+                        Rc::clone(&message_catalog),
                         history_file.suggested_name.to_owned(),
                         history_file.exported_text,
                     ),
@@ -1127,25 +1162,33 @@ impl Component for PageNavigation {
                         Some(PageNavigationCommand::HistoryExportFinished(export_outcome))
                     },
                 ),
-                Err(failure_text) => self.show_plain_toast(
-                    translated_messages::window::not_export_history_toast(&failure_text),
-                ),
+                Err(failure_text) => {
+                    self.show_plain_toast(translated_messages::window::not_export_history_toast(
+                        &message_catalog,
+                        &failure_text,
+                    ))
+                }
             },
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::TextSaved) => {
-                self.show_plain_toast(translated_messages::window::history_export_finished());
+                self.show_plain_toast(translated_messages::window::history_export_finished(
+                    &message_catalog,
+                ));
             }
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::ExportCancelled) => {}
             PageNavigationCommand::HistoryExportFinished(TextExportOutcome::ExportFailed(
                 export_failure,
-            )) => self.show_plain_toast(describe_export_failure(&export_failure)),
+            )) => self.show_plain_toast(describe_export_failure(&message_catalog, &export_failure)),
             PageNavigationCommand::HistoryCleared(Ok(())) => {
-                self.show_plain_toast(translated_messages::window::history_cleared());
+                self.show_plain_toast(translated_messages::window::history_cleared(
+                    &message_catalog,
+                ));
                 self.reload_every_history();
             }
             PageNavigationCommand::HistoryCleared(Err(clear_failure)) => {
                 log_failure_to_journal("clearing the history failed", &clear_failure);
                 self.show_plain_toast(translated_messages::window::not_clear_history_toast(
-                    describe_history_failure(&clear_failure),
+                    &message_catalog,
+                    describe_history_failure(&message_catalog, &clear_failure),
                 ));
             }
         }

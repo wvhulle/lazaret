@@ -14,6 +14,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const ON_ACCESS_KEY_PREFIX: &str = "OnAccess";
@@ -35,6 +36,7 @@ impl ReducedSettingGroup {
 }
 
 fn reduced_settings_status(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     reduced_settings: &[&ReducedSetting],
     change_time: OverridesChangeTime,
@@ -43,43 +45,51 @@ fn reduced_settings_status(
     match change_time {
         OverridesChangeTime::ChangedAt { changed_at } => {
             translated_messages::widgets::count_settings_reduced_since(
+                message_catalog,
                 setting_count,
                 moment_formatters.exact_moment_text(changed_at),
             )
         }
         OverridesChangeTime::ChangeTimeUnknown => {
-            translated_messages::widgets::count_settings_reduced_unknown_time(setting_count)
+            translated_messages::widgets::count_settings_reduced_unknown_time(
+                message_catalog,
+                setting_count,
+            )
         }
     }
 }
 
 fn override_change_time_row(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     change_time: OverridesChangeTime,
 ) -> StepEvidenceRow {
     evidence_row(
-        translated_messages::widgets::changed_label(),
+        translated_messages::widgets::changed_label(message_catalog),
         match change_time {
             OverridesChangeTime::ChangedAt { changed_at } => {
                 moment_formatters.exact_moment_text(changed_at)
             }
             OverridesChangeTime::ChangeTimeUnknown => {
-                translated_messages::widgets::change_time_unknown_override()
+                translated_messages::widgets::change_time_unknown_override(message_catalog)
             }
         },
     )
 }
 
-fn overrides_failure_text(read_failure: OverridesReadFailure) -> String {
+fn overrides_failure_text(
+    message_catalog: &MessageCatalog,
+    read_failure: OverridesReadFailure,
+) -> String {
     match read_failure {
         OverridesReadFailure::StoredOverridesUnusable(
             StoredOverridesFailure::OverridesFileUnreadable { failure_kind },
-        ) => translated_messages::widgets::reduction_unknown_unread(failure_kind),
+        ) => translated_messages::widgets::reduction_unknown_unread(message_catalog, failure_kind),
         OverridesReadFailure::StoredOverridesUnusable(
             StoredOverridesFailure::OverridesFileInvalid,
-        ) => translated_messages::widgets::reduction_unknown_file(),
+        ) => translated_messages::widgets::reduction_unknown_file(message_catalog),
         OverridesReadFailure::ReadingTaskInterrupted => {
-            translated_messages::widgets::reduction_unknown_reading()
+            translated_messages::widgets::reduction_unknown_reading(message_catalog)
         }
     }
 }
@@ -136,6 +146,7 @@ pub fn runtime_reduction_condition(
 }
 
 pub fn runtime_reduction_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     runtime_reductions: &RuntimeReductions,
     setting_group: ReducedSettingGroup,
@@ -145,9 +156,9 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
     match runtime_reductions {
         RuntimeReductions::NothingReduced => None,
         RuntimeReductions::OverridesUnreadable(read_failure) => Some(TimelineStep::settled(
-            translated_messages::widgets::settings_changed_runtime(),
-            translated_messages::widgets::administrator_can_change(),
-            overrides_failure_text(*read_failure),
+            translated_messages::widgets::settings_changed_runtime(message_catalog),
+            translated_messages::widgets::administrator_can_change(message_catalog),
+            overrides_failure_text(message_catalog, *read_failure),
             SettledStep {
                 header_action,
                 ..SettledStep::without_offers(node_state)
@@ -160,14 +171,20 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
             let grouped_settings = reduced_settings_in_group(reduced_settings, setting_group);
             (!grouped_settings.is_empty()).then(|| {
                 TimelineStep::settled(
-                    translated_messages::widgets::protection_reduced_purpose(),
-                    translated_messages::widgets::administrator_changed_runtime(),
-                    reduced_settings_status(moment_formatters, &grouped_settings, *change_time),
+                    translated_messages::widgets::protection_reduced_purpose(message_catalog),
+                    translated_messages::widgets::administrator_changed_runtime(message_catalog),
+                    reduced_settings_status(
+                        message_catalog,
+                        moment_formatters,
+                        &grouped_settings,
+                        *change_time,
+                    ),
                     SettledStep {
                         evidence_rows: plain_rows(grouped_settings.iter().map(|reduced_setting| {
                             evidence_row(
                                 reduced_setting.setting_key.clone(),
                                 translated_messages::widgets::base_configuration_changed_now(
+                                    message_catalog,
                                     &reduced_setting.base_value,
                                     &reduced_setting.changed_value,
                                 ),
@@ -186,9 +203,9 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
             let grouped_settings = overridden_settings_in_group(overridden_settings, setting_group);
             (!grouped_settings.is_empty()).then(|| {
                 TimelineStep::settled(
-                    translated_messages::widgets::settings_changed_runtime(),
-                    translated_messages::widgets::administrator_changed_clamd(),
-                    translated_messages::widgets::settings_changed_runtime_clamd(),
+                    translated_messages::widgets::settings_changed_runtime(message_catalog),
+                    translated_messages::widgets::administrator_changed_clamd(message_catalog),
+                    translated_messages::widgets::settings_changed_runtime_clamd(message_catalog),
                     SettledStep {
                         evidence_rows: plain_rows(
                             grouped_settings
@@ -197,11 +214,13 @@ pub fn runtime_reduction_step<StepAction: StepActionButton>(
                                     evidence_row(
                                         overridden_setting.setting_key.clone(),
                                         translated_messages::widgets::changed_now(
+                                            message_catalog,
                                             &overridden_setting.changed_value,
                                         ),
                                     )
                                 })
                                 .chain(std::iter::once(override_change_time_row(
+                                    message_catalog,
                                     moment_formatters,
                                     *change_time,
                                 ))),
@@ -231,7 +250,7 @@ mod runtime_reduction_steps_tests {
     }
 
     impl StepActionButton for ReviewStepAction {
-        fn button_label(&self) -> String {
+        fn button_label(&self, _message_catalog: &MessageCatalog) -> String {
             match self {
                 Self::ReviewChangedSettings => "Review".to_owned(),
             }
@@ -263,10 +282,12 @@ mod runtime_reduction_steps_tests {
     }
 
     fn reduction_rows(
+        message_catalog: &MessageCatalog,
         moment_formatters: &MomentFormatters,
         setting_group: ReducedSettingGroup,
     ) -> Vec<String> {
         runtime_reduction_step::<ReviewStepAction>(
+            message_catalog,
             moment_formatters,
             &mixed_reductions(),
             setting_group,
@@ -284,19 +305,29 @@ mod runtime_reduction_steps_tests {
 
     #[test]
     fn each_group_lists_only_its_own_reduced_keys() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         assert_eq!(
-            reduction_rows(moment_formatters, ReducedSettingGroup::OnAccessSettings),
+            reduction_rows(
+                message_catalog,
+                moment_formatters,
+                ReducedSettingGroup::OnAccessSettings
+            ),
             vec!["OnAccessPrevention"]
         );
         assert_eq!(
-            reduction_rows(moment_formatters, ReducedSettingGroup::EngineSettings),
+            reduction_rows(
+                message_catalog,
+                moment_formatters,
+                ReducedSettingGroup::EngineSettings
+            ),
             vec!["DetectPUA"]
         );
     }
 
     #[test]
     fn a_group_without_reduced_keys_adds_no_step_and_stays_met() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let on_access_only = RuntimeReductions::SettingsReduced {
             change_time: OverridesChangeTime::ChangeTimeUnknown,
@@ -304,6 +335,7 @@ mod runtime_reduction_steps_tests {
         };
         assert_eq!(
             runtime_reduction_step::<ReviewStepAction>(
+                message_catalog,
                 moment_formatters,
                 &on_access_only,
                 ReducedSettingGroup::EngineSettings,
@@ -319,6 +351,7 @@ mod runtime_reduction_steps_tests {
 
     #[test]
     fn unreadable_overrides_concern_every_group() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let unreadable_overrides =
             RuntimeReductions::OverridesUnreadable(OverridesReadFailure::ReadingTaskInterrupted);
@@ -329,6 +362,7 @@ mod runtime_reduction_steps_tests {
         .into_iter()
         .for_each(|setting_group| {
             let reduction_step = runtime_reduction_step(
+                message_catalog,
                 moment_formatters,
                 &unreadable_overrides,
                 setting_group,

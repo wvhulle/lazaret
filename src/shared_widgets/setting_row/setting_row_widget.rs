@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use clamd_configuration::setting_kinds::whole_number_in_text;
 use relm4::{
     FactorySender, adw,
@@ -21,6 +23,7 @@ use crate::{
         source_texts,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const SIZE_COUNT_CEILING: f64 = i32::MAX as f64;
@@ -49,7 +52,8 @@ enum DraftComparison {
 }
 
 pub struct SettingRow {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     row_state: SettingRowState,
     editor_draft: TypedSettingValue,
 }
@@ -134,7 +138,11 @@ fn row_title(row_state: &SettingRowState) -> String {
     }
 }
 
-fn explanation_text(moment_formatters: &MomentFormatters, row_state: &SettingRowState) -> String {
+fn explanation_text(
+    message_catalog: &MessageCatalog,
+    moment_formatters: &MomentFormatters,
+    row_state: &SettingRowState,
+) -> String {
     let setting_description = match &row_state.setting_label {
         SettingLabel::DescribedSetting { description, .. } => description.clone(),
         SettingLabel::ConfigKeyOnly => String::new(),
@@ -142,14 +150,19 @@ fn explanation_text(moment_formatters: &MomentFormatters, row_state: &SettingRow
     let unreadable_note = match &row_state.shown_value {
         ShownSettingValue::ReadableValue(_) => String::new(),
         ShownSettingValue::UnreadableValue { parse_failure, .. } => {
-            describe_parse_failure(*parse_failure)
+            describe_parse_failure(message_catalog, *parse_failure)
         }
     };
     [
         setting_description,
         unreadable_note,
-        source_texts(moment_formatters, &row_state.setting_subject).explanation,
-        route_explanation(change_route(&row_state.setting_subject)),
+        source_texts(
+            message_catalog,
+            moment_formatters,
+            &row_state.setting_subject,
+        )
+        .explanation,
+        route_explanation(message_catalog, change_route(&row_state.setting_subject)),
     ]
     .into_iter()
     .filter(|paragraph| !paragraph.is_empty())
@@ -186,12 +199,17 @@ fn shown_value_or_text(shown_value: &ShownSettingValue) -> TypedSettingValue {
     }
 }
 
-fn read_only_value_text(shown_value: &ShownSettingValue) -> String {
+fn read_only_value_text(
+    message_catalog: &MessageCatalog,
+    shown_value: &ShownSettingValue,
+) -> String {
     match shown_value {
         ShownSettingValue::ReadableValue(TypedSettingValue::SizeValue(size_amount)) => size_amount
             .byte_size()
             .map_or_else(|| size_amount.config_text(), byte_size_text),
-        ShownSettingValue::ReadableValue(typed_value) => shown_value_text(typed_value),
+        ShownSettingValue::ReadableValue(typed_value) => {
+            shown_value_text(message_catalog, typed_value)
+        }
         ShownSettingValue::UnreadableValue { raw_text, .. } => raw_text.clone(),
     }
 }
@@ -207,12 +225,16 @@ const fn editor_apply_timing(setting_route: ChangeRoute) -> EditorApplyTiming {
     }
 }
 
-fn follow_up_label(follow_up_action: FollowUpAction) -> String {
+fn follow_up_label(message_catalog: &MessageCatalog, follow_up_action: FollowUpAction) -> String {
     match follow_up_action {
-        FollowUpAction::ResetToDefault => translated_messages::widgets::reset_default_button(),
-        FollowUpAction::RevertRuntimeChange => translated_messages::widgets::revert_change_button(),
+        FollowUpAction::ResetToDefault => {
+            translated_messages::widgets::reset_default_button(message_catalog)
+        }
+        FollowUpAction::RevertRuntimeChange => {
+            translated_messages::widgets::revert_change_button(message_catalog)
+        }
         FollowUpAction::CopyConfigurationLine => {
-            translated_messages::widgets::copy_configuration_line_button()
+            translated_messages::widgets::copy_configuration_line_button(message_catalog)
         }
     }
 }
@@ -221,10 +243,10 @@ const fn follow_up_is_primary(follow_up_action: FollowUpAction) -> bool {
     matches!(follow_up_action, FollowUpAction::RevertRuntimeChange)
 }
 
-fn apply_button() -> gtk::Button {
+fn apply_button(message_catalog: &MessageCatalog) -> gtk::Button {
     gtk::Button::builder()
         .icon_name("object-select-symbolic")
-        .tooltip_text(translated_messages::widgets::apply_tooltip())
+        .tooltip_text(translated_messages::widgets::apply_tooltip(message_catalog))
         .valign(gtk::Align::Center)
         .css_classes(["suggested-action", "circular"])
         .build()
@@ -279,8 +301,11 @@ fn connect_count_editing(
     value_handler
 }
 
-fn connected_apply_button(sender: &FactorySender<SettingRow>) -> gtk::Button {
-    let apply_button = apply_button();
+fn connected_apply_button(
+    message_catalog: &MessageCatalog,
+    sender: &FactorySender<SettingRow>,
+) -> gtk::Button {
+    let apply_button = apply_button(message_catalog);
     let apply_sender = sender.clone();
     apply_button.connect_clicked(move |_clicked_button| {
         apply_sender.input(SettingRowInput::ApplyRequested);
@@ -288,20 +313,21 @@ fn connected_apply_button(sender: &FactorySender<SettingRow>) -> gtk::Button {
     apply_button
 }
 
-pub fn size_unit_labels() -> gtk::StringList {
-    let unit_labels = SIZE_UNITS.map(size_unit_label);
+pub fn size_unit_labels(message_catalog: &MessageCatalog) -> gtk::StringList {
+    let unit_labels = SIZE_UNITS.map(|size_unit| size_unit_label(message_catalog, size_unit));
     gtk::StringList::new(&unit_labels.each_ref().map(String::as_str))
 }
 
-pub fn size_unit_label(size_unit: SizeUnit) -> String {
+pub fn size_unit_label(message_catalog: &MessageCatalog, size_unit: SizeUnit) -> String {
     match size_unit {
-        SizeUnit::PlainBytes => translated_messages::widgets::plain_bytes(),
-        SizeUnit::Kibibytes => translated_messages::widgets::kibibytes_unit(),
-        SizeUnit::Mebibytes => translated_messages::widgets::mebibytes_unit(),
+        SizeUnit::PlainBytes => translated_messages::widgets::plain_bytes(message_catalog),
+        SizeUnit::Kibibytes => translated_messages::widgets::kibibytes_unit(message_catalog),
+        SizeUnit::Mebibytes => translated_messages::widgets::mebibytes_unit(message_catalog),
     }
 }
 
 fn build_suffix_editor(
+    message_catalog: &MessageCatalog,
     editor_kind: EditorKind,
     editor_draft: &TypedSettingValue,
     shown_value: &ShownSettingValue,
@@ -351,7 +377,7 @@ fn build_suffix_editor(
                 count_spin_button(*minimum as f64, *maximum as f64, *count_value as f64);
             labelled_for_assistive_technology(&spin_button, editor_label);
             let value_handler = connect_count_editing(&spin_button, sender);
-            let apply_button = connected_apply_button(sender);
+            let apply_button = connected_apply_button(message_catalog, sender);
             editor_box.append(&spin_button);
             editor_box.append(&apply_button);
             SuffixEditor::CountEditor {
@@ -366,10 +392,10 @@ fn build_suffix_editor(
             labelled_for_assistive_technology(&spin_button, editor_label);
             let value_handler = connect_count_editing(&spin_button, sender);
             let unit_dropdown = gtk::DropDown::builder()
-                .model(&size_unit_labels())
+                .model(&size_unit_labels(message_catalog))
                 .selected(size_amount.size_unit.unit_position())
                 .valign(gtk::Align::Center)
-                .tooltip_text(translated_messages::widgets::unit_tooltip())
+                .tooltip_text(translated_messages::widgets::unit_tooltip(message_catalog))
                 .build();
             let unit_sender = sender.clone();
             let unit_handler = unit_dropdown.connect_selected_notify(move |chosen_unit| {
@@ -379,7 +405,7 @@ fn build_suffix_editor(
                     )));
                 }
             });
-            let apply_button = connected_apply_button(sender);
+            let apply_button = connected_apply_button(message_catalog, sender);
             editor_box.append(&spin_button);
             editor_box.append(&unit_dropdown);
             editor_box.append(&apply_button);
@@ -411,7 +437,7 @@ fn build_suffix_editor(
             text_entry.connect_activate(move |_activated_entry| {
                 activation_sender.input(SettingRowInput::ApplyRequested);
             });
-            let apply_button = connected_apply_button(sender);
+            let apply_button = connected_apply_button(message_catalog, sender);
             editor_box.append(&text_entry);
             editor_box.append(&apply_button);
             SuffixEditor::TextEditor {
@@ -456,7 +482,7 @@ fn build_suffix_editor(
             _mismatched_draft,
         ) => {
             let value_label = gtk::Label::builder()
-                .label(read_only_value_text(shown_value))
+                .label(read_only_value_text(message_catalog, shown_value))
                 .selectable(true)
                 .ellipsize(gtk::pango::EllipsizeMode::Middle)
                 .max_width_chars(28)
@@ -517,17 +543,30 @@ impl SettingRow {
     }
 
     fn header_subtitle(&self) -> String {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         if self.row_state.change_activity.shows_applying_spinner() {
-            translated_messages::widgets::setting_applying_subtitle()
+            translated_messages::widgets::setting_applying_subtitle(&message_catalog)
         } else {
-            source_texts(moment_formatters, &self.row_state.setting_subject).short_tag
+            source_texts(
+                &message_catalog,
+                &moment_formatters,
+                &self.row_state.setting_subject,
+            )
+            .short_tag
         }
     }
 
     fn source_icon_name(&self) -> Option<&'static str> {
-        let moment_formatters = self.moment_formatters;
-        match source_texts(moment_formatters, &self.row_state.setting_subject).source_emphasis {
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
+        match source_texts(
+            &message_catalog,
+            &moment_formatters,
+            &self.row_state.setting_subject,
+        )
+        .source_emphasis
+        {
             SourceEmphasis::PlainSource => None,
             SourceEmphasis::NeedsAttention => Some("dialog-warning-symbolic"),
             SourceEmphasis::FixedValue => Some("changes-prevent-symbolic"),
@@ -539,6 +578,7 @@ impl SettingRow {
         widgets: &mut SettingRowWidgets,
         sender: &FactorySender<Self>,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let follow_ups =
             follow_up_actions(&self.row_state.setting_subject, &self.row_state.shown_value);
         while let Some(old_button) = widgets.action_box.first_child() {
@@ -546,7 +586,7 @@ impl SettingRow {
         }
         follow_ups.iter().for_each(|follow_up_action| {
             let follow_up_button = gtk::Button::builder()
-                .label(follow_up_label(*follow_up_action))
+                .label(follow_up_label(&message_catalog, *follow_up_action))
                 .build();
             if follow_up_is_primary(*follow_up_action) {
                 follow_up_button.add_css_class("suggested-action");
@@ -575,6 +615,7 @@ impl SettingRow {
             widgets.editor_slot.remove(&old_editor);
         }
         let (editor_box, suffix_editor) = build_suffix_editor(
+            &self.message_catalog,
             wanted_kind,
             &self.editor_draft,
             &self.row_state.shown_value,
@@ -587,11 +628,15 @@ impl SettingRow {
     }
 
     fn show_draft_in_editor(&self, widgets: &SettingRowWidgets) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let explicit_apply =
             editor_apply_timing(self.setting_route()) == EditorApplyTiming::AppliedOnRequest;
         match &widgets.suffix_editor {
             SuffixEditor::ValueLabel(value_label) => {
-                value_label.set_label(&read_only_value_text(&self.row_state.shown_value));
+                value_label.set_label(&read_only_value_text(
+                    &message_catalog,
+                    &self.row_state.shown_value,
+                ));
             }
             SuffixEditor::SwitchEditor {
                 value_switch,
@@ -671,8 +716,9 @@ impl SettingRow {
 }
 
 pub struct SettingRowInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub row_state: SettingRowState,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 impl FactoryComponent for SettingRow {
@@ -687,6 +733,7 @@ impl FactoryComponent for SettingRow {
 
     fn init_model(
         SettingRowInit {
+            message_catalog,
             row_state,
             moment_formatters,
         }: Self::Init,
@@ -694,6 +741,7 @@ impl FactoryComponent for SettingRow {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             moment_formatters,
             editor_draft: shown_value_or_text(&row_state.shown_value),
             row_state,
@@ -714,10 +762,12 @@ impl FactoryComponent for SettingRow {
         _returned_widget: &gtk::Widget,
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let source_icon = gtk::Image::builder().valign(gtk::Align::Center).build();
         root.add_prefix(&source_icon);
         let editor_kind = editor_kind_for(&self.row_state);
         let (editor_box, suffix_editor) = build_suffix_editor(
+            &message_catalog,
             editor_kind,
             &self.editor_draft,
             &self.row_state.shown_value,
@@ -729,7 +779,11 @@ impl FactoryComponent for SettingRow {
         let applying_spinner = adw::Spinner::builder()
             .halign(gtk::Align::Center)
             .valign(gtk::Align::Center)
-            .tooltip_text(translated_messages::widgets::applying_restarting_clamav_tooltip())
+            .tooltip_text(
+                translated_messages::widgets::applying_restarting_clamav_tooltip(
+                    &self.message_catalog,
+                ),
+            )
             .visible(false)
             .build();
         root.add_suffix(&applying_spinner);
@@ -755,8 +809,11 @@ impl FactoryComponent for SettingRow {
         detail_box.append(&explanation_label);
         detail_box.append(&action_box);
         root.add_row(&detail_box);
-        let attention_shown =
-            row_needs_attention(self.moment_formatters, &self.row_state.setting_subject);
+        let attention_shown = row_needs_attention(
+            &self.message_catalog,
+            &self.moment_formatters,
+            &self.row_state.setting_subject,
+        );
         root.set_expanded(attention_shown);
         let mut widgets = SettingRowWidgets {
             expander_row: root,
@@ -803,7 +860,8 @@ impl FactoryComponent for SettingRow {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, sender: FactorySender<Self>) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         self.replace_editor_when_kind_changed(widgets, &sender);
         self.show_draft_in_editor(widgets);
         if follow_up_actions(&self.row_state.setting_subject, &self.row_state.shown_value)
@@ -819,7 +877,12 @@ impl FactoryComponent for SettingRow {
             }
             None => widgets.source_icon.set_visible(false),
         }
-        if source_texts(moment_formatters, &self.row_state.setting_subject).source_emphasis
+        if source_texts(
+            &message_catalog,
+            &moment_formatters,
+            &self.row_state.setting_subject,
+        )
+        .source_emphasis
             == SourceEmphasis::NeedsAttention
         {
             widgets.source_icon.add_css_class("warning");
@@ -828,7 +891,7 @@ impl FactoryComponent for SettingRow {
             widgets.source_icon.remove_css_class("warning");
             widgets.source_icon.add_css_class("dim-label");
         }
-        let explanation = explanation_text(moment_formatters, &self.row_state);
+        let explanation = explanation_text(&message_catalog, &moment_formatters, &self.row_state);
         widgets.explanation_label.set_label(&explanation);
         widgets
             .expander_row
@@ -837,8 +900,11 @@ impl FactoryComponent for SettingRow {
         widgets
             .expander_row
             .set_enable_expansion(!explanation.is_empty() || !widgets.shown_actions.is_empty());
-        let needs_attention =
-            row_needs_attention(moment_formatters, &self.row_state.setting_subject);
+        let needs_attention = row_needs_attention(
+            &message_catalog,
+            &moment_formatters,
+            &self.row_state.setting_subject,
+        );
         if needs_attention && !widgets.attention_shown {
             widgets.expander_row.set_expanded(true);
         }

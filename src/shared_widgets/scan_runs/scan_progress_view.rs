@@ -9,6 +9,7 @@ use crate::{
         scanner_output_parser::sanitize_scanner_line,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,21 +37,21 @@ impl ScanProgressView {
         }
     }
 
-    pub fn progress_text(&self) -> String {
+    pub fn progress_text(&self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::PreparingScan => translated_messages::widgets::preparing_scan(),
+            Self::PreparingScan => translated_messages::widgets::preparing_scan(message_catalog),
             Self::FindingFiles {
                 found_file_count, ..
-            } => translated_messages::widgets::finding_files(*found_file_count),
+            } => translated_messages::widgets::finding_files(message_catalog, *found_file_count),
             Self::ScanningFiles {
                 inspected_file_count,
                 planned_file_count,
                 ..
-            } => file_progress_text(*inspected_file_count, *planned_file_count),
+            } => file_progress_text(message_catalog, *inspected_file_count, *planned_file_count),
         }
     }
 
-    pub fn detail_text(&self) -> String {
+    pub fn detail_text(&self, message_catalog: &MessageCatalog) -> String {
         match self {
             Self::PreparingScan => String::new(),
             Self::FindingFiles {
@@ -64,6 +65,7 @@ impl ScanProgressView {
             } => [current_file_text.clone()]
                 .into_iter()
                 .chain(remaining_time_text(
+                    message_catalog,
                     *elapsed_time,
                     *inspected_file_count,
                     *planned_file_count,
@@ -91,18 +93,26 @@ impl ScanProgressView {
 }
 
 pub trait ScanProgressBar {
-    fn show_scan_progress(&self, scan_progress_view: &ScanProgressView);
+    fn show_scan_progress(
+        &self,
+        message_catalog: &MessageCatalog,
+        scan_progress_view: &ScanProgressView,
+    );
 }
 
 impl ScanProgressBar for gtk::ProgressBar {
-    fn show_scan_progress(&self, scan_progress_view: &ScanProgressView) {
+    fn show_scan_progress(
+        &self,
+        message_catalog: &MessageCatalog,
+        scan_progress_view: &ScanProgressView,
+    ) {
         match scan_progress_view {
             ScanProgressView::FindingFiles { .. } => self.pulse(),
             ScanProgressView::PreparingScan | ScanProgressView::ScanningFiles { .. } => {
                 self.set_fraction(scan_progress_view.completed_fraction());
             }
         }
-        self.set_text(Some(&scan_progress_view.progress_text()));
+        self.set_text(Some(&scan_progress_view.progress_text(message_catalog)));
     }
 }
 
@@ -126,6 +136,11 @@ mod scan_progress_view_tests {
 
     #[test]
     fn preparation_shows_no_detail() {
-        assert!(ScanProgressView::PreparingScan.detail_text().is_empty());
+        let message_catalog = &crate::translated_messages::english_catalog();
+        assert!(
+            ScanProgressView::PreparingScan
+                .detail_text(message_catalog)
+                .is_empty()
+        );
     }
 }

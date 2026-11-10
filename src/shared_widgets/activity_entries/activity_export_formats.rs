@@ -4,6 +4,7 @@ use crate::{
         ScanActivityStatus, ScanOrigin, UpdateActivityStatus,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const CSV_HEADER: &str =
@@ -17,74 +18,102 @@ fn exported_origin_text(activity_record: &ActivityRecord) -> &'static str {
     }
 }
 
-pub fn activity_status_text(activity_record: &ActivityRecord) -> String {
+pub fn activity_status_text(
+    message_catalog: &MessageCatalog,
+    activity_record: &ActivityRecord,
+) -> String {
     match activity_record {
         ActivityRecord::ScanActivity { scan_status, .. } => match scan_status {
-            ScanActivityStatus::ScanClean => translated_messages::widgets::clean_label(),
-            ScanActivityStatus::ScanInfected { .. } => {
-                translated_messages::widgets::scan_infected()
-            }
-            ScanActivityStatus::ScanFailed => translated_messages::widgets::error_status(),
-            ScanActivityStatus::ScanCancelled => translated_messages::widgets::cancelled_label(),
-        },
-        ActivityRecord::SkippedScan { .. } => translated_messages::widgets::skipped_label(),
-        ActivityRecord::UpdateActivity { update_status } => match update_status {
-            UpdateActivityStatus::UpdateFailed => translated_messages::widgets::error_status(),
-            UpdateActivityStatus::UpdateCancelled => {
-                translated_messages::widgets::cancelled_label()
-            }
-            UpdateActivityStatus::UpdateApplied => translated_messages::widgets::success_label(),
-            UpdateActivityStatus::UpdateAlreadyCurrent => translated_messages::widgets::up_date(),
-            UpdateActivityStatus::UpdateRequested => {
-                translated_messages::widgets::requested_label()
-            }
-            UpdateActivityStatus::UpdateResultUnknown => translated_messages::widgets::ran_label(),
-        },
-    }
-}
-
-fn found_threats_text(found_threats: FoundThreatCount) -> String {
-    match found_threats {
-        FoundThreatCount::CountedThreats { threat_count } => {
-            translated_messages::widgets::counted_threats(threat_count.get())
-        }
-        FoundThreatCount::UncountedThreats => translated_messages::widgets::uncounted_threats(),
-    }
-}
-
-pub fn activity_summary_text(activity_entry: &ActivityEntryRecord) -> String {
-    match &activity_entry.activity_record {
-        ActivityRecord::ScanActivity { scan_status, .. } => match scan_status {
-            ScanActivityStatus::ScanInfected { found_threats } => {
-                found_threats_text(*found_threats)
-            }
             ScanActivityStatus::ScanClean => {
-                translated_messages::widgets::no_threats_found_activity()
+                translated_messages::widgets::clean_label(message_catalog)
             }
-            ScanActivityStatus::ScanFailed => translated_messages::widgets::scan_failed(),
+            ScanActivityStatus::ScanInfected { .. } => {
+                translated_messages::widgets::scan_infected(message_catalog)
+            }
+            ScanActivityStatus::ScanFailed => {
+                translated_messages::widgets::error_status(message_catalog)
+            }
             ScanActivityStatus::ScanCancelled => {
-                translated_messages::widgets::scan_cancelled_activity()
+                translated_messages::widgets::cancelled_label(message_catalog)
             }
         },
         ActivityRecord::SkippedScan { .. } => {
-            translated_messages::widgets::scheduled_scan_skipped_battery()
+            translated_messages::widgets::skipped_label(message_catalog)
+        }
+        ActivityRecord::UpdateActivity { update_status } => match update_status {
+            UpdateActivityStatus::UpdateFailed => {
+                translated_messages::widgets::error_status(message_catalog)
+            }
+            UpdateActivityStatus::UpdateCancelled => {
+                translated_messages::widgets::cancelled_label(message_catalog)
+            }
+            UpdateActivityStatus::UpdateApplied => {
+                translated_messages::widgets::success_label(message_catalog)
+            }
+            UpdateActivityStatus::UpdateAlreadyCurrent => {
+                translated_messages::widgets::up_date(message_catalog)
+            }
+            UpdateActivityStatus::UpdateRequested => {
+                translated_messages::widgets::requested_label(message_catalog)
+            }
+            UpdateActivityStatus::UpdateResultUnknown => {
+                translated_messages::widgets::ran_label(message_catalog)
+            }
+        },
+    }
+}
+
+fn found_threats_text(message_catalog: &MessageCatalog, found_threats: FoundThreatCount) -> String {
+    match found_threats {
+        FoundThreatCount::CountedThreats { threat_count } => {
+            translated_messages::widgets::counted_threats(message_catalog, threat_count.get())
+        }
+        FoundThreatCount::UncountedThreats => {
+            translated_messages::widgets::uncounted_threats(message_catalog)
+        }
+    }
+}
+
+pub fn activity_summary_text(
+    message_catalog: &MessageCatalog,
+    activity_entry: &ActivityEntryRecord,
+) -> String {
+    match &activity_entry.activity_record {
+        ActivityRecord::ScanActivity { scan_status, .. } => match scan_status {
+            ScanActivityStatus::ScanInfected { found_threats } => {
+                found_threats_text(message_catalog, *found_threats)
+            }
+            ScanActivityStatus::ScanClean => {
+                translated_messages::widgets::no_threats_found_activity(message_catalog)
+            }
+            ScanActivityStatus::ScanFailed => {
+                translated_messages::widgets::scan_failed(message_catalog)
+            }
+            ScanActivityStatus::ScanCancelled => {
+                translated_messages::widgets::scan_cancelled_activity(message_catalog)
+            }
+        },
+        ActivityRecord::SkippedScan { .. } => {
+            translated_messages::widgets::scheduled_scan_skipped_battery(message_catalog)
         }
         ActivityRecord::UpdateActivity { update_status } => match update_status {
             UpdateActivityStatus::UpdateApplied => {
-                translated_messages::widgets::virus_definitions_updated()
+                translated_messages::widgets::virus_definitions_updated(message_catalog)
             }
             UpdateActivityStatus::UpdateAlreadyCurrent => {
-                translated_messages::widgets::virus_definitions_up_date()
+                translated_messages::widgets::virus_definitions_up_date(message_catalog)
             }
             UpdateActivityStatus::UpdateRequested => {
-                translated_messages::widgets::update_requested_service()
+                translated_messages::widgets::update_requested_service(message_catalog)
             }
             UpdateActivityStatus::UpdateResultUnknown => {
-                translated_messages::widgets::update_service_no_result()
+                translated_messages::widgets::update_service_no_result(message_catalog)
             }
-            UpdateActivityStatus::UpdateFailed => translated_messages::widgets::update_failed(),
+            UpdateActivityStatus::UpdateFailed => {
+                translated_messages::widgets::update_failed(message_catalog)
+            }
             UpdateActivityStatus::UpdateCancelled => {
-                translated_messages::widgets::update_cancelled()
+                translated_messages::widgets::update_cancelled(message_catalog)
             }
         },
     }
@@ -138,7 +167,10 @@ fn csv_field(field_text: &str) -> String {
     }
 }
 
-pub fn activity_entries_as_csv(activity_entries: &[ActivityEntryRecord]) -> String {
+pub fn activity_entries_as_csv(
+    message_catalog: &MessageCatalog,
+    activity_entries: &[ActivityEntryRecord],
+) -> String {
     std::iter::once(CSV_HEADER.to_owned())
         .chain(activity_entries.iter().map(|activity_entry| {
             let exported_entry = ExportedActivityEntry::from_entry(activity_entry);
@@ -146,7 +178,9 @@ pub fn activity_entries_as_csv(activity_entries: &[ActivityEntryRecord]) -> Stri
                 "{},{},{},{},{},{},{},{}",
                 exported_entry.entry_id,
                 exported_entry.started_at,
-                csv_field(activity_status_text(&activity_entry.activity_record).as_str()),
+                csv_field(
+                    activity_status_text(message_catalog, &activity_entry.activity_record).as_str()
+                ),
                 exported_entry.scan_origin,
                 csv_field(&exported_entry.activity_targets),
                 exported_entry.inspected_file_count,
@@ -177,34 +211,37 @@ pub fn formatted_duration_text(duration_millis: u64) -> String {
 }
 
 pub fn activity_detail_text(
+    message_catalog: &MessageCatalog,
     activity_entry: &ActivityEntryRecord,
     formatted_start_time: &str,
 ) -> String {
     let heading = match activity_entry.activity_record {
         ActivityRecord::ScanActivity { .. } | ActivityRecord::SkippedScan { .. } => {
-            translated_messages::widgets::scan_log()
+            translated_messages::widgets::scan_log(message_catalog)
         }
-        ActivityRecord::UpdateActivity { .. } => translated_messages::widgets::update_log(),
+        ActivityRecord::UpdateActivity { .. } => {
+            translated_messages::widgets::update_log(message_catalog)
+        }
     };
     let metadata_lines = [
         format!(
             "{}: {formatted_start_time}",
-            translated_messages::widgets::timestamp_label()
+            translated_messages::widgets::timestamp_label(message_catalog)
         ),
         format!(
             "{}: {}",
-            translated_messages::widgets::status_label(),
-            activity_status_text(&activity_entry.activity_record)
+            translated_messages::widgets::status_label(message_catalog),
+            activity_status_text(message_catalog, &activity_entry.activity_record)
         ),
         format!(
             "{}: {}",
-            translated_messages::widgets::duration_label(),
+            translated_messages::widgets::duration_label(message_catalog),
             formatted_duration_text(activity_entry.duration_millis)
         ),
         format!(
             "{}: {}",
-            translated_messages::widgets::summary_label(),
-            activity_summary_text(activity_entry)
+            translated_messages::widgets::summary_label(message_catalog),
+            activity_summary_text(message_catalog, activity_entry)
         ),
     ]
     .join("\n");
@@ -214,7 +251,7 @@ pub fn activity_detail_text(
     } else {
         format!(
             "\n\n{}:\n{}",
-            translated_messages::widgets::path_label(),
+            translated_messages::widgets::path_label(message_catalog),
             scan_targets
                 .iter()
                 .map(|scan_target| scan_target.display().to_string())
@@ -227,7 +264,7 @@ pub fn activity_detail_text(
     } else {
         format!(
             "\n\n{}:\n{}",
-            translated_messages::widgets::full_output(),
+            translated_messages::widgets::full_output(message_catalog),
             activity_entry.activity_output
         )
     };
@@ -262,10 +299,11 @@ mod activity_export_formats_tests {
 
     #[test]
     fn csv_quotes_separators_and_guards_spreadsheet_formulas() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(csv_field("=SUM(A1)"), "'=SUM(A1)");
         assert_eq!(csv_field("a,b"), "\"a,b\"");
         assert_eq!(csv_field("say \"hi\""), "\"say \"\"hi\"\"\"");
-        let csv_text = activity_entries_as_csv(&[infected_entry()]);
+        let csv_text = activity_entries_as_csv(message_catalog, &[infected_entry()]);
         assert!(csv_text.starts_with("entry_id,"));
         assert!(csv_text.contains("7,1970-01-01T00:16:40Z,Infected,manual_scan,"));
         assert!(csv_text.contains("\"/scan/a,b\n=/scan/\"\"c\"\"\",3,1,2500\n"));
@@ -282,7 +320,8 @@ mod activity_export_formats_tests {
 
     #[test]
     fn details_contain_status_targets_and_output() {
-        let detail_text = activity_detail_text(&infected_entry(), "start time");
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let detail_text = activity_detail_text(message_catalog, &infected_entry(), "start time");
         assert!(detail_text.starts_with("SCAN LOG"));
         assert!(detail_text.contains("Timestamp: start time"));
         assert!(detail_text.contains("Duration: 2s"));
@@ -292,6 +331,7 @@ mod activity_export_formats_tests {
 
     #[test]
     fn update_entries_export_empty_scan_columns() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let update_entry = ActivityEntryRecord {
             activity_record: ActivityRecord::UpdateActivity {
                 update_status: UpdateActivityStatus::UpdateApplied,
@@ -299,7 +339,7 @@ mod activity_export_formats_tests {
             ..infected_entry()
         };
         assert!(
-            activity_entries_as_csv(std::slice::from_ref(&update_entry))
+            activity_entries_as_csv(message_catalog, std::slice::from_ref(&update_entry))
                 .contains("7,1970-01-01T00:16:40Z,Success,,,0,0,2500\n")
         );
         let json_text = activity_entries_as_json(&[update_entry]).expect("json");
@@ -310,6 +350,7 @@ mod activity_export_formats_tests {
 
     #[test]
     fn scheduled_scans_export_their_origin_beside_the_unchanged_status() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let scheduled_entry = ActivityEntryRecord {
             activity_record: ActivityRecord::ScanActivity {
                 scan_targets: vec![std::path::PathBuf::from("/home")],
@@ -320,7 +361,7 @@ mod activity_export_formats_tests {
             ..infected_entry()
         };
         assert!(
-            activity_entries_as_csv(std::slice::from_ref(&scheduled_entry))
+            activity_entries_as_csv(message_catalog, std::slice::from_ref(&scheduled_entry))
                 .contains(",Clean,scheduled_scan,/home,")
         );
         let json_text = activity_entries_as_json(&[scheduled_entry]).expect("json");

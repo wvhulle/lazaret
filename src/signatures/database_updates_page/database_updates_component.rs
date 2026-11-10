@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use futures::StreamExt;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
@@ -55,6 +57,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const UPDATE_BATCH_SIZE: usize = 64;
@@ -67,14 +70,16 @@ enum TranscriptDialogView {
 }
 
 pub struct DatabaseUpdatesPageInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub system_bus: SystemBusAccess,
     pub activity_history: ActivityHistory,
     pub sandbox_kind: SandboxKind,
 }
 
 pub struct DatabaseUpdatesPage {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     system_bus: SystemBusAccess,
     sandbox_kind: SandboxKind,
     toaster: Toaster,
@@ -141,11 +146,13 @@ impl DatabaseUpdatesPage {
     }
 
     fn history_failure_text(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.update_history {
             UpdateHistoryView::HistoryLoadFailed(load_failure) => {
-                translated_messages::signatures::history_load_failed(describe_history_failure(
-                    load_failure,
-                ))
+                translated_messages::signatures::history_load_failed(
+                    &message_catalog,
+                    describe_history_failure(&message_catalog, load_failure),
+                )
             }
             UpdateHistoryView::HistoryLoading | UpdateHistoryView::HistoryLoaded(_) => {
                 String::new()
@@ -154,7 +161,8 @@ impl DatabaseUpdatesPage {
     }
 
     fn show_status_steps(&mut self) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let GatheredEvidence::Gathered {
             protection_evidence,
             gathered_at,
@@ -163,11 +171,13 @@ impl DatabaseUpdatesPage {
             return;
         };
         show_timeline_steps(
+            &message_catalog,
             &mut self.status_rows,
             database_update_steps(
+                &message_catalog,
                 protection_evidence,
-                &self.update_control.update_view(),
-                moment_formatters,
+                &self.update_control.update_view(&message_catalog),
+                &moment_formatters,
                 *gathered_at,
                 self.distribution_family,
             ),
@@ -217,14 +227,15 @@ impl DatabaseUpdatesPage {
     }
 
     fn finish_update(&mut self, sender: &ComponentSender<Self>) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let sandbox_kind = self.sandbox_kind;
-        let finished_effects = match self.update_control.update_stream_ended() {
+        let finished_effects = match self.update_control.update_stream_ended(&message_catalog) {
             UpdateFinishEffects::UpdateFinished(finished_effects) => finished_effects,
             UpdateFinishEffects::StaleStreamEnding => return,
         };
         notify_outside_the_window(
             "update-finished",
-            &translated_messages::signatures::database_update_finished(),
+            &translated_messages::signatures::database_update_finished(&message_catalog),
             &finished_effects.summary_line,
         );
         self.toaster
@@ -245,14 +256,16 @@ impl DatabaseUpdatesPage {
     }
 
     fn open_transcript(&mut self, row_position: usize, root: &adw::ToastOverlay) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let Some(activity_entry) = self.update_history.listed_entries().get(row_position) else {
             return;
         };
         let transcript_dialog = ActivityTranscriptDialog::builder()
             .launch(ActivityTranscriptDialogInit {
+                message_catalog,
                 activity_entry: activity_entry.clone(),
-                moment_formatters,
+                moment_formatters: Rc::clone(&moment_formatters),
             })
             .detach();
         transcript_dialog.widget().present(Some(root));
@@ -277,13 +290,13 @@ impl Component for DatabaseUpdatesPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&translated_messages::signatures::check_again_database_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::signatures::check_again_database_tooltip(&model.message_catalog)),
                             connect_clicked => DatabaseUpdatesPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&translated_messages::signatures::checking_database_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::signatures::checking_database_tooltip(&model.message_catalog)),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -299,8 +312,8 @@ impl Component for DatabaseUpdatesPage {
                         add: model.update_settings_sections.widget(),
 
                         add = &adw::PreferencesGroup {
-                            set_title: &translated_messages::signatures::update_history_title(),
-                            set_description: Some(&translated_messages::signatures::updates_started_lazaret_description()),
+                            set_title: &translated_messages::signatures::update_history_title(&model.message_catalog),
+                            set_description: Some(&translated_messages::signatures::updates_started_lazaret_description(&model.message_catalog)),
 
                             #[local_ref]
                             history_list -> gtk::ListBox {
@@ -310,7 +323,7 @@ impl Component for DatabaseUpdatesPage {
                                 #[local_ref]
                                 set_placeholder = history_placeholder -> gtk::Stack {
                                     add_named[Some(LOAD_FAILED_PAGE_NAME)] = &adw::ActionRow {
-                                        set_title: &translated_messages::signatures::historical_logs_cannot_title(),
+                                        set_title: &translated_messages::signatures::historical_logs_cannot_title(&model.message_catalog),
                                         set_use_markup: false,
                                         set_subtitle_lines: 0,
                                         add_css_class: "dim-label",
@@ -337,6 +350,7 @@ impl Component for DatabaseUpdatesPage {
 
     fn init(
         DatabaseUpdatesPageInit {
+            message_catalog,
             moment_formatters,
             activity_history,
             sandbox_kind,
@@ -346,14 +360,17 @@ impl Component for DatabaseUpdatesPage {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
-            moment_formatters,
+            message_catalog: Rc::clone(&message_catalog),
+            moment_formatters: Rc::clone(&moment_formatters),
             system_bus,
             sandbox_kind,
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(translated_messages::signatures::status_title())
+                        .title(translated_messages::signatures::status_title(
+                            &message_catalog,
+                        ))
                         .build(),
                 )
                 .forward(
@@ -372,6 +389,7 @@ impl Component for DatabaseUpdatesPage {
             transcript_dialog: TranscriptDialogView::DialogClosed,
             update_settings_sections: EngineSettingsSections::builder()
                 .launch(EngineSettingsSectionsInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     moment_formatters,
                     settings_layout: EngineSettingsLayout::SingleSection(
                         EngineSettingsSection::SignatureUpdates,
@@ -383,11 +401,14 @@ impl Component for DatabaseUpdatesPage {
         let status_group = &model.status_rows.widget().clone();
         let history_list = model.history_rows.widget();
         let history_placeholder = &loading_placeholder_stack(
-            &translated_messages::signatures::loading_history(),
-            &empty_placeholder_row(&translated_messages::signatures::no_updates_started_lazaret()),
+            &translated_messages::signatures::loading_history(&message_catalog),
+            &empty_placeholder_row(
+                &translated_messages::signatures::no_updates_started_lazaret(&message_catalog),
+            ),
         );
-        let status_loading_page =
-            &loading_status_page(&translated_messages::signatures::checking_signatures());
+        let status_loading_page = &loading_status_page(
+            &translated_messages::signatures::checking_signatures(&message_catalog),
+        );
         let widgets = view_output!();
         Self::refresh_host_status(model.system_bus.clone(), sandbox_kind, &sender);
         model.reload_history(&sender);
@@ -400,6 +421,7 @@ impl Component for DatabaseUpdatesPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_input {
             DatabaseUpdatesPageInput::HistoryReloadRequested => self.reload_history(&sender),
             DatabaseUpdatesPageInput::RefreshRequested => {
@@ -417,8 +439,10 @@ impl Component for DatabaseUpdatesPage {
                 self.follow_start_decision(start_decision, &sender);
             }
             DatabaseUpdatesPageInput::SettingsNoticeReceived(settings_notice) => {
-                self.toaster
-                    .add_toast(engine_settings_notice_toast(&settings_notice));
+                self.toaster.add_toast(engine_settings_notice_toast(
+                    &message_catalog,
+                    &settings_notice,
+                ));
             }
             DatabaseUpdatesPageInput::StepRequested(TimelineStepRowOutput::ActionChosen(
                 DatabaseUpdateAction::UpdateSignatures,
@@ -437,7 +461,9 @@ impl Component for DatabaseUpdatesPage {
             )) => {
                 root.clipboard().set_text(&copied_command);
                 self.toaster.add_toast(adw::Toast::new(
-                    &translated_messages::signatures::command_copied_clipboard_database(),
+                    &translated_messages::signatures::command_copied_clipboard_database(
+                        &message_catalog,
+                    ),
                 ));
             }
             DatabaseUpdatesPageInput::HistoryEntryActivated { row_position } => {
@@ -452,14 +478,16 @@ impl Component for DatabaseUpdatesPage {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         match page_command {
             DatabaseUpdatesPageCommand::HostStatusLoaded(host_status) => {
                 let start_decision = self.update_control.host_status_loaded(host_status);
                 self.follow_start_decision(start_decision, &sender);
             }
             DatabaseUpdatesPageCommand::UpdateBatchArrived(update_batch) => {
-                self.update_control.absorb_update_batch(update_batch);
+                self.update_control
+                    .absorb_update_batch(&self.message_catalog, update_batch);
                 self.show_status_steps();
             }
             DatabaseUpdatesPageCommand::UpdateStreamFinished => self.finish_update(&sender),
@@ -474,7 +502,8 @@ impl Component for DatabaseUpdatesPage {
                 );
                 self.toaster.add_toast(plain_text_toast(
                     &translated_messages::signatures::update_not_added_history(
-                        describe_history_failure(&recording_failure),
+                        &message_catalog,
+                        describe_history_failure(&message_catalog, &recording_failure),
                     ),
                 ));
             }
@@ -489,8 +518,9 @@ impl Component for DatabaseUpdatesPage {
                     .cloned()
                     .for_each(|activity_entry| {
                         history_guard.push_back(ActivityEntryRowInit {
+                            message_catalog: Rc::clone(&message_catalog),
                             activity_entry,
-                            moment_formatters,
+                            moment_formatters: Rc::clone(&moment_formatters),
                         });
                     });
             }

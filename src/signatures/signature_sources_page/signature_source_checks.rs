@@ -17,12 +17,14 @@ use crate::{
     shared_widgets::host_read_failure_text::database_folder_failure_text,
     signatures::signature_sources_page::source_check_results::{AuditCheck, AuditStatus},
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const FANGFRISCH_CONFIG_PATH: &str = "/etc/fangfrisch/fangfrisch.conf";
 const FANGFRISCH_CONFIG_PROTECTION_COMMAND: &str = "sudo chmod 600 /etc/fangfrisch/fangfrisch.conf";
 
 fn settings_credential_check(
+    message_catalog: &MessageCatalog,
     inactive_check: AuditCheck,
     provider_name: &str,
     settings_credential: SettingsOnlyCredential,
@@ -33,6 +35,7 @@ fn settings_credential_check(
         return inactive_check
             .with_recommendation(
                 translated_messages::signatures::provider_needs_credential_fangfrisch(
+                    message_catalog,
                     credential_choice,
                     provider_name,
                 ),
@@ -42,6 +45,7 @@ fn settings_credential_check(
     inactive_check
         .with_recommendation(
             translated_messages::signatures::provider_needs_credential_website(
+                message_catalog,
                 credential_choice,
                 provider_name,
                 FANGFRISCH_CONFIG_PATH,
@@ -55,6 +59,7 @@ fn settings_credential_check(
 }
 
 fn inactive_provider_check(
+    message_catalog: &MessageCatalog,
     signature_provider: &SignatureProvider,
     distribution_family: DistributionFamily,
 ) -> AuditCheck {
@@ -62,12 +67,13 @@ fn inactive_provider_check(
     let inactive_check = AuditCheck::new(
         provider_name.to_owned(),
         AuditStatus::CheckSkipped,
-        translated_messages::signatures::not_use(),
+        translated_messages::signatures::not_use(message_catalog),
     )
     .starting_collapsed();
     match signature_provider.credential {
         ProviderCredential::CredentialInSettingsOnly(settings_credential) => {
             settings_credential_check(
+                message_catalog,
                 inactive_check,
                 provider_name,
                 settings_credential,
@@ -83,12 +89,14 @@ fn inactive_provider_check(
         ProviderCredential::NoCredential(enabling_snippets) => inactive_check
             .with_recommendation(
                 translated_messages::signatures::add_lines_fangfrisch_settings(
+                    message_catalog,
                     FANGFRISCH_CONFIG_PATH,
                 ),
             )
             .with_suggested_commands([enabling_snippets.fangfrisch_lines]),
         ProviderCredential::KeyFileSupported(enabling_snippets) => inactive_check
             .with_recommendation(translated_messages::signatures::provider_needs_free_abuse(
+                message_catalog,
                 provider_name,
                 FANGFRISCH_CONFIG_PATH,
             ))
@@ -101,6 +109,7 @@ fn inactive_provider_check(
 }
 
 pub fn signature_source_checks(
+    message_catalog: &MessageCatalog,
     signature_file_names: &[String],
     distribution_family: DistributionFamily,
 ) -> Vec<AuditCheck> {
@@ -118,16 +127,19 @@ pub fn signature_source_checks(
                         .provider_name()
                         .to_owned(),
                     AuditStatus::CheckPassed,
-                    translated_messages::signatures::use_label(),
+                    translated_messages::signatures::use_label(message_catalog),
                 )
             } else {
-                inactive_provider_check(signature_provider, distribution_family)
+                inactive_provider_check(message_catalog, signature_provider, distribution_family)
             }
         })
         .collect()
 }
 
-pub fn unreadable_source_checks(read_failure: DatabaseFolderReadFailure) -> Vec<AuditCheck> {
+pub fn unreadable_source_checks(
+    message_catalog: &MessageCatalog,
+    read_failure: DatabaseFolderReadFailure,
+) -> Vec<AuditCheck> {
     SIGNATURE_PROVIDERS
         .iter()
         .map(|signature_provider| {
@@ -138,7 +150,8 @@ pub fn unreadable_source_checks(read_failure: DatabaseFolderReadFailure) -> Vec<
                     .to_owned(),
                 AuditStatus::StatusUnknown,
                 translated_messages::signatures::unknown_reason_source(
-                    database_folder_failure_text(read_failure),
+                    message_catalog,
+                    database_folder_failure_text(message_catalog, read_failure),
                 ),
             )
         })
@@ -158,17 +171,25 @@ fn signature_file_names(
     }
 }
 
-pub async fn gather_signature_source_checks(
+pub async fn read_signature_file_names(
     sandbox_kind: SandboxKind,
-    distribution_family: DistributionFamily,
-) -> Vec<AuditCheck> {
-    match spawn_blocking(move || signature_file_names(&configured_database_directory(sandbox_kind)))
+) -> Result<Vec<String>, DatabaseFolderReadFailure> {
+    spawn_blocking(move || signature_file_names(&configured_database_directory(sandbox_kind)))
         .await
         .map_err(DatabaseFolderReadFailure::from)
         .flatten()
-    {
-        Ok(signature_files) => signature_source_checks(&signature_files, distribution_family),
-        Err(read_failure) => unreadable_source_checks(read_failure),
+}
+
+pub fn audit_checks_of(
+    message_catalog: &MessageCatalog,
+    file_names_read: Result<Vec<String>, DatabaseFolderReadFailure>,
+    distribution_family: DistributionFamily,
+) -> Vec<AuditCheck> {
+    match file_names_read {
+        Ok(signature_files) => {
+            signature_source_checks(message_catalog, &signature_files, distribution_family)
+        }
+        Err(read_failure) => unreadable_source_checks(message_catalog, read_failure),
     }
 }
 
@@ -196,8 +217,11 @@ mod signature_source_checks_tests {
 
     #[test]
     fn an_unreadable_signature_folder_leaves_every_source_unknown() {
-        let source_checks =
-            unreadable_source_checks(DatabaseFolderReadFailure::ReadingTaskInterrupted);
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let source_checks = unreadable_source_checks(
+            message_catalog,
+            DatabaseFolderReadFailure::ReadingTaskInterrupted,
+        );
         assert_eq!(source_checks.len(), SIGNATURE_PROVIDERS.len());
         source_checks.iter().for_each(|source_check| {
             assert_eq!(source_check.check_status, AuditStatus::StatusUnknown);
@@ -207,7 +231,9 @@ mod signature_source_checks_tests {
 
     #[test]
     fn sources_in_use_are_recognized_and_offer_no_snippet() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let source_checks = signature_source_checks(
+            message_catalog,
             &["urlhaus_clamav.ndb".to_owned()],
             DistributionFamily::NixosFamily,
         );
@@ -218,7 +244,8 @@ mod signature_source_checks_tests {
 
     #[test]
     fn no_snippet_ever_contains_a_credential() {
-        signature_source_checks(&[], DistributionFamily::NixosFamily)
+        let message_catalog = &crate::translated_messages::english_catalog();
+        signature_source_checks(message_catalog, &[], DistributionFamily::NixosFamily)
             .iter()
             .flat_map(commands_of)
             .for_each(|enabling_snippet| {
@@ -235,7 +262,9 @@ mod signature_source_checks_tests {
 
     #[test]
     fn sources_needing_a_store_visible_credential_warn_instead_of_suggesting() {
-        let source_checks = signature_source_checks(&[], DistributionFamily::NixosFamily);
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let source_checks =
+            signature_source_checks(message_catalog, &[], DistributionFamily::NixosFamily);
         let malwarepatrol_check = source_checks
             .iter()
             .find(|source_check| source_check.check_name == "Malwarepatrol")
@@ -248,7 +277,9 @@ mod signature_source_checks_tests {
 
     #[test]
     fn other_systems_get_placeholder_lines_and_a_permission_command() {
-        let source_checks = signature_source_checks(&[], DistributionFamily::DebianFamily);
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let source_checks =
+            signature_source_checks(message_catalog, &[], DistributionFamily::DebianFamily);
         let securiteinfo_check = source_checks
             .iter()
             .find(|source_check| source_check.check_name == "SecuriteInfo")
@@ -267,6 +298,7 @@ mod signature_source_checks_tests {
 
     #[test]
     fn providers_without_a_settings_credential_carry_their_snippets() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let sanesecurity_provider = SIGNATURE_PROVIDERS
             .iter()
             .find(|signature_provider| {
@@ -280,7 +312,8 @@ mod signature_source_checks_tests {
                 fangfrisch_lines: FANGFRISCH_SANESECURITY_LINES,
             })
         );
-        let nixos_checks = signature_source_checks(&[], DistributionFamily::NixosFamily);
+        let nixos_checks =
+            signature_source_checks(message_catalog, &[], DistributionFamily::NixosFamily);
         let sanesecurity_check = nixos_checks
             .iter()
             .find(|source_check| source_check.check_name == "Sanesecurity")
@@ -293,12 +326,15 @@ mod signature_source_checks_tests {
 
     #[test]
     fn every_suggested_snippet_is_filled_in() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         [
             DistributionFamily::NixosFamily,
             DistributionFamily::DebianFamily,
         ]
         .into_iter()
-        .flat_map(|distribution_family| signature_source_checks(&[], distribution_family))
+        .flat_map(|distribution_family| {
+            signature_source_checks(message_catalog, &[], distribution_family)
+        })
         .for_each(|source_check| {
             commands_of(&source_check)
                 .into_iter()

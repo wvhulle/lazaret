@@ -20,6 +20,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const NIXOS_PTRACE_SNIPPET: &str = "boot.kernel.sysctl.\"kernel.yama.ptrace_scope\" = 1;";
@@ -32,9 +33,11 @@ pub enum AlertStepAction {
 }
 
 impl StepActionButton for AlertStepAction {
-    fn button_label(&self) -> String {
+    fn button_label(&self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::OpenPreferences => translated_messages::findings::open_preferences(),
+            Self::OpenPreferences => {
+                translated_messages::findings::open_preferences(message_catalog)
+            }
         }
     }
 
@@ -79,38 +82,40 @@ pub fn alerts_condition(
 }
 
 fn alerts_status_text(
+    message_catalog: &MessageCatalog,
     alert_readiness: &AlertReadiness,
     background_service_state: UnitState,
 ) -> String {
     match &alert_readiness.journal_access {
         JournalAccess::JournalUnreadable => {
-            translated_messages::findings::journal_unreadable_alerts()
+            translated_messages::findings::journal_unreadable_alerts(message_catalog)
         }
         JournalAccess::FollowingFailed(follow_failure) => {
-            journal_follow_failure_text(follow_failure)
+            journal_follow_failure_text(message_catalog, follow_failure)
         }
         JournalAccess::FollowingJournal if !alert_readiness.notifications_enabled => {
-            translated_messages::findings::notifications_turned_off_preferences()
+            translated_messages::findings::notifications_turned_off_preferences(message_catalog)
         }
         JournalAccess::FollowingJournal if !background_service_runs(background_service_state) => {
-            translated_messages::findings::alerts_stop_quit_lazaret()
+            translated_messages::findings::alerts_stop_quit_lazaret(message_catalog)
         }
         JournalAccess::FollowingJournal => {
-            translated_messages::findings::running_background_following_journal()
+            translated_messages::findings::running_background_following_journal(message_catalog)
         }
     }
 }
 
 fn alerts_timeline_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     alert_readiness: &AlertReadiness,
     background_service_state: UnitState,
     header_action: StepActionSlot<StepAction>,
     evidence_rows: Vec<ActionableEvidenceRow<StepAction>>,
 ) -> TimelineStep<StepAction> {
     TimelineStep::settled(
-        translated_messages::findings::alerts_label(),
-        translated_messages::findings::lazaret_follows_system_journal(),
-        alerts_status_text(alert_readiness, background_service_state),
+        translated_messages::findings::alerts_label(message_catalog),
+        translated_messages::findings::lazaret_follows_system_journal(message_catalog),
+        alerts_status_text(message_catalog, alert_readiness, background_service_state),
         SettledStep {
             header_action,
             evidence_rows,
@@ -121,40 +126,48 @@ fn alerts_timeline_step<StepAction: StepActionButton>(
     )
 }
 
-fn notifications_text(notifications_enabled: bool) -> String {
+fn notifications_text(message_catalog: &MessageCatalog, notifications_enabled: bool) -> String {
     if notifications_enabled {
-        translated_messages::findings::notifications_on()
+        translated_messages::findings::notifications_on(message_catalog)
     } else {
-        translated_messages::findings::notifications_off()
+        translated_messages::findings::notifications_off(message_catalog)
     }
 }
 
-fn background_service_text(background_service_state: UnitState) -> String {
+fn background_service_text(
+    message_catalog: &MessageCatalog,
+    background_service_state: UnitState,
+) -> String {
     match background_service_state {
         UnitState::UnitLoaded(UnitActivity::UnitActive) => {
-            translated_messages::findings::running_label()
+            translated_messages::findings::running_label(message_catalog)
         }
         UnitState::UnitLoaded(UnitActivity::UnitInactive) => {
-            translated_messages::findings::not_running()
+            translated_messages::findings::not_running(message_catalog)
         }
-        UnitState::UnitNotFound => translated_messages::findings::unit_not_found(),
-        UnitState::SystemdUnavailable => translated_messages::findings::systemd_unavailable(),
+        UnitState::UnitNotFound => translated_messages::findings::unit_not_found(message_catalog),
+        UnitState::SystemdUnavailable => {
+            translated_messages::findings::systemd_unavailable(message_catalog)
+        }
     }
 }
 
-fn journal_access_text(journal_access: &JournalAccess) -> String {
+fn journal_access_text(message_catalog: &MessageCatalog, journal_access: &JournalAccess) -> String {
     match journal_access {
         JournalAccess::FollowingJournal => {
-            translated_messages::findings::following_journal_access()
+            translated_messages::findings::following_journal_access(message_catalog)
         }
         JournalAccess::JournalUnreadable => {
-            translated_messages::findings::journal_unreadable_access()
+            translated_messages::findings::journal_unreadable_access(message_catalog)
         }
-        JournalAccess::FollowingFailed(_) => translated_messages::findings::following_failed(),
+        JournalAccess::FollowingFailed(_) => {
+            translated_messages::findings::following_failed(message_catalog)
+        }
     }
 }
 
 pub fn alert_delivery_step(
+    message_catalog: &MessageCatalog,
     alert_readiness: &AlertReadiness,
     background_service_state: UnitState,
     distribution_family: DistributionFamily,
@@ -173,21 +186,22 @@ pub fn alert_delivery_step(
         Vec::new()
     };
     alerts_timeline_step(
+        message_catalog,
         alert_readiness,
         background_service_state,
         preferences_offer,
         plain_rows([
             evidence_row(
-                translated_messages::findings::notifications_label(),
-                notifications_text(alert_readiness.notifications_enabled),
+                translated_messages::findings::notifications_label(message_catalog),
+                notifications_text(message_catalog, alert_readiness.notifications_enabled),
             ),
             evidence_row(
-                translated_messages::findings::background_service(),
-                background_service_text(background_service_state),
+                translated_messages::findings::background_service(message_catalog),
+                background_service_text(message_catalog, background_service_state),
             ),
             evidence_row(
-                translated_messages::findings::system_journal(),
-                journal_access_text(&alert_readiness.journal_access),
+                translated_messages::findings::system_journal(message_catalog),
+                journal_access_text(message_catalog, &alert_readiness.journal_access),
             ),
         ]),
     )
@@ -206,29 +220,39 @@ pub const fn process_attach_condition(
     }
 }
 
-fn process_attach_failure_text(read_failure: ProcessAttachReadFailure) -> String {
+fn process_attach_failure_text(
+    message_catalog: &MessageCatalog,
+    read_failure: ProcessAttachReadFailure,
+) -> String {
     match read_failure {
         ProcessAttachReadFailure::ScopeFileUnreadable { failure_kind } => {
-            translated_messages::findings::attach_unknown_setting(failure_kind)
+            translated_messages::findings::attach_unknown_setting(message_catalog, failure_kind)
         }
         ProcessAttachReadFailure::ScopeValueUnrecognized => {
-            translated_messages::findings::attach_unknown_reports()
+            translated_messages::findings::attach_unknown_reports(message_catalog)
         }
         ProcessAttachReadFailure::ReadingTaskInterrupted => {
-            translated_messages::findings::attach_unknown_check()
+            translated_messages::findings::attach_unknown_check(message_catalog)
         }
     }
 }
 
-fn process_attach_status_text(process_attach_scope: ProcessAttachScope) -> String {
+fn process_attach_status_text(
+    message_catalog: &MessageCatalog,
+    process_attach_scope: ProcessAttachScope,
+) -> String {
     match process_attach_scope {
-        ProcessAttachScope::AttachRestricted => translated_messages::findings::attach_restricted(),
-        ProcessAttachScope::AnyProgramMayAttach => {
-            translated_messages::findings::any_program_may_attach()
+        ProcessAttachScope::AttachRestricted => {
+            translated_messages::findings::attach_restricted(message_catalog)
         }
-        ProcessAttachScope::YamaNotLoaded => translated_messages::findings::yama_not_loaded(),
+        ProcessAttachScope::AnyProgramMayAttach => {
+            translated_messages::findings::any_program_may_attach(message_catalog)
+        }
+        ProcessAttachScope::YamaNotLoaded => {
+            translated_messages::findings::yama_not_loaded(message_catalog)
+        }
         ProcessAttachScope::ScopeUnreadable(read_failure) => {
-            process_attach_failure_text(read_failure)
+            process_attach_failure_text(message_catalog, read_failure)
         }
     }
 }
@@ -245,6 +269,7 @@ const fn ptrace_scope_command(distribution_family: DistributionFamily) -> &'stat
 }
 
 pub fn process_attach_step(
+    message_catalog: &MessageCatalog,
     process_attach_scope: ProcessAttachScope,
     distribution_family: DistributionFamily,
 ) -> AlertStep {
@@ -257,26 +282,29 @@ pub fn process_attach_step(
         | ProcessAttachScope::ScopeUnreadable(_) => Vec::new(),
     };
     TimelineStep::settled(
-        translated_messages::findings::other_programs_cannot_attach(),
-        translated_messages::findings::program_attaches_lazaret_hide(),
-        process_attach_status_text(process_attach_scope),
+        translated_messages::findings::other_programs_cannot_attach(message_catalog),
+        translated_messages::findings::program_attaches_lazaret_hide(message_catalog),
+        process_attach_status_text(message_catalog, process_attach_scope),
         SettledStep::without_offers(process_attach_condition(process_attach_scope).node_state()),
     )
     .with_guidance_commands(guidance_commands)
 }
 
 pub fn alert_group_steps(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     alert_readiness: &AlertReadiness,
     distribution_family: DistributionFamily,
 ) -> Vec<AlertStep> {
     vec![
         alert_delivery_step(
+            message_catalog,
             alert_readiness,
             protection_evidence.background_service_state,
             distribution_family,
         ),
         process_attach_step(
+            message_catalog,
             protection_evidence.process_attach_scope,
             distribution_family,
         ),
@@ -299,10 +327,12 @@ mod alert_delivery_presentation_tests {
     }
 
     fn alert_step_state(
+        message_catalog: &MessageCatalog,
         alert_readiness: &AlertReadiness,
         background_service_state: UnitState,
     ) -> StepNodeState {
         alert_delivery_step(
+            message_catalog,
             alert_readiness,
             background_service_state,
             DistributionFamily::NixosFamily,
@@ -312,19 +342,22 @@ mod alert_delivery_presentation_tests {
 
     #[test]
     fn alerts_are_only_complete_when_they_will_actually_fire() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
             alert_step_state(
+                message_catalog,
                 &ready_alerts(),
                 UnitState::UnitLoaded(UnitActivity::UnitActive)
             ),
             StepNodeState::Completed
         );
         assert_eq!(
-            alert_step_state(&ready_alerts(), UnitState::UnitNotFound),
+            alert_step_state(message_catalog, &ready_alerts(), UnitState::UnitNotFound),
             StepNodeState::NeedsReview
         );
         assert_eq!(
             alert_step_state(
+                message_catalog,
                 &AlertReadiness {
                     notifications_enabled: false,
                     ..ready_alerts()
@@ -335,6 +368,7 @@ mod alert_delivery_presentation_tests {
         );
         assert_eq!(
             alert_step_state(
+                message_catalog,
                 &AlertReadiness {
                     journal_access: JournalAccess::JournalUnreadable,
                     ..ready_alerts()
@@ -347,7 +381,9 @@ mod alert_delivery_presentation_tests {
 
     #[test]
     fn the_alert_step_shows_notifications_service_and_journal() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let delivery_step = alert_delivery_step(
+            message_catalog,
             &ready_alerts(),
             UnitState::UnitNotFound,
             DistributionFamily::NixosFamily,
@@ -379,7 +415,9 @@ mod alert_delivery_presentation_tests {
 
     #[test]
     fn turned_off_notifications_offer_the_preferences() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let delivery_step = alert_delivery_step(
+            message_catalog,
             &AlertReadiness {
                 notifications_enabled: false,
                 ..ready_alerts()
@@ -396,7 +434,9 @@ mod alert_delivery_presentation_tests {
 
     #[test]
     fn the_process_attach_step_follows_the_ptrace_scope() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let restricted_step = process_attach_step(
+            message_catalog,
             ProcessAttachScope::AttachRestricted,
             DistributionFamily::NixosFamily,
         );
@@ -407,6 +447,7 @@ mod alert_delivery_presentation_tests {
         );
         assert!(restricted_step.guidance_commands.is_empty());
         let open_step = process_attach_step(
+            message_catalog,
             ProcessAttachScope::AnyProgramMayAttach,
             DistributionFamily::DebianFamily,
         );
@@ -417,6 +458,7 @@ mod alert_delivery_presentation_tests {
         );
         assert_eq!(
             process_attach_step(
+                message_catalog,
                 ProcessAttachScope::YamaNotLoaded,
                 DistributionFamily::NixosFamily
             )
@@ -424,6 +466,7 @@ mod alert_delivery_presentation_tests {
             StepNodeState::NeedsReview
         );
         let unknown_step = process_attach_step(
+            message_catalog,
             ProcessAttachScope::ScopeUnreadable(ProcessAttachReadFailure::ReadingTaskInterrupted),
             DistributionFamily::NixosFamily,
         );
@@ -437,7 +480,9 @@ mod alert_delivery_presentation_tests {
 
     #[test]
     fn the_alert_group_lists_delivery_then_process_attach() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let group_steps = alert_group_steps(
+            message_catalog,
             &healthy_evidence(),
             &ready_alerts(),
             DistributionFamily::NixosFamily,

@@ -14,6 +14,7 @@ use zbus::{Connection, proxy};
 use crate::{
     host_services::desktop::flatpak_sandbox::{SandboxKind, readable_host_path},
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[proxy(
@@ -308,46 +309,53 @@ pub fn change_effect(
     }
 }
 
-fn reduction_headline(protection_reduction: ProtectionReduction) -> Option<String> {
+fn reduction_headline(
+    message_catalog: &MessageCatalog,
+    protection_reduction: ProtectionReduction,
+) -> Option<String> {
     match protection_reduction {
-        ProtectionReduction::BlockingTurnedOff => {
-            Some(translated_messages::host::blocking_turned_off())
+        ProtectionReduction::BlockingTurnedOff => Some(
+            translated_messages::host::blocking_turned_off(message_catalog),
+        ),
+        ProtectionReduction::CheckTurnedOff => {
+            Some(translated_messages::host::check_turned_off(message_catalog))
         }
-        ProtectionReduction::CheckTurnedOff => Some(translated_messages::host::check_turned_off()),
-        ProtectionReduction::WatchedFolderRemoved => {
-            Some(translated_messages::host::watched_folder_removed())
-        }
-        ProtectionReduction::SkippedLocationAdded => {
-            Some(translated_messages::host::skipped_location_added())
-        }
-        ProtectionReduction::ScanLimitLowered => {
-            Some(translated_messages::host::scan_limit_lowered())
-        }
-        ProtectionReduction::CurrentValuesUnknown => {
-            Some(translated_messages::host::current_values_unknown())
-        }
-        ProtectionReduction::DetectionTrusted => {
-            Some(translated_messages::host::detection_trusted())
-        }
+        ProtectionReduction::WatchedFolderRemoved => Some(
+            translated_messages::host::watched_folder_removed(message_catalog),
+        ),
+        ProtectionReduction::SkippedLocationAdded => Some(
+            translated_messages::host::skipped_location_added(message_catalog),
+        ),
+        ProtectionReduction::ScanLimitLowered => Some(
+            translated_messages::host::scan_limit_lowered(message_catalog),
+        ),
+        ProtectionReduction::CurrentValuesUnknown => Some(
+            translated_messages::host::current_values_unknown(message_catalog),
+        ),
+        ProtectionReduction::DetectionTrusted => Some(
+            translated_messages::host::detection_trusted(message_catalog),
+        ),
         ProtectionReduction::NoReduction => None,
     }
 }
 
 pub fn change_confirmation_text(
+    message_catalog: &MessageCatalog,
     setting_key: &str,
     current_values: &[String],
     new_values: &[String],
     protection_reduction: ProtectionReduction,
 ) -> String {
     let change_lines = translated_messages::host::key_now_current_new(
+        message_catalog,
         setting_key,
         current_values.join(", "),
         new_values.join(", "),
     );
-    match reduction_headline(protection_reduction) {
+    match reduction_headline(message_catalog, protection_reduction) {
         Some(headline) => format!(
             "{headline}\n\n{change_lines}\n\n{}",
-            translated_messages::host::system_records_change_reduced()
+            translated_messages::host::system_records_change_reduced(message_catalog)
         ),
         None => change_lines,
     }
@@ -400,7 +408,9 @@ mod live_settings_client_tests {
 
     #[test]
     fn the_confirmation_shows_both_values_and_warns_when_weakening() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let confirmation_text = change_confirmation_text(
+            message_catalog,
             "OnAccessPrevention",
             &values(&["true"]),
             &values(&["false"]),

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
@@ -6,25 +8,27 @@ use crate::{
         scanner_output_parser::sanitize_scanner_line,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub fn is_preset_pattern(exclusion_pattern: &str) -> bool {
     PRESET_DIRECTORY_NAMES.contains(&exclusion_pattern)
 }
 
-fn preset_description(exclusion_pattern: &str) -> String {
+fn preset_description(message_catalog: &MessageCatalog, exclusion_pattern: &str) -> String {
     match exclusion_pattern {
-        "node_modules" => translated_messages::scans::node_js_dependencies(),
-        ".git" => translated_messages::scans::git_repository_data(),
-        ".venv" => translated_messages::scans::python_virtual_environment(),
-        "build" => translated_messages::scans::build_output_directory(),
-        "dist" => translated_messages::scans::distribution_output_directory(),
-        "__pycache__" => translated_messages::scans::python_bytecode_cache(),
+        "node_modules" => translated_messages::scans::node_js_dependencies(message_catalog),
+        ".git" => translated_messages::scans::git_repository_data(message_catalog),
+        ".venv" => translated_messages::scans::python_virtual_environment(message_catalog),
+        "build" => translated_messages::scans::build_output_directory(message_catalog),
+        "dist" => translated_messages::scans::distribution_output_directory(message_catalog),
+        "__pycache__" => translated_messages::scans::python_bytecode_cache(message_catalog),
         _other_pattern => String::new(),
     }
 }
 
 pub struct ScanExclusionRow {
+    pub message_catalog: Rc<MessageCatalog>,
     exclusion_entry: ExclusionEntry,
 }
 
@@ -53,9 +57,14 @@ impl ScanExclusionRow {
     }
 }
 
+pub struct ScanExclusionRowInit {
+    pub exclusion_entry: ExclusionEntry,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::factory(pub)]
 impl FactoryComponent for ScanExclusionRow {
-    type Init = ExclusionEntry;
+    type Init = ScanExclusionRowInit;
     type Input = ();
     type Output = ScanExclusionRowOutput;
     type CommandOutput = ();
@@ -65,7 +74,7 @@ impl FactoryComponent for ScanExclusionRow {
         adw::SwitchRow {
             set_use_markup: false,
             set_title: &self.shown_title(),
-            set_subtitle: &preset_description(&self.exclusion_entry.exclusion_pattern),
+            set_subtitle: &preset_description(&self.message_catalog, &self.exclusion_entry.exclusion_pattern),
             set_active: self.exclusion_entry.is_enabled,
             connect_active_notify[sender, exclusion_pattern = self.exclusion_entry.exclusion_pattern.clone()] => move |changed_row| {
                 let _page_closed = sender.output(ScanExclusionRowOutput::EnabledToggled {
@@ -76,7 +85,7 @@ impl FactoryComponent for ScanExclusionRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "user-trash-symbolic",
-                set_tooltip_text: Some(&translated_messages::scans::remove_exclusion_tooltip()),
+                set_tooltip_text: Some(&translated_messages::scans::remove_exclusion_tooltip(&self.message_catalog)),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_visible: !self.is_preset(),
@@ -90,10 +99,16 @@ impl FactoryComponent for ScanExclusionRow {
     }
 
     fn init_model(
-        exclusion_entry: Self::Init,
+        ScanExclusionRowInit {
+            exclusion_entry,
+            message_catalog,
+        }: Self::Init,
         _row_index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { exclusion_entry }
+        Self {
+            exclusion_entry,
+            message_catalog,
+        }
     }
 }

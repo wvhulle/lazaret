@@ -27,13 +27,14 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OnAccessAction {}
 
 impl StepActionButton for OnAccessAction {
-    fn button_label(&self) -> String {
+    fn button_label(&self, _message_catalog: &MessageCatalog) -> String {
         match *self {}
     }
 
@@ -55,53 +56,62 @@ fn on_access_setting_row<StepAction: StepActionButton>(
     .into()
 }
 
-fn clamd_config_failure_text(config_failure: ClamdConfigReadFailure) -> String {
+fn clamd_config_failure_text(
+    message_catalog: &MessageCatalog,
+    config_failure: ClamdConfigReadFailure,
+) -> String {
     match config_failure {
         ClamdConfigReadFailure::NoReadableConfig => {
-            translated_messages::scans::no_readable_config()
+            translated_messages::scans::no_readable_config(message_catalog)
         }
         ClamdConfigReadFailure::ReadingTaskAborted => {
-            translated_messages::scans::reading_task_aborted_clamd()
+            translated_messages::scans::reading_task_aborted_clamd(message_catalog)
         }
     }
 }
 
-fn watched_location_text(watched_location: &WatchedLocation) -> String {
+fn watched_location_text(
+    message_catalog: &MessageCatalog,
+    watched_location: &WatchedLocation,
+) -> String {
     match watched_location {
         WatchedLocation::WatchedFolder { folder_path } => folder_path.clone(),
         WatchedLocation::WatchedMount { mount_path } => {
-            translated_messages::scans::watched_mount(mount_path)
+            translated_messages::scans::watched_mount(message_catalog, mount_path)
         }
     }
 }
 
-fn watch_scope_text(watch_scope: &WatchScope) -> String {
+fn watch_scope_text(message_catalog: &MessageCatalog, watch_scope: &WatchScope) -> String {
     match watch_scope {
-        WatchScope::NothingWatched => translated_messages::scans::nothing_watched(),
+        WatchScope::NothingWatched => translated_messages::scans::nothing_watched(message_catalog),
         WatchScope::WatchedLocations { .. } => watch_scope
             .watched_locations()
             .into_iter()
-            .map(watched_location_text)
+            .map(|watched_location| watched_location_text(message_catalog, watched_location))
             .collect::<Vec<_>>()
             .join("\n"),
     }
 }
 
-fn size_limit_text(size_limit: &OnAccessSizeLimit) -> String {
+fn size_limit_text(message_catalog: &MessageCatalog, size_limit: &OnAccessSizeLimit) -> String {
     match size_limit {
-        OnAccessSizeLimit::DefaultLimit => translated_messages::scans::default_limit(),
+        OnAccessSizeLimit::DefaultLimit => {
+            translated_messages::scans::default_limit(message_catalog)
+        }
         OnAccessSizeLimit::ConfiguredLimit { size_limit } => byte_size_text(*size_limit),
         OnAccessSizeLimit::UnreadableLimit { limit_text } => limit_text.clone(),
     }
 }
 
 fn on_access_rows<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     on_access_config: &OnAccessConfig,
 ) -> Vec<ActionableEvidenceRow<StepAction>> {
     match on_access_config {
         OnAccessConfig::ConfigUnreadable(config_failure) => vec![on_access_setting_row(
-            translated_messages::scans::configuration_label(),
-            clamd_config_failure_text(*config_failure),
+            translated_messages::scans::configuration_label(message_catalog),
+            clamd_config_failure_text(message_catalog, *config_failure),
         )],
         OnAccessConfig::ConfigRead {
             watch_scope,
@@ -109,12 +119,12 @@ fn on_access_rows<StepAction: StepActionButton>(
             ..
         } => vec![
             on_access_setting_row(
-                translated_messages::scans::watched_folders(),
-                watch_scope_text(watch_scope),
+                translated_messages::scans::watched_folders(message_catalog),
+                watch_scope_text(message_catalog, watch_scope),
             ),
             on_access_setting_row(
-                translated_messages::scans::largest_file_scanned(),
-                size_limit_text(size_limit),
+                translated_messages::scans::largest_file_scanned(message_catalog),
+                size_limit_text(message_catalog, size_limit),
             ),
         ],
     }
@@ -126,52 +136,59 @@ struct OnAccessVerdict {
     suggested_remedies: Vec<SuggestedRemedy>,
 }
 
-fn kernel_config_failure_text(read_failure: KernelConfigReadFailure) -> String {
+fn kernel_config_failure_text(
+    message_catalog: &MessageCatalog,
+    read_failure: KernelConfigReadFailure,
+) -> String {
     match read_failure {
         KernelConfigReadFailure::NoKernelConfigFound => {
-            translated_messages::scans::no_kernel_config_found()
+            translated_messages::scans::no_kernel_config_found(message_catalog)
         }
         KernelConfigReadFailure::KernelConfigUnreadable { .. } => {
-            translated_messages::scans::kernel_config_unreadable()
+            translated_messages::scans::kernel_config_unreadable(message_catalog)
         }
         KernelConfigReadFailure::CompressedConfigCorrupt => {
-            translated_messages::scans::compressed_config_corrupt()
+            translated_messages::scans::compressed_config_corrupt(message_catalog)
         }
         KernelConfigReadFailure::KernelReleaseUnreadable { .. } => {
-            translated_messages::scans::kernel_release_unreadable()
+            translated_messages::scans::kernel_release_unreadable(message_catalog)
         }
         KernelConfigReadFailure::ReadingTaskAborted => {
-            translated_messages::scans::reading_task_aborted_config()
+            translated_messages::scans::reading_task_aborted_config(message_catalog)
         }
     }
 }
 
-fn watched_blocking_verdict(on_access_blocking: OnAccessBlocking) -> OnAccessVerdict {
+fn watched_blocking_verdict(
+    message_catalog: &MessageCatalog,
+    on_access_blocking: OnAccessBlocking,
+) -> OnAccessVerdict {
     match on_access_blocking {
         OnAccessBlocking::BlocksDetectedFiles => OnAccessVerdict {
             checked_condition: CheckedCondition::ConditionMet,
-            status_text: translated_messages::scans::blocks_detected_files(),
+            status_text: translated_messages::scans::blocks_detected_files(message_catalog),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::PreventionOff => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::prevention_off(),
+            status_text: translated_messages::scans::prevention_off(message_catalog),
             suggested_remedies: vec![SuggestedRemedy::OnAccessPreventionEnable],
         },
         OnAccessBlocking::PreventionConflictsWithMounts => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::prevention_conflicts_mounts(),
+            status_text: translated_messages::scans::prevention_conflicts_mounts(message_catalog),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::KernelCannotBlock => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::kernel_cannot_block(),
+            status_text: translated_messages::scans::kernel_cannot_block(message_catalog),
             suggested_remedies: Vec::new(),
         },
         OnAccessBlocking::KernelSupportUnknown(read_failure) => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
             status_text: translated_messages::scans::kernel_support_unknown(
-                kernel_config_failure_text(read_failure),
+                message_catalog,
+                kernel_config_failure_text(message_catalog, read_failure),
             ),
             suggested_remedies: Vec::new(),
         },
@@ -179,13 +196,14 @@ fn watched_blocking_verdict(on_access_blocking: OnAccessBlocking) -> OnAccessVer
 }
 
 fn running_monitor_verdict(
+    message_catalog: &MessageCatalog,
     on_access_config: &OnAccessConfig,
     kernel_blocking_support: KernelBlockingSupport,
 ) -> OnAccessVerdict {
     match on_access_config {
         OnAccessConfig::ConfigUnreadable(_) => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: translated_messages::scans::config_unreadable_monitor(),
+            status_text: translated_messages::scans::config_unreadable_monitor(message_catalog),
             suggested_remedies: Vec::new(),
         },
         OnAccessConfig::ConfigRead {
@@ -194,7 +212,7 @@ fn running_monitor_verdict(
             ..
         } => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::running_no_folders_status(),
+            status_text: translated_messages::scans::running_no_folders_status(message_catalog),
             suggested_remedies: vec![SuggestedRemedy::OnAccessWatchedPathAdd],
         },
         OnAccessConfig::ConfigRead {
@@ -203,7 +221,7 @@ fn running_monitor_verdict(
             ..
         } => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::running_detected_status(),
+            status_text: translated_messages::scans::running_detected_status(message_catalog),
             suggested_remedies: vec![
                 SuggestedRemedy::OnAccessWatchedPathAdd,
                 SuggestedRemedy::OnAccessPreventionEnable,
@@ -214,45 +232,53 @@ fn running_monitor_verdict(
             configured_prevention,
             setting_conflicts,
             ..
-        } => watched_blocking_verdict(on_access_blocking(
-            *configured_prevention,
-            setting_conflicts,
-            kernel_blocking_support,
-        )),
+        } => watched_blocking_verdict(
+            message_catalog,
+            on_access_blocking(
+                *configured_prevention,
+                setting_conflicts,
+                kernel_blocking_support,
+            ),
+        ),
     }
 }
 
 fn on_access_verdict(
+    message_catalog: &MessageCatalog,
     on_access_evidence: &OnAccessEvidence,
     daemon_answering: bool,
 ) -> OnAccessVerdict {
     match on_access_evidence.on_access_scanner {
         OnAccessScanner::UnitStateUnknown => OnAccessVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: translated_messages::scans::unit_state_unknown_access(),
+            status_text: translated_messages::scans::unit_state_unknown_access(message_catalog),
             suggested_remedies: Vec::new(),
         },
         OnAccessScanner::NeverSetUp => OnAccessVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::scans::never_set_up_access(),
+            status_text: translated_messages::scans::never_set_up_access(message_catalog),
             suggested_remedies: vec![SuggestedRemedy::OnAccessScanningEnable],
         },
         OnAccessScanner::UnitStopped { .. } if !daemon_answering => OnAccessVerdict {
             checked_condition: CheckedCondition::PrerequisiteMissing,
-            status_text: daemon_awaited_text(),
+            status_text: daemon_awaited_text(message_catalog),
             suggested_remedies: vec![SuggestedRemedy::OnAccessScanningEnable],
         },
         OnAccessScanner::UnitStopped { service_unit } => OnAccessVerdict {
             checked_condition: CheckedCondition::ConditionFailed,
-            status_text: translated_messages::scans::unit_stopped_access(service_unit),
+            status_text: translated_messages::scans::unit_stopped_access(
+                message_catalog,
+                service_unit,
+            ),
             suggested_remedies: vec![SuggestedRemedy::OnAccessScanningEnable],
         },
         OnAccessScanner::MonitorRunning if !daemon_answering => OnAccessVerdict {
             checked_condition: CheckedCondition::PrerequisiteMissing,
-            status_text: daemon_awaited_text(),
+            status_text: daemon_awaited_text(message_catalog),
             suggested_remedies: Vec::new(),
         },
         OnAccessScanner::MonitorRunning => running_monitor_verdict(
+            message_catalog,
             &on_access_evidence.on_access_config,
             on_access_evidence.kernel_blocking_support,
         ),
@@ -260,27 +286,31 @@ fn on_access_verdict(
 }
 
 pub fn on_access_condition(
+    message_catalog: &MessageCatalog,
     on_access_evidence: &OnAccessEvidence,
     daemon_answering: bool,
 ) -> CheckedCondition {
-    on_access_verdict(on_access_evidence, daemon_answering).checked_condition
+    on_access_verdict(message_catalog, on_access_evidence, daemon_answering).checked_condition
 }
 
 pub fn on_access_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     on_access_evidence: &OnAccessEvidence,
     daemon_answering: bool,
     distribution_family: DistributionFamily,
     header_action: StepActionSlot<StepAction>,
 ) -> TimelineStep<StepAction> {
-    let step_title = translated_messages::scans::access_blocking_title();
-    let mechanism_details = translated_messages::scans::clamonacc_checks_files_watched();
-    let on_access_verdict = on_access_verdict(on_access_evidence, daemon_answering);
+    let step_title = translated_messages::scans::access_blocking_title(message_catalog);
+    let mechanism_details =
+        translated_messages::scans::clamonacc_checks_files_watched(message_catalog);
+    let on_access_verdict =
+        on_access_verdict(message_catalog, on_access_evidence, daemon_answering);
     TimelineStep::settled(
         step_title,
         mechanism_details,
         on_access_verdict.status_text,
         SettledStep {
-            evidence_rows: on_access_rows(&on_access_evidence.on_access_config),
+            evidence_rows: on_access_rows(message_catalog, &on_access_evidence.on_access_config),
             header_action,
             ..SettledStep::without_offers(on_access_verdict.checked_condition.node_state())
         },
@@ -303,6 +333,7 @@ fn conflicting_options_text(setting_conflicts: &[OnAccessConflict]) -> String {
 }
 
 fn setup_finding_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     setup_finding: &OnAccessSetupFinding,
 ) -> TimelineStep<StepAction> {
     let checked_condition = if setup_finding.evidence_is_missing() {
@@ -312,36 +343,43 @@ fn setup_finding_step<StepAction: StepActionButton>(
     };
     let (step_title, mechanism_details, status_text) = match setup_finding {
         OnAccessSetupFinding::MountWatchConflicts { setting_conflicts } => (
-            translated_messages::scans::mount_watching(),
-            translated_messages::scans::onaccessmountpath_watches_whole_mount(),
+            translated_messages::scans::mount_watching(message_catalog),
+            translated_messages::scans::onaccessmountpath_watches_whole_mount(message_catalog),
             translated_messages::scans::onaccessmountpath_cannot_combined_options(
+                message_catalog,
                 conflicting_options_text(setting_conflicts),
             ),
         ),
         OnAccessSetupFinding::ClamdUserNotExcluded => (
-            translated_messages::scans::loop_protection(),
-            translated_messages::scans::clamd_opens_every_file(),
-            translated_messages::scans::clamd_not_excluded_clamonacc(),
+            translated_messages::scans::loop_protection(message_catalog),
+            translated_messages::scans::clamd_opens_every_file(message_catalog),
+            translated_messages::scans::clamd_not_excluded_clamonacc(message_catalog),
         ),
         OnAccessSetupFinding::WholeRootIncluded => (
-            translated_messages::scans::watching_whole_file_system(),
-            translated_messages::scans::clamonacc_refuses_onaccessincludepath_include(),
-            translated_messages::scans::onaccessincludepath_rejected_clamonacc(),
+            translated_messages::scans::watching_whole_file_system(message_catalog),
+            translated_messages::scans::clamonacc_refuses_onaccessincludepath_include(
+                message_catalog,
+            ),
+            translated_messages::scans::onaccessincludepath_rejected_clamonacc(message_catalog),
         ),
         OnAccessSetupFinding::WatchLimitLow {
             max_user_watches,
             large_tree_path,
         } => (
-            translated_messages::scans::folder_watch_limit(),
-            watch_limit_details(),
-            translated_messages::scans::path_watched_fs_inotify(large_tree_path, max_user_watches),
+            translated_messages::scans::folder_watch_limit(message_catalog),
+            watch_limit_details(message_catalog),
+            translated_messages::scans::path_watched_fs_inotify(
+                message_catalog,
+                large_tree_path,
+                max_user_watches,
+            ),
         ),
         OnAccessSetupFinding::WatchLimitUnknown {
             large_tree_path, ..
         } => (
-            translated_messages::scans::folder_watch_limit(),
-            watch_limit_details(),
-            translated_messages::scans::unknown_whether_path_fits(large_tree_path),
+            translated_messages::scans::folder_watch_limit(message_catalog),
+            watch_limit_details(message_catalog),
+            translated_messages::scans::unknown_whether_path_fits(message_catalog, large_tree_path),
         ),
     };
     no_guidance_step(
@@ -352,34 +390,39 @@ fn setup_finding_step<StepAction: StepActionButton>(
     )
 }
 
-fn watch_limit_details() -> String {
-    translated_messages::scans::clamonacc_watches_every_folder()
+fn watch_limit_details(message_catalog: &MessageCatalog) -> String {
+    translated_messages::scans::clamonacc_watches_every_folder(message_catalog)
 }
 
 pub fn on_access_setup_steps<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     on_access_evidence: &OnAccessEvidence,
 ) -> Vec<TimelineStep<StepAction>> {
     on_access_setup_findings(on_access_evidence)
         .iter()
-        .map(setup_finding_step)
+        .map(|setup_finding| setup_finding_step(message_catalog, setup_finding))
         .collect()
 }
 
 pub fn on_access_page_steps(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     protection_evidence: &ProtectionEvidence,
     distribution_family: DistributionFamily,
 ) -> Vec<OnAccessStep> {
     std::iter::once(on_access_step(
+        message_catalog,
         &protection_evidence.on_access_evidence,
         daemon_is_answering(&protection_evidence.daemon_evidence),
         distribution_family,
         StepActionSlot::NoAction,
     ))
     .chain(on_access_setup_steps(
+        message_catalog,
         &protection_evidence.on_access_evidence,
     ))
     .chain(runtime_reduction_step(
+        message_catalog,
         moment_formatters,
         &protection_evidence.runtime_reductions,
         ReducedSettingGroup::OnAccessSettings,
@@ -411,10 +454,12 @@ mod on_access_presentation_tests {
     }
 
     fn page_step_of(
+        message_catalog: &MessageCatalog,
         moment_formatters: &MomentFormatters,
         on_access_evidence: OnAccessEvidence,
     ) -> OnAccessStep {
         on_access_page_steps(
+            message_catalog,
             moment_formatters,
             &ProtectionEvidence {
                 on_access_evidence,
@@ -436,8 +481,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn running_without_prevention_is_never_reported_as_blocking() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let on_access_step = page_step_of(
+            message_catalog,
             moment_formatters,
             on_access_with(OnAccessConfig::ConfigRead {
                 watch_scope: WatchScope::WatchedLocations {
@@ -461,8 +508,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn an_on_access_unit_systemd_could_not_report_is_unknown_rather_than_not_set_up() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let on_access_step = page_step_of(
+            message_catalog,
             moment_formatters,
             OnAccessEvidence {
                 on_access_scanner: OnAccessScanner::UnitStateUnknown,
@@ -476,8 +525,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn an_unreadable_daemon_config_claims_no_missing_blocking() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let on_access_step = page_step_of(
+            message_catalog,
             moment_formatters,
             on_access_with(OnAccessConfig::ConfigUnreadable(
                 ClamdConfigReadFailure::NoReadableConfig,
@@ -499,8 +550,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn prevention_without_watched_locations_suggests_adding_a_watched_folder() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let on_access_step = page_step_of(
+            message_catalog,
             moment_formatters,
             on_access_with(OnAccessConfig::ConfigRead {
                 watch_scope: WatchScope::NothingWatched,
@@ -526,8 +579,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn a_watched_mount_is_shown_as_a_whole_mount() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let on_access_step = page_step_of(
+            message_catalog,
             moment_formatters,
             on_access_with(OnAccessConfig::ConfigRead {
                 watch_scope: WatchScope::WatchedLocations {
@@ -551,15 +606,22 @@ mod on_access_presentation_tests {
 
     #[test]
     fn setting_rows_on_the_page_link_nowhere_because_the_settings_are_below() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
-        let on_access_step = page_step_of(moment_formatters, healthy_evidence().on_access_evidence);
+        let on_access_step = page_step_of(
+            message_catalog,
+            moment_formatters,
+            healthy_evidence().on_access_evidence,
+        );
         assert!(on_access_step.offered_actions().is_empty());
     }
 
     #[test]
     fn a_stopped_daemon_leaves_on_access_waiting() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let page_steps = on_access_page_steps(
+            message_catalog,
             moment_formatters,
             &ProtectionEvidence {
                 daemon_evidence: DaemonEvidence::UnitStopped {
@@ -577,6 +639,7 @@ mod on_access_presentation_tests {
 
     #[test]
     fn only_on_access_key_reductions_appear_on_this_page() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let reductions_of = |setting_key: &str| ProtectionEvidence {
             runtime_reductions: RuntimeReductions::SettingsReduced {
@@ -591,6 +654,7 @@ mod on_access_presentation_tests {
         };
         assert_eq!(
             on_access_page_steps(
+                message_catalog,
                 moment_formatters,
                 &reductions_of("OnAccessPrevention"),
                 DistributionFamily::NixosFamily
@@ -600,6 +664,7 @@ mod on_access_presentation_tests {
         );
         assert_eq!(
             on_access_page_steps(
+                message_catalog,
                 moment_formatters,
                 &reductions_of("DetectPUA"),
                 DistributionFamily::NixosFamily
@@ -620,8 +685,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn mount_watching_with_prevention_is_shown_as_not_blocking_with_its_conflict() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let page_steps = on_access_page_steps(
+            message_catalog,
             moment_formatters,
             &ProtectionEvidence {
                 on_access_evidence: on_access_with(OnAccessConfig::ConfigRead {
@@ -651,8 +718,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn an_unreadable_kernel_config_is_unknown_and_never_blocking() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let on_access_step = page_step_of(
+            message_catalog,
             moment_formatters,
             OnAccessEvidence {
                 kernel_blocking_support: KernelBlockingSupport::KernelConfigUnreadable(
@@ -668,8 +737,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn a_notify_only_kernel_says_it_cannot_block() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let on_access_step = page_step_of(
+            message_catalog,
             moment_formatters,
             OnAccessEvidence {
                 kernel_blocking_support: KernelBlockingSupport::NotifyOnly,
@@ -682,8 +753,10 @@ mod on_access_presentation_tests {
 
     #[test]
     fn a_missing_clamd_exclusion_gets_its_own_review_step() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let page_steps = on_access_page_steps(
+            message_catalog,
             moment_formatters,
             &ProtectionEvidence {
                 on_access_evidence: on_access_with(OnAccessConfig::ConfigRead {
@@ -707,9 +780,11 @@ mod on_access_presentation_tests {
 
     #[test]
     fn a_healthy_setup_adds_no_review_steps() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         assert_eq!(
             on_access_page_steps(
+                message_catalog,
                 moment_formatters,
                 &healthy_evidence(),
                 DistributionFamily::NixosFamily

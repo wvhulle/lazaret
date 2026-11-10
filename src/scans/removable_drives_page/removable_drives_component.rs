@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Instant};
+use std::{path::PathBuf, rc::Rc, time::Instant};
 
 use jiff::Timestamp;
 use relm4::{
@@ -49,7 +49,7 @@ use crate::{
         },
         database_migration_failure_text::describe_history_failure,
         scan_runs::{
-            found_threat_row::FoundThreatRow,
+            found_threat_row::{FoundThreatRow, FoundThreatRowInit},
             scan_progress_view::{ScanProgressBar, ScanProgressView},
             scan_results_section::scan_results_component::{
                 ScanResultsSection, ScanResultsSectionInit, ScanResultsSectionInput,
@@ -63,10 +63,12 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct RemovableDrivesPageInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub activity_history: ActivityHistory,
@@ -79,13 +81,17 @@ enum DrivesPageNotice {
     ScanNotRecorded(ActivityHistoryFailure),
 }
 
-fn describe_page_notice(page_notice: &DrivesPageNotice) -> String {
+fn describe_page_notice(
+    message_catalog: &MessageCatalog,
+    page_notice: &DrivesPageNotice,
+) -> String {
     match page_notice {
         DrivesPageNotice::NoNoticeShown => String::new(),
         DrivesPageNotice::ScanNotRecorded(recording_failure) => {
-            translated_messages::scans::drive_scan_not_added(describe_history_failure(
-                recording_failure,
-            ))
+            translated_messages::scans::drive_scan_not_added(
+                message_catalog,
+                describe_history_failure(message_catalog, recording_failure),
+            )
         }
     }
 }
@@ -95,7 +101,8 @@ const fn shows_page_notice(page_notice: &DrivesPageNotice) -> bool {
 }
 
 pub struct RemovableDrivesPage {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     sandbox_kind: SandboxKind,
     toaster: Toaster,
     activity_history: ActivityHistory,
@@ -145,11 +152,11 @@ pub enum RemovableDrivesPageCommand {
     ActivityRecordingFinished(Result<(), ActivityHistoryFailure>),
 }
 
-fn notify_drive_skipped_during_scan() {
+fn notify_drive_skipped_during_scan(message_catalog: &MessageCatalog) {
     notify_outside_the_window(
         "device-scan-skipped",
-        &translated_messages::scans::device_auto_scan(),
-        &translated_messages::scans::device_connected_during_another(),
+        &translated_messages::scans::device_auto_scan(message_catalog),
+        &translated_messages::scans::device_connected_during_another(message_catalog),
     );
 }
 
@@ -162,17 +169,19 @@ impl RemovableDrivesPage {
     }
 
     fn report_status_change(&mut self, sender: &ComponentSender<Self>) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let current_status = self.current_status();
         if current_status != self.reported_status {
             self.reported_status = current_status.clone();
             let _shell_closed = sender.output(RemovableDrivesPageOutput::AreaSummaryChanged(
-                removable_drives_summary(&current_status),
+                removable_drives_summary(&message_catalog, &current_status),
             ));
         }
     }
 
     fn show_drive_events(&mut self) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let mut event_rows_guard = self.drive_event_rows.guard();
         event_rows_guard.clear();
         self.drive_event_log
@@ -181,8 +190,9 @@ impl RemovableDrivesPage {
             .cloned()
             .for_each(|drive_event| {
                 event_rows_guard.push_back(DriveEventRowInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     drive_event,
-                    moment_formatters,
+                    moment_formatters: Rc::clone(&moment_formatters),
                 });
             });
     }
@@ -198,10 +208,11 @@ impl RemovableDrivesPage {
     }
 
     fn withdraw_drive(&mut self, withdrawn_drive: WithdrawnDrive) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match withdrawn_drive {
             WithdrawnDrive::DriveWithdrawn(drive_event_number) => {
                 self.decide_drive(drive_event_number, skipped_while_scanning());
-                notify_drive_skipped_during_scan();
+                notify_drive_skipped_during_scan(&message_catalog);
             }
             WithdrawnDrive::NoDriveWithdrawn => {}
         }
@@ -321,6 +332,7 @@ impl RemovableDrivesPage {
         scan_run_number: ScanRunNumber,
         sender: &ComponentSender<Self>,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let (drive_event_number, scan_result, new_entry) = match self
             .device_scan_flow
             .finish_scan_stream(scan_run_number, Instant::now())
@@ -329,9 +341,9 @@ impl RemovableDrivesPage {
                 let finished_scan = finished_device_scan.finished_scan;
                 self.scan_results_section
                     .emit(ScanResultsSectionInput::ResultsShown(
-                        finished_results_view(finished_scan),
+                        finished_results_view(&message_catalog, finished_scan),
                     ));
-                notify_finished_scan(finished_scan);
+                notify_finished_scan(&message_catalog, finished_scan);
                 (
                     finished_device_scan.scan_target.drive_event_number,
                     finished_results_status(finished_scan),
@@ -354,13 +366,14 @@ impl RemovableDrivesPage {
     }
 
     fn header_subtitle(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match self.device_scan_flow.scan_progress_view() {
             ScanProgressView::ScanningFiles {
                 inspected_file_count,
                 planned_file_count,
                 ..
             } if self.device_scan_flow.scan_is_running() && *planned_file_count > 0 => {
-                file_progress_text(*inspected_file_count, *planned_file_count)
+                file_progress_text(&message_catalog, *inspected_file_count, *planned_file_count)
             }
             ScanProgressView::PreparingScan
             | ScanProgressView::FindingFiles { .. }
@@ -383,13 +396,13 @@ impl Component for RemovableDrivesPage {
                 add_top_bar = &adw::HeaderBar {
                     #[wrap(Some)]
                     set_title_widget = &adw::WindowTitle {
-                        set_title: &translated_messages::scans::removable_drives_title(),
+                        set_title: &translated_messages::scans::removable_drives_title(&model.message_catalog),
                         #[watch]
                         set_subtitle: &model.header_subtitle(),
                     },
 
                     pack_end = &gtk::Button {
-                        set_label: &translated_messages::scans::cancel_removable_label(),
+                        set_label: &translated_messages::scans::cancel_removable_label(&model.message_catalog),
                         add_css_class: "destructive-action",
                         #[watch]
                         set_visible: model.device_scan_flow.scan_is_running(),
@@ -403,7 +416,7 @@ impl Component for RemovableDrivesPage {
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
                         #[watch]
-                        set_title: &device_scan_title(&model.device_scan_flow.device_scan_status()),
+                        set_title: &device_scan_title(&model.message_catalog, &model.device_scan_flow.device_scan_status()),
                         #[watch]
                         set_visible: model.device_scan_flow.scan_is_running(),
 
@@ -414,7 +427,7 @@ impl Component for RemovableDrivesPage {
                             gtk::ProgressBar {
                                 set_show_text: true,
                                 #[watch]
-                                show_scan_progress: model.device_scan_flow.scan_progress_view(),
+                                show_scan_progress: (&model.message_catalog, model.device_scan_flow.scan_progress_view()),
                             },
 
                             gtk::Label {
@@ -424,13 +437,13 @@ impl Component for RemovableDrivesPage {
                                 add_css_class: "dim-label",
                                 add_css_class: "caption",
                                 #[watch]
-                                set_label: &model.device_scan_flow.scan_progress_view().detail_text(),
+                                set_label: &model.device_scan_flow.scan_progress_view().detail_text(&model.message_catalog),
                             },
                         },
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &translated_messages::scans::found_far_removable_title(),
+                        set_title: &translated_messages::scans::found_far_removable_title(&model.message_catalog),
                         #[watch]
                         set_visible: model.device_scan_flow.scan_is_running() && !model.found_threat_rows.is_empty(),
 
@@ -452,7 +465,7 @@ impl Component for RemovableDrivesPage {
                             #[watch]
                             set_visible: shows_page_notice(&model.page_notice),
                             #[watch]
-                            set_label: &describe_page_notice(&model.page_notice),
+                            set_label: &describe_page_notice(&model.message_catalog, &model.page_notice),
                         },
 
                         #[local_ref]
@@ -463,8 +476,8 @@ impl Component for RemovableDrivesPage {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &translated_messages::scans::drives_session_title(),
-                        set_description: Some(&translated_messages::scans::drives_connected_since_description()),
+                        set_title: &translated_messages::scans::drives_session_title(&model.message_catalog),
+                        set_description: Some(&translated_messages::scans::drives_connected_since_description(&model.message_catalog)),
 
                         #[local_ref]
                         drive_event_list -> gtk::ListBox {
@@ -472,7 +485,7 @@ impl Component for RemovableDrivesPage {
                             set_selection_mode: gtk::SelectionMode::None,
                             #[wrap(Some)]
                             set_placeholder = &adw::ActionRow {
-                                set_title: &translated_messages::scans::no_drive_connected_title(),
+                                set_title: &translated_messages::scans::no_drive_connected_title(&model.message_catalog),
                                 add_css_class: "dim-label",
                             },
                         },
@@ -490,6 +503,7 @@ impl Component for RemovableDrivesPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = page_init.message_catalog;
         let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let volume_monitor = gio::VolumeMonitor::get();
@@ -506,7 +520,8 @@ impl Component for RemovableDrivesPage {
             device_scan_status: device_scan_flow.device_scan_status(),
         };
         let model = Self {
-            moment_formatters,
+            message_catalog: Rc::clone(&message_catalog),
+            moment_formatters: Rc::clone(&moment_formatters),
             sandbox_kind,
             toaster: Toaster::new(&root),
             activity_history: page_init.activity_history.clone(),
@@ -523,9 +538,12 @@ impl Component for RemovableDrivesPage {
                 .detach(),
             scan_results_section: ScanResultsSection::builder()
                 .launch(ScanResultsSectionInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     sandbox_kind,
                     quarantine_vault: page_init.quarantine_vault,
-                    dismiss_label: translated_messages::scans::close_results_button(),
+                    dismiss_label: translated_messages::scans::close_results_button(
+                        &message_catalog,
+                    ),
                 })
                 .forward(
                     sender.input_sender(),
@@ -545,7 +563,10 @@ impl Component for RemovableDrivesPage {
                     },
                 ),
             settings_section: DeviceAutoScanSection::builder()
-                .launch(DeviceAutoScanSectionInit { moment_formatters })
+                .launch(DeviceAutoScanSectionInit {
+                    moment_formatters: Rc::clone(&moment_formatters),
+                    message_catalog: Rc::clone(&message_catalog),
+                })
                 .forward(
                     sender.input_sender(),
                     |section_output| match section_output {
@@ -556,12 +577,15 @@ impl Component for RemovableDrivesPage {
                 ),
             history_group: ActivityHistoryGroup::builder()
                 .launch(ActivityHistoryGroupInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     moment_formatters,
                     activity_history: page_init.activity_history,
                     history_filter: ActivityHistoryFilter::DeviceScans,
-                    group_title: translated_messages::scans::drive_scans_title(),
+                    group_title: translated_messages::scans::drive_scans_title(&message_catalog),
                     group_description:
-                        translated_messages::scans::drives_lazaret_scanned_description(),
+                        translated_messages::scans::drives_lazaret_scanned_description(
+                            &message_catalog,
+                        ),
                 })
                 .detach(),
             page_notice: DrivesPageNotice::NoNoticeShown,
@@ -572,7 +596,7 @@ impl Component for RemovableDrivesPage {
         let drive_event_list = model.drive_event_rows.widget();
         let scan_results_widget = model.scan_results_section.widget();
         let _shell_closed = sender.output(RemovableDrivesPageOutput::AreaSummaryChanged(
-            removable_drives_summary(&model.reported_status),
+            removable_drives_summary(&message_catalog, &model.reported_status),
         ));
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -630,6 +654,7 @@ impl Component for RemovableDrivesPage {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_command {
             RemovableDrivesPageCommand::DriveSettled {
                 scan_target,
@@ -646,7 +671,10 @@ impl Component for RemovableDrivesPage {
                 );
                 let mut threat_rows_guard = self.found_threat_rows.guard();
                 newly_found_threats.into_iter().for_each(|detected_threat| {
-                    threat_rows_guard.push_back(detected_threat);
+                    threat_rows_guard.push_back(FoundThreatRowInit {
+                        detected_threat,
+                        message_catalog: Rc::clone(&message_catalog),
+                    });
                 });
             }
             RemovableDrivesPageCommand::ScanStreamFinished { scan_run_number } => {

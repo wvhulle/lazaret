@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk};
 
 use crate::{
@@ -9,6 +11,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const VIRUSTOTAL_KEY_PAGE_URL: &str = "https://www.virustotal.com/gui/my-apikey";
@@ -21,24 +24,30 @@ fn service_group_title(threat_intel_service: ThreatIntelService) -> &'static str
     }
 }
 
-fn service_description(threat_intel_service: ThreatIntelService) -> String {
+fn service_description(
+    message_catalog: &MessageCatalog,
+    threat_intel_service: ThreatIntelService,
+) -> String {
     match threat_intel_service {
         ThreatIntelService::VirusTotalService => {
-            translated_messages::preferences::virustotal_receives_summary()
+            translated_messages::preferences::virustotal_receives_summary(message_catalog)
         }
         ThreatIntelService::AbuseChService => {
-            translated_messages::preferences::malwarebazaar_receives_summary()
+            translated_messages::preferences::malwarebazaar_receives_summary(message_catalog)
         }
     }
 }
 
-fn service_key_hint(threat_intel_service: ThreatIntelService) -> String {
+fn service_key_hint(
+    message_catalog: &MessageCatalog,
+    threat_intel_service: ThreatIntelService,
+) -> String {
     match threat_intel_service {
         ThreatIntelService::VirusTotalService => {
-            translated_messages::preferences::virustotal_service_hint()
+            translated_messages::preferences::virustotal_service_hint(message_catalog)
         }
         ThreatIntelService::AbuseChService => {
-            translated_messages::preferences::abuse_ch_service_hint()
+            translated_messages::preferences::abuse_ch_service_hint(message_catalog)
         }
     }
 }
@@ -50,36 +59,46 @@ const fn service_key_page_url(threat_intel_service: ThreatIntelService) -> &'sta
     }
 }
 
-fn key_problem_hint(key_problem: KeyProblem) -> String {
+fn key_problem_hint(message_catalog: &MessageCatalog, key_problem: KeyProblem) -> String {
     match key_problem {
         KeyProblem::KeyFileNotPermitted => {
-            translated_messages::preferences::key_file_not_permitted_hint()
+            translated_messages::preferences::key_file_not_permitted_hint(message_catalog)
         }
-        KeyProblem::KeyFileMissing => translated_messages::preferences::key_file_missing_hint(),
+        KeyProblem::KeyFileMissing => {
+            translated_messages::preferences::key_file_missing_hint(message_catalog)
+        }
         KeyProblem::KeyFileUnreadable => {
-            translated_messages::preferences::key_file_unreadable_hint()
+            translated_messages::preferences::key_file_unreadable_hint(message_catalog)
         }
-        KeyProblem::KeyNotValid => translated_messages::preferences::key_not_valid_hint(),
+        KeyProblem::KeyNotValid => {
+            translated_messages::preferences::key_not_valid_hint(message_catalog)
+        }
         KeyProblem::KeyringUnavailable => {
-            translated_messages::preferences::keyring_unavailable_hint()
+            translated_messages::preferences::keyring_unavailable_hint(message_catalog)
         }
         KeyProblem::StoredKeyUnreadable => {
-            translated_messages::preferences::stored_key_unreadable_hint()
+            translated_messages::preferences::stored_key_unreadable_hint(message_catalog)
         }
     }
 }
 
-fn key_problem_text(key_problem: KeyProblem) -> String {
+fn key_problem_text(message_catalog: &MessageCatalog, key_problem: KeyProblem) -> String {
     match key_problem {
         KeyProblem::KeyFileNotPermitted => {
-            translated_messages::preferences::key_file_not_permitted()
+            translated_messages::preferences::key_file_not_permitted(message_catalog)
         }
-        KeyProblem::KeyFileMissing => translated_messages::preferences::key_file_missing(),
-        KeyProblem::KeyFileUnreadable => translated_messages::preferences::key_file_unreadable(),
-        KeyProblem::KeyNotValid => translated_messages::preferences::key_not_valid(),
-        KeyProblem::KeyringUnavailable => translated_messages::preferences::keyring_unavailable(),
+        KeyProblem::KeyFileMissing => {
+            translated_messages::preferences::key_file_missing(message_catalog)
+        }
+        KeyProblem::KeyFileUnreadable => {
+            translated_messages::preferences::key_file_unreadable(message_catalog)
+        }
+        KeyProblem::KeyNotValid => translated_messages::preferences::key_not_valid(message_catalog),
+        KeyProblem::KeyringUnavailable => {
+            translated_messages::preferences::keyring_unavailable(message_catalog)
+        }
         KeyProblem::StoredKeyUnreadable => {
-            translated_messages::preferences::stored_key_unreadable()
+            translated_messages::preferences::stored_key_unreadable(message_catalog)
         }
     }
 }
@@ -95,6 +114,7 @@ enum KeySaveOutcome {
 }
 
 pub struct ServiceKeySection {
+    pub message_catalog: Rc<MessageCatalog>,
     threat_intel_service: ThreatIntelService,
     key_source: KeySource,
     key_reading: KeyReading,
@@ -155,22 +175,31 @@ impl ServiceKeySection {
     }
 
     fn key_problem_banner_text(&self) -> String {
-        self.key_problem().map(key_problem_text).unwrap_or_default()
+        let message_catalog = Rc::clone(&self.message_catalog);
+        self.key_problem()
+            .map(|key_problem| key_problem_text(&message_catalog, key_problem))
+            .unwrap_or_default()
     }
 
     fn key_problem_hint_text(&self) -> String {
-        self.key_problem().map(key_problem_hint).unwrap_or_default()
+        let message_catalog = Rc::clone(&self.message_catalog);
+        self.key_problem()
+            .map(|key_problem| key_problem_hint(&message_catalog, key_problem))
+            .unwrap_or_default()
     }
 
     fn key_status_text(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.key_reading {
-            KeyReading::CheckingKey => translated_messages::preferences::checking_label(),
+            KeyReading::CheckingKey => {
+                translated_messages::preferences::checking_label(&message_catalog)
+            }
             KeyReading::KeyRead(ServiceAccess::KeyReady(api_key)) => api_key.masked_text(),
             KeyReading::KeyRead(ServiceAccess::KeyMissing) => {
-                translated_messages::preferences::not_configured()
+                translated_messages::preferences::not_configured(&message_catalog)
             }
             KeyReading::KeyRead(ServiceAccess::KeyBroken(_)) => {
-                translated_messages::preferences::key_unreadable_status()
+                translated_messages::preferences::key_unreadable_status(&message_catalog)
             }
         }
     }
@@ -184,9 +213,14 @@ impl ServiceKeySection {
     }
 }
 
+pub struct ServiceKeySectionInit {
+    pub threat_intel_service: ThreatIntelService,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::component(pub)]
 impl Component for ServiceKeySection {
-    type Init = ThreatIntelService;
+    type Init = ServiceKeySectionInit;
     type Input = ServiceKeySectionInput;
     type Output = ServiceKeySectionOutput;
     type CommandOutput = ServiceKeySectionCommand;
@@ -194,7 +228,7 @@ impl Component for ServiceKeySection {
     view! {
         adw::PreferencesGroup {
             set_title: service_group_title(model.threat_intel_service),
-            set_description: Some(&service_description(model.threat_intel_service)),
+            set_description: Some(&service_description(&model.message_catalog, model.threat_intel_service)),
 
             adw::ActionRow {
                 set_use_markup: false,
@@ -210,10 +244,10 @@ impl Component for ServiceKeySection {
             },
 
             adw::ActionRow {
-                set_title: &translated_messages::preferences::key_file_title(),
+                set_title: &translated_messages::preferences::key_file_title(&model.message_catalog),
                 set_use_markup: false,
                 set_subtitle: &model.key_file_path_text(),
-                set_tooltip_text: Some(&translated_messages::preferences::set_system_configuration_title()),
+                set_tooltip_text: Some(&translated_messages::preferences::set_system_configuration_title(&model.message_catalog)),
                 set_visible: model.uses_system_key_file(),
                 add_prefix = &gtk::Image { set_icon_name: Some("changes-prevent-symbolic") },
                 add_suffix = &gtk::Label {
@@ -226,13 +260,13 @@ impl Component for ServiceKeySection {
             },
 
             adw::ActionRow {
-                set_title: &translated_messages::preferences::key_keyring_title(),
+                set_title: &translated_messages::preferences::key_keyring_title(&model.message_catalog),
                 set_visible: !model.uses_system_key_file(),
                 #[watch]
                 set_subtitle: &model.key_status_text(),
 
                 add_suffix = &gtk::Button {
-                    set_label: &translated_messages::preferences::delete_key_label(),
+                    set_label: &translated_messages::preferences::delete_key_label(&model.message_catalog),
                     set_valign: gtk::Align::Center,
                     #[watch]
                     set_visible: model.keyring_key_stored(),
@@ -242,7 +276,7 @@ impl Component for ServiceKeySection {
             },
 
             adw::PasswordEntryRow {
-                set_title: &translated_messages::preferences::paste_api_key_title(),
+                set_title: &translated_messages::preferences::paste_api_key_title(&model.message_catalog),
                 set_show_apply_button: true,
                 set_visible: !model.uses_system_key_file(),
                 #[track(model.entered_key_cleared)]
@@ -255,8 +289,8 @@ impl Component for ServiceKeySection {
             },
 
             adw::ActionRow {
-                set_title: &translated_messages::preferences::get_free_api_title(),
-                set_subtitle: &service_key_hint(model.threat_intel_service),
+                set_title: &translated_messages::preferences::get_free_api_title(&model.message_catalog),
+                set_subtitle: &service_key_hint(&model.message_catalog, model.threat_intel_service),
                 set_activatable: true,
                 set_visible: !model.uses_system_key_file(),
                 add_suffix = &gtk::Image { set_icon_name: Some("adw-external-link-symbolic") },
@@ -266,11 +300,15 @@ impl Component for ServiceKeySection {
     }
 
     fn init(
-        threat_intel_service: Self::Init,
+        ServiceKeySectionInit {
+            threat_intel_service,
+            message_catalog,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            message_catalog,
             threat_intel_service,
             key_source: key_source(threat_intel_service),
             key_reading: KeyReading::CheckingKey,

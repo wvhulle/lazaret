@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, abstractions::Toaster, adw, adw::prelude::*, gtk,
 };
@@ -11,9 +13,11 @@ use crate::{
         activity_detail_text, activity_summary_text,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct ActivityTranscriptDialog {
+    pub message_catalog: Rc<MessageCatalog>,
     transcript_title: String,
     transcript_text: String,
     toaster: Toaster,
@@ -25,18 +29,21 @@ pub enum ActivityTranscriptDialogInput {
 }
 
 pub fn transcript_text_of(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     activity_entry: &ActivityEntryRecord,
 ) -> String {
     activity_detail_text(
+        message_catalog,
         activity_entry,
         &moment_formatters.exact_moment_text(activity_entry.started_at),
     )
 }
 
 pub struct ActivityTranscriptDialogInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub activity_entry: ActivityEntryRecord,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::component(pub)]
@@ -59,7 +66,7 @@ impl Component for ActivityTranscriptDialog {
                     add_top_bar = &adw::HeaderBar {
                         pack_start = &gtk::Button {
                             set_icon_name: "edit-copy-symbolic",
-                            set_tooltip_text: Some(&translated_messages::widgets::copy_activity_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::widgets::copy_activity_tooltip(&model.message_catalog)),
                             connect_clicked => ActivityTranscriptDialogInput::CopyRequested,
                         },
                     },
@@ -90,6 +97,7 @@ impl Component for ActivityTranscriptDialog {
 
     fn init(
         ActivityTranscriptDialogInit {
+            message_catalog,
             activity_entry,
             moment_formatters,
         }: Self::Init,
@@ -98,8 +106,13 @@ impl Component for ActivityTranscriptDialog {
     ) -> ComponentParts<Self> {
         let transcript_overlay = &adw::ToastOverlay::new();
         let model = Self {
-            transcript_title: activity_summary_text(&activity_entry),
-            transcript_text: transcript_text_of(moment_formatters, &activity_entry),
+            message_catalog: Rc::clone(&message_catalog),
+            transcript_title: activity_summary_text(&message_catalog, &activity_entry),
+            transcript_text: transcript_text_of(
+                &message_catalog,
+                &moment_formatters,
+                &activity_entry,
+            ),
             toaster: Toaster::new(transcript_overlay),
         };
         let widgets = view_output!();
@@ -112,11 +125,14 @@ impl Component for ActivityTranscriptDialog {
         _sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match dialog_input {
             ActivityTranscriptDialogInput::CopyRequested => {
                 root.clipboard().set_text(&self.transcript_text);
                 self.toaster
-                    .toast(&translated_messages::widgets::log_details_copied_toast());
+                    .toast(&translated_messages::widgets::log_details_copied_toast(
+                        &message_catalog,
+                    ));
             }
         }
     }

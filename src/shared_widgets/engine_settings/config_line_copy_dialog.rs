@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{ComponentParts, ComponentSender, SimpleComponent, adw, adw::prelude::*, gtk};
 
 use crate::{
@@ -11,11 +13,13 @@ use crate::{
         listed_spin_row::listed_spin_row, setting_row::setting_row_widget::size_unit_labels,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const SIZE_COUNT_CEILING: f64 = i32::MAX as f64;
 
 pub struct ConfigLineCopyInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub setting_key: String,
     pub sibling_values: Vec<String>,
     pub value_position: usize,
@@ -25,6 +29,7 @@ pub struct ConfigLineCopyInit {
 }
 
 pub struct ConfigLineCopyDialog {
+    pub message_catalog: Rc<MessageCatalog>,
     setting_key: String,
     sibling_values: Vec<String>,
     value_position: usize,
@@ -151,7 +156,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
 
     view! {
         adw::Dialog {
-            set_title: &translated_messages::widgets::copy_configuration_line_title(),
+            set_title: &translated_messages::widgets::copy_configuration_line_title(&model.message_catalog),
             set_content_width: 460,
             connect_closed => ConfigLineCopyDialogInput::DialogClosed,
 
@@ -162,7 +167,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
                 #[wrap(Some)]
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
-                        set_description: Some(&translated_messages::widgets::nothing_applied_choose_description()),
+                        set_description: Some(&translated_messages::widgets::nothing_applied_choose_description(&model.message_catalog)),
 
                         #[name = "switch_editor"]
                         adw::SwitchRow {
@@ -205,9 +210,9 @@ impl SimpleComponent for ConfigLineCopyDialog {
                         },
 
                         adw::ComboRow {
-                            set_title: &translated_messages::widgets::unit_title(),
+                            set_title: &translated_messages::widgets::unit_title(&model.message_catalog),
                             set_visible: model.shows_size(),
-                            set_model: Some(&size_unit_labels()),
+                            set_model: Some(&size_unit_labels(&model.message_catalog)),
                             #[watch]
                             #[block_signal(unit_handler)]
                             set_selected: model.shown_unit_position(),
@@ -239,7 +244,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
                     add = &adw::PreferencesGroup {
                         adw::ActionRow {
                             set_use_markup: false,
-                            set_title: &translated_messages::widgets::line_copy_title(),
+                            set_title: &translated_messages::widgets::line_copy_title(&model.message_catalog),
                             set_subtitle_selectable: true,
                             set_subtitle_lines: 0,
                             add_css_class: "property",
@@ -250,7 +255,7 @@ impl SimpleComponent for ConfigLineCopyDialog {
 
                     add = &adw::PreferencesGroup {
                         gtk::Button {
-                            set_label: &translated_messages::widgets::copy_line_label(),
+                            set_label: &translated_messages::widgets::copy_line_label(&model.message_catalog),
                             set_halign: gtk::Align::Center,
                             add_css_class: "pill",
                             add_css_class: "suggested-action",
@@ -269,7 +274,9 @@ impl SimpleComponent for ConfigLineCopyDialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = copy_init.message_catalog;
         let model = Self {
+            message_catalog,
             setting_key: copy_init.setting_key,
             sibling_values: copy_init.sibling_values,
             value_position: copy_init.value_position,

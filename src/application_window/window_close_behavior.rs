@@ -10,6 +10,7 @@ use crate::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,11 +37,11 @@ impl CloseAction {
         }
     }
 
-    pub fn choice_label(self) -> String {
+    pub fn choice_label(self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::QuitCompletely => translated_messages::window::quit_completely(),
-            Self::HideToTray => translated_messages::window::hide_tray(),
-            Self::AskOnNextClose => translated_messages::window::ask_on_next_close(),
+            Self::QuitCompletely => translated_messages::window::quit_completely(message_catalog),
+            Self::HideToTray => translated_messages::window::hide_tray(message_catalog),
+            Self::AskOnNextClose => translated_messages::window::ask_on_next_close(message_catalog),
         }
     }
 
@@ -91,27 +92,30 @@ impl AlertChoice for CloseAnswer {
 }
 
 pub fn present_close_confirmation<Message: 'static>(
+    message_catalog: &MessageCatalog,
     window_root: &adw::ApplicationWindow,
     answer_sender: Sender<Message>,
     answered_message: fn(CloseAnswer) -> Message,
 ) {
     let close_dialog = adw::AlertDialog::new(
-        Some(&translated_messages::window::close_lazaret()),
-        Some(&translated_messages::window::detection_alerts_stop_lazaret()),
+        Some(&translated_messages::window::close_lazaret(message_catalog)),
+        Some(&translated_messages::window::detection_alerts_stop_lazaret(
+            message_catalog,
+        )),
     );
     add_dismissing_choice::<CloseAnswer>(
         &close_dialog,
-        &translated_messages::window::cancel_close_button(),
+        &translated_messages::window::cancel_close_button(message_catalog),
     );
     add_alert_choice(
         &close_dialog,
         CloseAnswer::QuitChosen,
-        &translated_messages::window::quit_close_button(),
+        &translated_messages::window::quit_close_button(message_catalog),
     );
     add_alert_choice(
         &close_dialog,
         CloseAnswer::KeepRunningChosen,
-        &translated_messages::window::keep_running(),
+        &translated_messages::window::keep_running(message_catalog),
     );
     close_dialog.set_default_response(Some(CloseAnswer::KeepRunningChosen.response_id()));
     deliver_local_outcome(

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
 };
@@ -22,17 +24,20 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct SystemChangesGroupInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub audit_topic: AuditTopic,
     pub group_description: String,
     pub empty_title: String,
 }
 
 pub struct SystemChangesGroup {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     audit_topic: AuditTopic,
     system_changes_view: SystemChangesView,
     system_change_rows: FactoryVecDeque<SystemChangeRow>,
@@ -48,10 +53,13 @@ pub enum SystemChangesGroupCommand {
     SystemChangesLoaded(Result<Vec<AdminAuditEntry>, SystemChangesReadFailure>),
 }
 
-pub fn system_changes_failure_text(system_changes_view: &SystemChangesView) -> String {
+pub fn system_changes_failure_text(
+    message_catalog: &MessageCatalog,
+    system_changes_view: &SystemChangesView,
+) -> String {
     match system_changes_view {
         SystemChangesView::SystemChangesFailed(read_failure) => {
-            translated_messages::widgets::system_changes_failed(read_failure)
+            translated_messages::widgets::system_changes_failed(message_catalog, read_failure)
         }
         SystemChangesView::SystemChangesLoading | SystemChangesView::SystemChangesLoaded => {
             String::new()
@@ -67,13 +75,15 @@ impl SystemChangesGroup {
     }
 
     fn replace_rows(&mut self, audit_entries: Vec<AdminAuditEntry>) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let mut row_guard = self.system_change_rows.guard();
         row_guard.clear();
         audit_entries.into_iter().for_each(|audit_entry| {
             row_guard.push_back(SystemChangeRowInit {
+                message_catalog: Rc::clone(&message_catalog),
                 audit_entry,
-                moment_formatters,
+                moment_formatters: Rc::clone(&moment_formatters),
             });
         });
     }
@@ -88,12 +98,12 @@ impl Component for SystemChangesGroup {
 
     view! {
         adw::PreferencesGroup {
-            set_title: &translated_messages::widgets::system_changes_title(),
+            set_title: &translated_messages::widgets::system_changes_title(&model.message_catalog),
             set_description: Some(&group_init.group_description),
             #[wrap(Some)]
             set_header_suffix = &gtk::Button {
                 set_icon_name: "view-refresh-symbolic",
-                set_tooltip_text: Some(&translated_messages::widgets::refresh_tooltip()),
+                set_tooltip_text: Some(&translated_messages::widgets::refresh_tooltip(&model.message_catalog)),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 connect_clicked => SystemChangesGroupInput::ReloadRequested,
@@ -107,12 +117,12 @@ impl Component for SystemChangesGroup {
                 #[local_ref]
                 set_placeholder = system_change_placeholder -> gtk::Stack {
                     add_named[Some(LOAD_FAILED_PAGE_NAME)] = &adw::ActionRow {
-                        set_title: &translated_messages::widgets::system_changes_cannot_title(),
+                        set_title: &translated_messages::widgets::system_changes_cannot_title(&model.message_catalog),
                         set_use_markup: false,
                         set_subtitle_lines: 0,
                         add_css_class: "dim-label",
                         #[watch]
-                        set_subtitle: &system_changes_failure_text(&model.system_changes_view),
+                        set_subtitle: &system_changes_failure_text(&model.message_catalog, &model.system_changes_view),
                     },
                     #[watch]
                     set_visible_child_name: model.system_changes_view.placeholder_page_name(),
@@ -126,8 +136,10 @@ impl Component for SystemChangesGroup {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = group_init.message_catalog;
         let moment_formatters = group_init.moment_formatters;
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             moment_formatters,
             audit_topic: group_init.audit_topic,
             system_changes_view: SystemChangesView::SystemChangesLoading,
@@ -137,7 +149,7 @@ impl Component for SystemChangesGroup {
         };
         let system_change_list = model.system_change_rows.widget();
         let system_change_placeholder = &loading_placeholder_stack(
-            &translated_messages::widgets::loading_system_changes(),
+            &translated_messages::widgets::loading_system_changes(&message_catalog),
             &empty_placeholder_row(&group_init.empty_title),
         );
         let widgets = view_output!();

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -26,6 +28,7 @@ use crate::{
     },
     shared_widgets::submission_confirm_dialog::ClamavReportProposal,
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub fn quarantined_false_positive_detection(
@@ -62,7 +65,8 @@ pub fn entry_summary_text(
 }
 
 pub struct QuarantineEntryDetail {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     entry_record: QuarantineEntryRecord,
     row_state: EntryRowState,
 }
@@ -103,10 +107,11 @@ impl QuarantineEntryDetail {
     }
 
     fn payload_hash_text(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.entry_record.payload_hash {
             RecordedPayloadHash::KnownSha256 { sha256_hex } => sha256_hex.clone(),
             RecordedPayloadHash::IntegrityUnknown => {
-                translated_messages::findings::integrity_unknown_hash()
+                translated_messages::findings::integrity_unknown_hash(&message_catalog)
             }
         }
     }
@@ -129,12 +134,20 @@ impl QuarantineEntryDetail {
         }
     }
 
-    fn source_answer_text(&self, answered_text: fn(&ReputationAnswers) -> String) -> String {
+    fn source_answer_text(
+        &self,
+        answered_text: fn(&MessageCatalog, &ReputationAnswers) -> String,
+    ) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.row_state.row_reputation {
-            RowReputation::NotChecked => translated_messages::findings::not_checked(),
-            RowReputation::CheckingReputation => translated_messages::findings::checking_label(),
+            RowReputation::NotChecked => {
+                translated_messages::findings::not_checked(&message_catalog)
+            }
+            RowReputation::CheckingReputation => {
+                translated_messages::findings::checking_label(&message_catalog)
+            }
             RowReputation::ReputationChecked(reputation_answers) => {
-                answered_text(reputation_answers)
+                answered_text(&message_catalog, reputation_answers)
             }
         }
     }
@@ -144,23 +157,28 @@ impl QuarantineEntryDetail {
         source_blocker: fn(&KnownServiceAccess) -> Option<&ServiceAccess>,
         keyed_source: fn(&ReputationAnswers) -> &KeyedSourceAnswer,
     ) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match source_blocker(&self.row_state.service_access) {
-            Some(ServiceAccess::KeyMissing) => translated_messages::findings::reputation_no_key(),
+            Some(ServiceAccess::KeyMissing) => {
+                translated_messages::findings::reputation_no_key(&message_catalog)
+            }
             Some(ServiceAccess::KeyBroken(_) | ServiceAccess::KeyReady(_)) => {
-                translated_messages::findings::reputation_key_unreadable()
+                translated_messages::findings::reputation_key_unreadable(&message_catalog)
             }
             None => match &self.row_state.row_reputation {
-                RowReputation::NotChecked => translated_messages::findings::not_checked(),
+                RowReputation::NotChecked => {
+                    translated_messages::findings::not_checked(&message_catalog)
+                }
                 RowReputation::CheckingReputation => {
-                    translated_messages::findings::checking_label()
+                    translated_messages::findings::checking_label(&message_catalog)
                 }
                 RowReputation::ReputationChecked(reputation_answers) => {
                     match keyed_source(reputation_answers) {
                         KeyedSourceAnswer::KeyedAnswer(source_answer) => {
-                            source_answer.displayed_text()
+                            source_answer.displayed_text(&message_catalog)
                         }
                         KeyedSourceAnswer::SkippedWithoutKey => {
-                            translated_messages::findings::not_checked()
+                            translated_messages::findings::not_checked(&message_catalog)
                         }
                     }
                 }
@@ -212,8 +230,13 @@ impl QuarantineEntryDetail {
     }
 }
 
-fn circl_answer_text(reputation_answers: &ReputationAnswers) -> String {
-    reputation_answers.circl_answer.displayed_text()
+fn circl_answer_text(
+    message_catalog: &MessageCatalog,
+    reputation_answers: &ReputationAnswers,
+) -> String {
+    reputation_answers
+        .circl_answer
+        .displayed_text(message_catalog)
 }
 
 const fn bazaar_source(reputation_answers: &ReputationAnswers) -> &KeyedSourceAnswer {
@@ -248,8 +271,8 @@ impl FactoryComponent for QuarantineEntryDetail {
             set_spacing: 18,
 
             adw::PreferencesGroup {
-                set_title: &glib::markup_escape_text(&displayed_threat_name(&self.entry_record.threat_identity)),
-                set_description: Some(&glib::markup_escape_text(&entry_summary_text(self.moment_formatters, &self.entry_record))),
+                set_title: &glib::markup_escape_text(&displayed_threat_name(&self.message_catalog, &self.entry_record.threat_identity)),
+                set_description: Some(&glib::markup_escape_text(&entry_summary_text(&self.moment_formatters, &self.entry_record))),
 
                 #[wrap(Some)]
                 set_header_suffix = &gtk::Box {
@@ -257,7 +280,7 @@ impl FactoryComponent for QuarantineEntryDetail {
                     set_valign: gtk::Align::Start,
 
                     gtk::Button {
-                        set_label: &translated_messages::findings::delete_entry_label(),
+                        set_label: &translated_messages::findings::delete_entry_label(&self.message_catalog),
                         add_css_class: "destructive-action",
                         #[watch]
                         set_sensitive: self.actions_available(),
@@ -267,7 +290,7 @@ impl FactoryComponent for QuarantineEntryDetail {
                     },
 
                     gtk::Button {
-                        set_label: &translated_messages::findings::restore_label(),
+                        set_label: &translated_messages::findings::restore_label(&self.message_catalog),
                         #[watch]
                         set_sensitive: self.known_sha256_hex().is_some() && self.actions_available(),
                         connect_clicked[sender, entry_id = self.entry_record.entry_id] => move |_clicked_button| {
@@ -278,8 +301,8 @@ impl FactoryComponent for QuarantineEntryDetail {
             },
 
             adw::PreferencesGroup {
-                set_title: &translated_messages::findings::reputation_section_title(),
-                set_description: Some(&translated_messages::findings::reputation_section_description()),
+                set_title: &translated_messages::findings::reputation_section_title(&self.message_catalog),
+                set_description: Some(&translated_messages::findings::reputation_section_description(&self.message_catalog)),
 
                 add = &adw::ActionRow {
                     set_use_markup: false,
@@ -291,7 +314,7 @@ impl FactoryComponent for QuarantineEntryDetail {
 
                     add_suffix = &gtk::Button {
                         set_icon_name: "edit-copy-symbolic",
-                        set_tooltip_text: Some(&translated_messages::findings::copy_hash_tooltip()),
+                        set_tooltip_text: Some(&translated_messages::findings::copy_hash_tooltip(&self.message_catalog)),
                         set_valign: gtk::Align::Center,
                         set_visible: self.known_sha256_hex().is_some(),
                         add_css_class: "flat",
@@ -300,7 +323,7 @@ impl FactoryComponent for QuarantineEntryDetail {
                 },
 
                 add = &adw::ButtonRow {
-                    set_title: &translated_messages::findings::look_up_hash_button(),
+                    set_title: &translated_messages::findings::look_up_hash_button(&self.message_catalog),
                     set_start_icon_name: Some("system-search-symbolic"),
                     #[watch]
                     set_sensitive: self.known_sha256_hex().is_some() && !self.reputation_check_running(),
@@ -337,7 +360,7 @@ impl FactoryComponent for QuarantineEntryDetail {
                     },
 
                     add_suffix = &gtk::Button {
-                        set_label: &translated_messages::findings::set_up_source_button(),
+                        set_label: &translated_messages::findings::set_up_source_button(&self.message_catalog),
                         set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: self.keyed_source_blocked(KnownServiceAccess::malware_bazaar_blocker),
@@ -361,7 +384,7 @@ impl FactoryComponent for QuarantineEntryDetail {
                     },
 
                     add_suffix = &gtk::Button {
-                        set_label: &translated_messages::findings::set_up_source_button(),
+                        set_label: &translated_messages::findings::set_up_source_button(&self.message_catalog),
                         set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: self.keyed_source_blocked(KnownServiceAccess::virustotal_blocker),
@@ -369,7 +392,7 @@ impl FactoryComponent for QuarantineEntryDetail {
                     },
 
                     add_suffix = &gtk::Button {
-                        set_label: &translated_messages::findings::view_report_label(),
+                        set_label: &translated_messages::findings::view_report_label(&self.message_catalog),
                         set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: self.virustotal_report_url().is_some(),
@@ -378,12 +401,12 @@ impl FactoryComponent for QuarantineEntryDetail {
                 },
 
                 add = &adw::ActionRow {
-                    set_title: &translated_messages::findings::submit_sample_row_title(),
-                    set_subtitle: &translated_messages::findings::send_clamav_malwarebazaar_tooltip(),
+                    set_title: &translated_messages::findings::submit_sample_row_title(&self.message_catalog),
+                    set_subtitle: &translated_messages::findings::send_clamav_malwarebazaar_tooltip(&self.message_catalog),
                     set_subtitle_lines: 0,
 
                     add_suffix = &gtk::Button {
-                        set_label: &translated_messages::findings::submit_quarantine_label(),
+                        set_label: &translated_messages::findings::submit_quarantine_label(&self.message_catalog),
                         set_valign: gtk::Align::Center,
                         set_sensitive: self.known_sha256_hex().is_some(),
                         connect_clicked => QuarantineEntryDetailInput::SubmissionRequested,
@@ -392,28 +415,28 @@ impl FactoryComponent for QuarantineEntryDetail {
             },
 
             adw::PreferencesGroup {
-                set_title: &translated_messages::findings::false_positive_title(),
+                set_title: &translated_messages::findings::false_positive_title(&self.message_catalog),
 
                 add = &adw::ActionRow {
-                    set_title: &translated_messages::findings::report_false_positive_row_title(),
-                    set_subtitle: &translated_messages::findings::report_false_positive_row_subtitle(),
+                    set_title: &translated_messages::findings::report_false_positive_row_title(&self.message_catalog),
+                    set_subtitle: &translated_messages::findings::report_false_positive_row_subtitle(&self.message_catalog),
                     set_subtitle_lines: 0,
                     set_visible: quarantined_false_positive_detection(&self.entry_record).is_some(),
 
                     add_suffix = &gtk::Button {
-                        set_label: &translated_messages::findings::report_label(),
+                        set_label: &translated_messages::findings::report_label(&self.message_catalog),
                         set_valign: gtk::Align::Center,
                         connect_clicked => QuarantineEntryDetailInput::FalsePositiveReportRequested,
                     },
                 },
 
                 add = &adw::ActionRow {
-                    set_title: &translated_messages::findings::trust_file_row_title(),
-                    set_subtitle: &translated_messages::findings::trust_file_row_subtitle(),
+                    set_title: &translated_messages::findings::trust_file_row_title(&self.message_catalog),
+                    set_subtitle: &translated_messages::findings::trust_file_row_subtitle(&self.message_catalog),
                     set_subtitle_lines: 0,
 
                     add_suffix = &gtk::Button {
-                        set_label: &translated_messages::findings::trust_label(),
+                        set_label: &translated_messages::findings::trust_label(&self.message_catalog),
                         set_valign: gtk::Align::Center,
                         set_sensitive: self.known_sha256_hex().is_some(),
                         connect_clicked => QuarantineEntryDetailInput::TrustFileRequested,
@@ -425,6 +448,7 @@ impl FactoryComponent for QuarantineEntryDetail {
 
     fn init_model(
         QuarantineRowInit {
+            message_catalog,
             moment_formatters,
             entry_record,
             row_state,
@@ -433,6 +457,7 @@ impl FactoryComponent for QuarantineEntryDetail {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             moment_formatters,
             entry_record,
             row_state,

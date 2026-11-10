@@ -14,7 +14,7 @@ use jiff::{SignedDuration, Timestamp, civil, tz::TimeZone};
 use relm4::gtk::glib;
 use writeable::Writeable;
 
-use crate::translated_messages;
+use crate::{translated_messages, translated_messages::MessageCatalog};
 
 const HOURS_PER_DAY: i64 = 24;
 const LOCALE_INDEPENDENT_NAMES: [&str; 2] = ["C", "POSIX"];
@@ -172,9 +172,13 @@ pub fn byte_size_text(byte_size: ByteSize) -> String {
     byte_size.display().iec().to_string()
 }
 
-pub fn exact_byte_size_text(byte_size: ByteSize) -> String {
+pub fn exact_byte_size_text(message_catalog: &MessageCatalog, byte_size: ByteSize) -> String {
     let byte_count = byte_size.as_u64();
-    translated_messages::host::exact_byte_size(byte_count, byte_size_text(byte_size))
+    translated_messages::host::exact_byte_size(
+        message_catalog,
+        byte_count,
+        byte_size_text(byte_size),
+    )
 }
 
 #[cfg(test)]
@@ -282,14 +286,18 @@ mod locale_formatting_tests {
 
     #[test]
     fn byte_sizes_use_binary_units_and_keep_the_exact_count_when_asked() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(byte_size_text(ByteSize::b(15)), "15 B");
         assert_eq!(byte_size_text(ByteSize::b(27_474_124)), "26.2 MiB");
         assert_eq!(byte_size_text(ByteSize::mib(100)), "100.0 MiB");
         assert_eq!(
-            exact_byte_size_text(ByteSize::b(27_474_124)),
+            exact_byte_size_text(message_catalog, ByteSize::b(27_474_124)),
             "26.2 MiB (27474124 bytes)"
         );
-        assert_eq!(exact_byte_size_text(ByteSize::b(1)), "1 B (1 byte)");
+        assert_eq!(
+            exact_byte_size_text(message_catalog, ByteSize::b(1)),
+            "1 B (1 byte)"
+        );
     }
 
     #[test]

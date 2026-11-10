@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     abstractions::Toaster, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
@@ -48,10 +50,12 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct ScheduledScansPageInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub system_bus: SystemBusAccess,
     pub user_bus: UserBusAccess,
     pub activity_history: ActivityHistory,
@@ -59,7 +63,8 @@ pub struct ScheduledScansPageInit {
 }
 
 pub struct ScheduledScansPage {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     system_bus: SystemBusAccess,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<ScheduledScanAction>>,
@@ -96,15 +101,22 @@ pub enum ScheduledScansPageCommand {
 const FOUND_THREATS_TOAST_SECONDS: u32 = 10;
 
 fn system_scan_toast(
+    message_catalog: &MessageCatalog,
     start_outcome: &UnitStartOutcome,
     scan_service: &ScanServiceEvidence,
 ) -> adw::Toast {
     let run_toast = adw::Toast::builder()
-        .title(unit_run_toast_text(start_outcome, scan_service))
+        .title(unit_run_toast_text(
+            message_catalog,
+            start_outcome,
+            scan_service,
+        ))
         .use_markup(false)
         .build();
     if scan_found_threats(start_outcome, scan_service) {
-        run_toast.set_button_label(Some(&translated_messages::scans::review_button()));
+        run_toast.set_button_label(Some(&translated_messages::scans::review_button(
+            message_catalog,
+        )));
         run_toast.set_action_name(Some("win.show-page"));
         run_toast
             .set_action_target_value(Some(&ApplicationPage::Detections.page_name().to_variant()));
@@ -122,12 +134,13 @@ impl ScheduledScansPage {
     }
 
     fn show_status_steps(&mut self) {
-        let _moment_formatters = self.moment_formatters;
-        let _moment_formatters = self.moment_formatters;
-        let _moment_formatters = self.moment_formatters;
-        let _moment_formatters = self.moment_formatters;
-        let _moment_formatters = self.moment_formatters;
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let _moment_formatters = &self.moment_formatters;
+        let _moment_formatters = &self.moment_formatters;
+        let _moment_formatters = &self.moment_formatters;
+        let _moment_formatters = &self.moment_formatters;
+        let _moment_formatters = &self.moment_formatters;
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let GatheredEvidence::Gathered {
             protection_evidence,
             gathered_at,
@@ -136,10 +149,12 @@ impl ScheduledScansPage {
             return;
         };
         show_timeline_steps(
+            &message_catalog,
             &mut self.status_rows,
             scheduled_scans_page_steps(
+                &message_catalog,
                 protection_evidence,
-                moment_formatters,
+                &moment_formatters,
                 *gathered_at,
                 self.distribution_family,
             ),
@@ -162,13 +177,13 @@ impl Component for ScheduledScansPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&translated_messages::scans::check_again_scheduled_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::check_again_scheduled_tooltip(&model.message_catalog)),
                             connect_clicked => ScheduledScansPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&translated_messages::scans::checking_scheduled_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::checking_scheduled_tooltip(&model.message_catalog)),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -183,9 +198,9 @@ impl Component for ScheduledScansPage {
                         add: status_group,
 
                     adw::PreferencesGroup {
-                        set_title: &translated_messages::scans::system_scan_title(),
+                        set_title: &translated_messages::scans::system_scan_title(&model.message_catalog),
                         #[watch]
-                        set_description: Some(&gtk::glib::markup_escape_text(&model.system_scan_control.group_description())),
+                        set_description: Some(&gtk::glib::markup_escape_text(&model.system_scan_control.group_description(&model.message_catalog))),
                         #[watch]
                         set_visible: model.system_scan_control.shows_system_scan(),
 
@@ -194,12 +209,12 @@ impl Component for ScheduledScansPage {
                             #[watch]
                             set_visible: model.system_scan_control.shows_run_status(),
                             #[watch]
-                            set_title: &model.system_scan_control.run_status_title(),
+                            set_title: &model.system_scan_control.run_status_title(&model.message_catalog),
                             #[watch]
                             set_subtitle: &model
                                 .system_scan_control
                                 .run_started_at()
-                                .map(|started_at| translated_messages::scans::started_at(model.moment_formatters.exact_moment_text(started_at)))
+                                .map(|started_at| translated_messages::scans::started_at(&model.message_catalog, model.moment_formatters.exact_moment_text(started_at)))
                                 .unwrap_or_default(),
 
                             add_prefix = &adw::Spinner {
@@ -208,8 +223,8 @@ impl Component for ScheduledScansPage {
                             },
 
                             add_suffix = &gtk::Button {
-                                set_label: &translated_messages::scans::stop_scan_label(),
-                                set_tooltip_text: Some(&translated_messages::scans::stop_scan_tooltip()),
+                                set_label: &translated_messages::scans::stop_scan_label(&model.message_catalog),
+                                set_tooltip_text: Some(&translated_messages::scans::stop_scan_tooltip(&model.message_catalog)),
                                 set_valign: gtk::Align::Center,
                                 add_css_class: "destructive-action",
                                 #[watch]
@@ -220,12 +235,12 @@ impl Component for ScheduledScansPage {
 
                         adw::ActionRow {
                             set_use_markup: false,
-                            set_title: &translated_messages::scans::folders_scanned_title(),
+                            set_title: &translated_messages::scans::folders_scanned_title(&model.message_catalog),
                             #[watch]
-                            set_subtitle: &model.system_scan_control.scanned_folders_text(),
+                            set_subtitle: &model.system_scan_control.scanned_folders_text(&model.message_catalog),
 
                             add_suffix = &gtk::Button {
-                                set_label: &translated_messages::scans::run_now_label(),
+                                set_label: &translated_messages::scans::run_now_label(&model.message_catalog),
                                 set_valign: gtk::Align::Center,
                                 #[watch]
                                 set_sensitive: model.system_scan_control.accepts_run(),
@@ -246,6 +261,7 @@ impl Component for ScheduledScansPage {
 
     fn init(
         ScheduledScansPageInit {
+            message_catalog,
             moment_formatters,
             activity_history,
             sandbox_kind,
@@ -256,13 +272,16 @@ impl Component for ScheduledScansPage {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
-            moment_formatters,
+            message_catalog: Rc::clone(&message_catalog),
+            moment_formatters: Rc::clone(&moment_formatters),
             system_bus: system_bus.clone(),
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(translated_messages::scans::status_scheduled_title())
+                        .title(translated_messages::scans::status_scheduled_title(
+                            &message_catalog,
+                        ))
                         .build(),
                 )
                 .forward(
@@ -274,7 +293,8 @@ impl Component for ScheduledScansPage {
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             schedule_section: ScanScheduleSection::builder()
                 .launch(ScanScheduleSectionInit {
-                    moment_formatters,
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
                     sandbox_kind,
                     system_bus: system_bus.clone(),
                     user_bus,
@@ -282,19 +302,22 @@ impl Component for ScheduledScansPage {
                 .detach(),
             history_group: ActivityHistoryGroup::builder()
                 .launch(ActivityHistoryGroupInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     moment_formatters,
                     activity_history,
                     history_filter: ActivityHistoryFilter::ScheduledScans,
-                    group_title: translated_messages::scans::scheduled_runs_title(),
+                    group_title: translated_messages::scans::scheduled_runs_title(&message_catalog),
                     group_description: translated_messages::scans::lazaret_schedule_ran_description(
+                        &message_catalog,
                     ),
                 })
                 .detach(),
             system_scan_control: SystemScanControl::new(),
         };
         let status_group = &model.status_rows.widget().clone();
-        let status_loading_page =
-            &loading_status_page(&translated_messages::scans::checking_schedule());
+        let status_loading_page = &loading_status_page(
+            &translated_messages::scans::checking_schedule(&message_catalog),
+        );
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -305,6 +328,7 @@ impl Component for ScheduledScansPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_input {
             ScheduledScansPageInput::RefreshRequested => {
                 let _shell_closed =
@@ -339,7 +363,9 @@ impl Component for ScheduledScansPage {
             )) => {
                 root.clipboard().set_text(&copied_command);
                 self.toaster.add_toast(adw::Toast::new(
-                    &translated_messages::scans::command_copied_clipboard_scheduled(),
+                    &translated_messages::scans::command_copied_clipboard_scheduled(
+                        &message_catalog,
+                    ),
                 ));
             }
             ScheduledScansPageInput::SystemScanRequested => {
@@ -386,19 +412,25 @@ impl Component for ScheduledScansPage {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_command {
             ScheduledScansPageCommand::SystemScanFinished {
                 start_outcome,
                 scan_service,
             } => {
                 self.system_scan_control.run_finished();
-                self.toaster
-                    .add_toast(system_scan_toast(&start_outcome, &scan_service));
+                self.toaster.add_toast(system_scan_toast(
+                    &message_catalog,
+                    &start_outcome,
+                    &scan_service,
+                ));
                 let _shell_closed =
                     sender.output(ScheduledScansPageOutput::EvidenceRefreshRequested);
             }
             ScheduledScansPageCommand::SystemScanStopSent { stop_outcome } => {
-                if let Some(stop_failure_text) = unit_stop_toast_text(&stop_outcome) {
+                if let Some(stop_failure_text) =
+                    unit_stop_toast_text(&message_catalog, &stop_outcome)
+                {
                     self.system_scan_control.stop_refused();
                     self.toaster.add_toast(
                         adw::Toast::builder()

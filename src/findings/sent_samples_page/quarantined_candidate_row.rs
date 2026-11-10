@@ -1,7 +1,10 @@
+use std::rc::Rc;
+
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
     findings::sent_samples_page::sent_samples_presentation::CandidateRowView, translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Debug)]
@@ -10,12 +13,18 @@ pub enum QuarantinedCandidateRowOutput {
 }
 
 pub struct QuarantinedCandidateRow {
+    pub message_catalog: Rc<MessageCatalog>,
     row_view: CandidateRowView,
+}
+
+pub struct QuarantinedCandidateRowInit {
+    pub row_view: CandidateRowView,
+    pub message_catalog: Rc<MessageCatalog>,
 }
 
 #[relm4::factory(pub)]
 impl FactoryComponent for QuarantinedCandidateRow {
-    type Init = CandidateRowView;
+    type Init = QuarantinedCandidateRowInit;
     type Input = ();
     type Output = QuarantinedCandidateRowOutput;
     type CommandOutput = ();
@@ -29,7 +38,7 @@ impl FactoryComponent for QuarantinedCandidateRow {
             set_subtitle_lines: 0,
 
             add_suffix = &gtk::Button {
-                set_label: &translated_messages::findings::submit_quarantined_label(),
+                set_label: &translated_messages::findings::submit_quarantined_label(&self.message_catalog),
                 set_valign: gtk::Align::Center,
                 #[watch]
                 set_sensitive: self.row_view.allows_sending(),
@@ -41,10 +50,16 @@ impl FactoryComponent for QuarantinedCandidateRow {
     }
 
     fn init_model(
-        row_view: Self::Init,
+        QuarantinedCandidateRowInit {
+            row_view,
+            message_catalog,
+        }: Self::Init,
         _row_index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { row_view }
+        Self {
+            row_view,
+            message_catalog,
+        }
     }
 }

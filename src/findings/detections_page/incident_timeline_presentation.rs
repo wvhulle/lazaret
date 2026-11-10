@@ -23,6 +23,7 @@ use crate::{
         StepChoiceRow, StepEvidenceRow, TimelineStep,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const TEST_SIGNATURE_MARKER: &str = "Eicar-Test-Signature";
@@ -40,20 +41,32 @@ pub enum IncidentStepAction {
 }
 
 impl StepActionButton for IncidentStepAction {
-    fn button_label(&self) -> String {
+    fn button_label(&self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::QuarantineIncident => translated_messages::findings::quarantine_incident(),
-            Self::AskIncidentDeletion => translated_messages::findings::ask_incident_deletion(),
-            Self::DeleteIncidentFile => translated_messages::findings::delete_incident_file(),
+            Self::QuarantineIncident => {
+                translated_messages::findings::quarantine_incident(message_catalog)
+            }
+            Self::AskIncidentDeletion => {
+                translated_messages::findings::ask_incident_deletion(message_catalog)
+            }
+            Self::DeleteIncidentFile => {
+                translated_messages::findings::delete_incident_file(message_catalog)
+            }
             Self::CancelIncidentDeletion => {
-                translated_messages::findings::cancel_incident_deletion()
+                translated_messages::findings::cancel_incident_deletion(message_catalog)
             }
-            Self::DismissIncident => translated_messages::findings::dismiss_incident(),
+            Self::DismissIncident => {
+                translated_messages::findings::dismiss_incident(message_catalog)
+            }
             Self::LookUpIncidentSignature => {
-                translated_messages::findings::look_up_incident_signature()
+                translated_messages::findings::look_up_incident_signature(message_catalog)
             }
-            Self::OpenOnlineServices => translated_messages::findings::set_up_lookup_button(),
-            Self::SubmitIncidentSample => translated_messages::findings::submit_incident_sample(),
+            Self::OpenOnlineServices => {
+                translated_messages::findings::set_up_lookup_button(message_catalog)
+            }
+            Self::SubmitIncidentSample => {
+                translated_messages::findings::submit_incident_sample(message_catalog)
+            }
         }
     }
 
@@ -116,62 +129,76 @@ pub fn displayed_file_name(stored_detection: &StoredDetection) -> String {
     )
 }
 
-pub fn detection_state_text(displayed_detection: &DisplayedDetection) -> String {
+pub fn detection_state_text(
+    message_catalog: &MessageCatalog,
+    displayed_detection: &DisplayedDetection,
+) -> String {
     let stored_detection = &displayed_detection.stored_detection;
     match &stored_detection.detection_state {
         DetectionState::Resolved {
             resolution_kind: ResolutionKind::MovedToQuarantine,
             ..
         } if displayed_detection.file_state.file_is_present() => {
-            translated_messages::findings::restored_quarantine()
+            translated_messages::findings::restored_quarantine(message_catalog)
         }
         DetectionState::Resolved {
             resolution_kind: ResolutionKind::MovedToQuarantine,
             ..
-        } => translated_messages::findings::moved_quarantine(),
+        } => translated_messages::findings::moved_quarantine(message_catalog),
         DetectionState::Resolved {
             resolution_kind: ResolutionKind::DeletedByUser,
             ..
-        } => translated_messages::findings::deleted_label(),
+        } => translated_messages::findings::deleted_label(message_catalog),
         DetectionState::Resolved {
             resolution_kind: ResolutionKind::DismissedByUser,
             ..
-        } => translated_messages::findings::kept_label(),
+        } => translated_messages::findings::kept_label(message_catalog),
         DetectionState::Open => match displayed_detection.file_state {
             DetectedFileState::Present {
                 owner: FileOwner::OtherUser,
                 ..
-            } => translated_messages::findings::belongs_another_user(),
+            } => translated_messages::findings::belongs_another_user(message_catalog),
             DetectedFileState::Present {
                 access: FileAccess::BlockedOnAccess,
                 owner: FileOwner::CurrentUser,
-            } => translated_messages::findings::blocked_needs_decision(),
+            } => translated_messages::findings::blocked_needs_decision(message_catalog),
             DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
-            } => translated_messages::findings::not_blocked_needs_decision(),
+            } => translated_messages::findings::not_blocked_needs_decision(message_catalog),
             DetectedFileState::Present {
                 access: FileAccess::NotOpened,
                 owner: FileOwner::CurrentUser,
-            } => translated_messages::findings::needs_decision(),
+            } => translated_messages::findings::needs_decision(message_catalog),
             DetectedFileState::NoLongerThere => {
-                translated_messages::findings::no_longer_there_detection()
+                translated_messages::findings::no_longer_there_detection(message_catalog)
             }
             DetectedFileState::StateUnknown => {
-                translated_messages::findings::state_unknown_detection()
+                translated_messages::findings::state_unknown_detection(message_catalog)
             }
         },
     }
 }
 
-pub fn detection_summary_text(displayed_detection: &DisplayedDetection) -> String {
+pub fn detection_summary_text(
+    message_catalog: &MessageCatalog,
+    displayed_detection: &DisplayedDetection,
+) -> String {
     let stored_detection = &displayed_detection.stored_detection;
     let signature_text = sanitize_scanner_line(&stored_detection.signature_name);
-    let state_text = detection_state_text(displayed_detection);
+    let state_text = detection_state_text(message_catalog, displayed_detection);
     if signature_is_test_pattern(&stored_detection.signature_name) {
-        translated_messages::findings::signature_test_file_state(&signature_text, &state_text)
+        translated_messages::findings::signature_test_file_state(
+            message_catalog,
+            &signature_text,
+            &state_text,
+        )
     } else {
-        translated_messages::findings::signature_state(&signature_text, &state_text)
+        translated_messages::findings::signature_state(
+            message_catalog,
+            &signature_text,
+            &state_text,
+        )
     }
 }
 
@@ -196,49 +223,57 @@ fn plain_step(
     )
 }
 
-fn source_text(stored_detection: &StoredDetection) -> String {
+fn source_text(message_catalog: &MessageCatalog, stored_detection: &StoredDetection) -> String {
     match stored_detection.detection_sources {
-        DetectionSources::OnAccessAndSchedule => translated_messages::findings::access_schedule(),
-        DetectionSources::OnAccessOnly => translated_messages::findings::access_only(),
-        DetectionSources::ScheduleOnly => translated_messages::findings::schedule_only(),
+        DetectionSources::OnAccessAndSchedule => {
+            translated_messages::findings::access_schedule(message_catalog)
+        }
+        DetectionSources::OnAccessOnly => {
+            translated_messages::findings::access_only(message_catalog)
+        }
+        DetectionSources::ScheduleOnly => {
+            translated_messages::findings::schedule_only(message_catalog)
+        }
     }
 }
 
 fn detected_step(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     stored_detection: &StoredDetection,
 ) -> IncidentStep {
     let signature_text = sanitize_scanner_line(&stored_detection.signature_name);
     let evidence_rows = vec![
         evidence_row(
-            translated_messages::findings::file_label(),
+            translated_messages::findings::file_label(message_catalog),
             displayed_file_path(stored_detection),
         ),
         evidence_row(
-            translated_messages::findings::signature_source(),
+            translated_messages::findings::signature_source(message_catalog),
             signature_source_name(provider_of_signature(&stored_detection.signature_name)),
         ),
         evidence_row(
-            translated_messages::findings::found_label(),
-            source_text(stored_detection),
+            translated_messages::findings::found_label(message_catalog),
+            source_text(message_catalog, stored_detection),
         ),
         evidence_row(
-            translated_messages::findings::last_seen(),
+            translated_messages::findings::last_seen(message_catalog),
             moment_formatters.exact_moment_text(stored_detection.last_seen),
         ),
         evidence_row(
-            translated_messages::findings::times_seen(),
+            translated_messages::findings::times_seen(message_catalog),
             stored_detection.sighting_count.to_string(),
         ),
     ];
     TimelineStep::settled(
-        translated_messages::findings::detected_label(),
+        translated_messages::findings::detected_label(message_catalog),
         if signature_is_test_pattern(&stored_detection.signature_name) {
-            translated_messages::findings::signature_matches_harmless_eicar()
+            translated_messages::findings::signature_matches_harmless_eicar(message_catalog)
         } else {
-            translated_messages::findings::clamav_matched_file_against()
+            translated_messages::findings::clamav_matched_file_against(message_catalog)
         },
         translated_messages::findings::signature_first_seen_time(
+            message_catalog,
             &signature_text,
             moment_formatters.exact_moment_text(stored_detection.first_seen),
         ),
@@ -249,7 +284,10 @@ fn detected_step(
     )
 }
 
-fn blocked_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
+fn blocked_step(
+    message_catalog: &MessageCatalog,
+    displayed_detection: &DisplayedDetection,
+) -> IncidentStep {
     let stored_detection = &displayed_detection.stored_detection;
     let (node_state, status_text) = match displayed_detection.file_state {
         DetectedFileState::Present {
@@ -257,41 +295,41 @@ fn blocked_step(displayed_detection: &DisplayedDetection) -> IncidentStep {
             ..
         } => (
             SettledNodeState::Completed,
-            translated_messages::findings::opening_file_refused_why(),
+            translated_messages::findings::opening_file_refused_why(message_catalog),
         ),
         DetectedFileState::Present {
             access: FileAccess::NotOpened,
             ..
         } => (
             SettledNodeState::Completed,
-            translated_messages::findings::not_opened_again_after(),
+            translated_messages::findings::not_opened_again_after(message_catalog),
         ),
         DetectedFileState::NoLongerThere => (
             SettledNodeState::Completed,
-            translated_messages::findings::no_longer_there_blocked(),
+            translated_messages::findings::no_longer_there_blocked(message_catalog),
         ),
         DetectedFileState::Present {
             access: FileAccess::Readable,
             ..
         } if stored_detection.detection_sources == DetectionSources::ScheduleOnly => (
             SettledNodeState::NeedsReview,
-            translated_messages::findings::not_blocked_scheduled_scan(),
+            translated_messages::findings::not_blocked_scheduled_scan(message_catalog),
         ),
         DetectedFileState::Present {
             access: FileAccess::Readable,
             ..
         } => (
             SettledNodeState::NeedsReview,
-            translated_messages::findings::not_blocked_right_now(),
+            translated_messages::findings::not_blocked_right_now(message_catalog),
         ),
         DetectedFileState::StateUnknown => (
             SettledNodeState::NeedsReview,
-            translated_messages::findings::state_unknown_blocked(),
+            translated_messages::findings::state_unknown_blocked(message_catalog),
         ),
     };
     plain_step(
-        translated_messages::findings::blocked_label(),
-        translated_messages::findings::access_prevention_kernel_refuses(),
+        translated_messages::findings::blocked_label(message_catalog),
+        translated_messages::findings::access_prevention_kernel_refuses(message_catalog),
         node_state,
         status_text,
     )
@@ -312,23 +350,28 @@ fn false_positive_snippet(
     }
 }
 
-fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
+fn lookup_summary_text(
+    message_catalog: &MessageCatalog,
+    lookup_state: &SignatureLookupState,
+) -> Option<String> {
     match lookup_state {
         SignatureLookupState::NotLookedUp => None,
-        SignatureLookupState::LookingUp => Some(translated_messages::findings::looking_up()),
-        SignatureLookupState::BazaarLookupFailed(bazaar_failure) => Some(sanitize_scanner_line(
-            &describe_bazaar_failure(bazaar_failure),
-        )),
-        SignatureLookupState::LookupFinished(KnownSampleLookup::NoKnownSamples) => {
-            Some(translated_messages::findings::no_known_samples_match())
+        SignatureLookupState::LookingUp => {
+            Some(translated_messages::findings::looking_up(message_catalog))
         }
+        SignatureLookupState::BazaarLookupFailed(bazaar_failure) => Some(sanitize_scanner_line(
+            &describe_bazaar_failure(message_catalog, bazaar_failure),
+        )),
+        SignatureLookupState::LookupFinished(KnownSampleLookup::NoKnownSamples) => Some(
+            translated_messages::findings::no_known_samples_match(message_catalog),
+        ),
         SignatureLookupState::LookupFinished(KnownSampleLookup::SamplesFound { known_samples }) => {
             let families = known_samples
                 .iter()
                 .map(|known_sample| &known_sample.malware_family)
                 .collect::<BTreeSet<_>>()
                 .into_iter()
-                .map(malware_family_text)
+                .map(|malware_family| malware_family_text(message_catalog, malware_family))
                 .collect::<Vec<_>>()
                 .join(", ");
             let earliest_seen = known_samples
@@ -339,10 +382,11 @@ fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
                 })
                 .min()
                 .map_or_else(
-                    translated_messages::findings::unknown_label,
+                    || translated_messages::findings::unknown_label(message_catalog),
                     sanitize_scanner_line,
                 );
             Some(translated_messages::findings::count_known_samples_families(
+                message_catalog,
                 known_samples.len(),
                 &families,
                 &earliest_seen,
@@ -352,21 +396,28 @@ fn lookup_summary_text(lookup_state: &SignatureLookupState) -> Option<String> {
 }
 
 fn bazaar_status_text(
+    message_catalog: &MessageCatalog,
     lookup_state: &SignatureLookupState,
     service_access: &KnownServiceAccess,
 ) -> Option<String> {
     match service_access.malware_bazaar_blocker() {
-        Some(ServiceAccess::KeyMissing) => Some(translated_messages::findings::bazaar_no_key()),
-        Some(ServiceAccess::KeyBroken(_) | ServiceAccess::KeyReady(_)) => {
-            Some(translated_messages::findings::bazaar_key_unreadable())
-        }
-        None => lookup_summary_text(lookup_state),
+        Some(ServiceAccess::KeyMissing) => Some(translated_messages::findings::bazaar_no_key(
+            message_catalog,
+        )),
+        Some(ServiceAccess::KeyBroken(_) | ServiceAccess::KeyReady(_)) => Some(
+            translated_messages::findings::bazaar_key_unreadable(message_catalog),
+        ),
+        None => lookup_summary_text(message_catalog, lookup_state),
     }
 }
 
-fn lookup_choices(service_access: &KnownServiceAccess) -> Vec<StepChoiceRow<IncidentStepAction>> {
+fn lookup_choices(
+    message_catalog: &MessageCatalog,
+    service_access: &KnownServiceAccess,
+) -> Vec<StepChoiceRow<IncidentStepAction>> {
     vec![StepChoiceRow {
         choice_description: translated_messages::findings::ask_malwarebazaar_signature_description(
+            message_catalog,
         ),
         chosen_action: match service_access.malware_bazaar_blocker() {
             Some(_unusable_access) => IncidentStepAction::OpenOnlineServices,
@@ -376,12 +427,15 @@ fn lookup_choices(service_access: &KnownServiceAccess) -> Vec<StepChoiceRow<Inci
 }
 
 fn decision_choices(
+    message_catalog: &MessageCatalog,
     deletion_prompt: DeletionPrompt,
     file_state: DetectedFileState,
 ) -> Vec<StepChoiceRow<IncidentStepAction>> {
     if !file_state.user_can_move_or_delete() {
         return vec![StepChoiceRow {
-            choice_description: translated_messages::findings::stop_asking_file_description(),
+            choice_description: translated_messages::findings::stop_asking_file_description(
+                message_catalog,
+            ),
             chosen_action: IncidentStepAction::DismissIncident,
         }];
     }
@@ -389,26 +443,35 @@ fn decision_choices(
         DeletionPrompt::AwaitingAnswer => vec![
             StepChoiceRow {
                 choice_description:
-                    translated_messages::findings::delete_file_permanently_description(),
+                    translated_messages::findings::delete_file_permanently_description(
+                        message_catalog,
+                    ),
                 chosen_action: IncidentStepAction::DeleteIncidentFile,
             },
             StepChoiceRow {
-                choice_description: translated_messages::findings::go_back_without_description(),
+                choice_description: translated_messages::findings::go_back_without_description(
+                    message_catalog,
+                ),
                 chosen_action: IncidentStepAction::CancelIncidentDeletion,
             },
         ],
         DeletionPrompt::NotAsked => vec![
             StepChoiceRow {
                 choice_description: translated_messages::findings::move_somewhere_safe_description(
+                    message_catalog,
                 ),
                 chosen_action: IncidentStepAction::QuarantineIncident,
             },
             StepChoiceRow {
-                choice_description: translated_messages::findings::remove_good_description(),
+                choice_description: translated_messages::findings::remove_good_description(
+                    message_catalog,
+                ),
                 chosen_action: IncidentStepAction::AskIncidentDeletion,
             },
             StepChoiceRow {
-                choice_description: translated_messages::findings::know_file_fine_description(),
+                choice_description: translated_messages::findings::know_file_fine_description(
+                    message_catalog,
+                ),
                 chosen_action: IncidentStepAction::DismissIncident,
             },
         ],
@@ -416,6 +479,7 @@ fn decision_choices(
 }
 
 fn review_step(
+    message_catalog: &MessageCatalog,
     displayed_detection: &DisplayedDetection,
     deletion_prompt: DeletionPrompt,
     lookup_state: &SignatureLookupState,
@@ -423,41 +487,50 @@ fn review_step(
     distribution_family: DistributionFamily,
 ) -> IncidentStep {
     let stored_detection = &displayed_detection.stored_detection;
-    let step_title = translated_messages::findings::decision_title();
-    let mechanism_details = translated_messages::findings::unfamiliar_quarantine_keeping_file();
+    let step_title = translated_messages::findings::decision_title(message_catalog);
+    let mechanism_details =
+        translated_messages::findings::unfamiliar_quarantine_keeping_file(message_catalog);
     if !detection_needs_attention(displayed_detection) {
         return plain_step(
             step_title,
-            translated_messages::findings::quarantined_files_restored_quarantine(),
+            translated_messages::findings::quarantined_files_restored_quarantine(message_catalog),
             SettledNodeState::Completed,
-            detection_state_text(displayed_detection),
+            detection_state_text(message_catalog, displayed_detection),
         );
     }
     let status_text = match displayed_detection.file_state {
         DetectedFileState::Present {
             owner: FileOwner::OtherUser,
             ..
-        } => translated_messages::findings::file_other_owner_decision(),
-        DetectedFileState::StateUnknown => translated_messages::findings::state_unknown_review(),
+        } => translated_messages::findings::file_other_owner_decision(message_catalog),
+        DetectedFileState::StateUnknown => {
+            translated_messages::findings::state_unknown_review(message_catalog)
+        }
         DetectedFileState::Present {
             owner: FileOwner::CurrentUser,
             ..
         }
-        | DetectedFileState::NoLongerThere => translated_messages::findings::choose_happens_file(),
+        | DetectedFileState::NoLongerThere => {
+            translated_messages::findings::choose_happens_file(message_catalog)
+        }
     };
     TimelineStep::settled(
         step_title,
         mechanism_details,
         status_text,
         SettledStep {
-            choice_rows: decision_choices(deletion_prompt, displayed_detection.file_state)
-                .into_iter()
-                .chain(lookup_choices(service_access))
-                .collect(),
-            evidence_rows: bazaar_status_text(lookup_state, service_access)
+            choice_rows: decision_choices(
+                message_catalog,
+                deletion_prompt,
+                displayed_detection.file_state,
+            )
+            .into_iter()
+            .chain(lookup_choices(message_catalog, service_access))
+            .collect(),
+            evidence_rows: bazaar_status_text(message_catalog, lookup_state, service_access)
                 .map(|lookup_summary| {
                     evidence_row(
-                        translated_messages::findings::malwarebazaar_label(),
+                        translated_messages::findings::malwarebazaar_label(message_catalog),
                         lookup_summary,
                     )
                 })
@@ -473,28 +546,31 @@ fn review_step(
 }
 
 fn resolved_step(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     displayed_detection: &DisplayedDetection,
 ) -> IncidentStep {
     let stored_detection = &displayed_detection.stored_detection;
-    let step_title = translated_messages::findings::resolved_title();
-    let mechanism_details = translated_messages::findings::resolved_detection_opens_again();
+    let step_title = translated_messages::findings::resolved_title(message_catalog);
+    let mechanism_details =
+        translated_messages::findings::resolved_detection_opens_again(message_catalog);
     if detection_needs_attention(displayed_detection) {
         return plain_step(
             step_title,
             mechanism_details,
             SettledNodeState::AwaitingPrerequisite,
-            translated_messages::findings::waiting_decision(),
+            translated_messages::findings::waiting_decision(message_catalog),
         );
     }
     let status_text = match &stored_detection.detection_state {
         DetectionState::Resolved { resolved_at, .. } => {
             translated_messages::findings::resolved_state_step(
-                detection_state_text(displayed_detection),
+                message_catalog,
+                detection_state_text(message_catalog, displayed_detection),
                 moment_formatters.exact_moment_text(*resolved_at),
             )
         }
-        DetectionState::Open => detection_state_text(displayed_detection),
+        DetectionState::Open => detection_state_text(message_catalog, displayed_detection),
     };
     let quarantined_copy_kept = matches!(
         stored_detection.detection_state,
@@ -518,7 +594,9 @@ fn resolved_step(
         SettledStep {
             choice_rows: vec![StepChoiceRow {
                 choice_description:
-                    translated_messages::findings::send_quarantined_copy_description(),
+                    translated_messages::findings::send_quarantined_copy_description(
+                        message_catalog,
+                    ),
                 chosen_action: IncidentStepAction::SubmitIncidentSample,
             }],
             ..SettledStep::without_offers(SettledNodeState::Completed)
@@ -527,6 +605,7 @@ fn resolved_step(
 }
 
 pub fn incident_timeline(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     displayed_detection: &DisplayedDetection,
     deletion_prompt: DeletionPrompt,
@@ -535,16 +614,21 @@ pub fn incident_timeline(
     distribution_family: DistributionFamily,
 ) -> Vec<IncidentStep> {
     vec![
-        detected_step(moment_formatters, &displayed_detection.stored_detection),
-        blocked_step(displayed_detection),
+        detected_step(
+            message_catalog,
+            moment_formatters,
+            &displayed_detection.stored_detection,
+        ),
+        blocked_step(message_catalog, displayed_detection),
         review_step(
+            message_catalog,
             displayed_detection,
             deletion_prompt,
             lookup_state,
             service_access,
             distribution_family,
         ),
-        resolved_step(moment_formatters, displayed_detection),
+        resolved_step(message_catalog, moment_formatters, displayed_detection),
     ]
 }
 
@@ -590,11 +674,13 @@ mod incident_timeline_presentation_tests {
     }
 
     fn review_choices(
+        message_catalog: &MessageCatalog,
         moment_formatters: &MomentFormatters,
         displayed_detection: &DisplayedDetection,
         deletion_prompt: DeletionPrompt,
     ) -> Vec<StepChoiceRow<IncidentStepAction>> {
         let review_step = incident_timeline(
+            message_catalog,
             moment_formatters,
             displayed_detection,
             deletion_prompt,
@@ -610,23 +696,31 @@ mod incident_timeline_presentation_tests {
     }
 
     fn choice_actions(
+        message_catalog: &MessageCatalog,
         moment_formatters: &MomentFormatters,
         displayed_detection: &DisplayedDetection,
         deletion_prompt: DeletionPrompt,
     ) -> Vec<IncidentStepAction> {
-        review_choices(moment_formatters, displayed_detection, deletion_prompt)
-            .into_iter()
-            .map(|choice_row| choice_row.chosen_action)
-            .filter(|chosen_action| {
-                !matches!(chosen_action, IncidentStepAction::LookUpIncidentSignature)
-            })
-            .collect()
+        review_choices(
+            message_catalog,
+            moment_formatters,
+            displayed_detection,
+            deletion_prompt,
+        )
+        .into_iter()
+        .map(|choice_row| choice_row.chosen_action)
+        .filter(|chosen_action| {
+            !matches!(chosen_action, IncidentStepAction::LookUpIncidentSignature)
+        })
+        .collect()
     }
 
     #[test]
     fn permanent_deletion_is_always_shown_as_destructive() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let deletion_choices = review_choices(
+            message_catalog,
             moment_formatters,
             &blocked_detection(),
             DeletionPrompt::AwaitingAnswer,
@@ -644,15 +738,19 @@ mod incident_timeline_presentation_tests {
             ]
         );
         assert_eq!(
-            deletion_choices[0].chosen_action.button_label(),
+            deletion_choices[0]
+                .chosen_action
+                .button_label(message_catalog),
             "Delete Permanently"
         );
     }
 
     #[test]
     fn a_blocked_file_explains_itself_and_asks_for_a_decision() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let incident_steps = incident_timeline(
+            message_catalog,
             moment_formatters,
             &blocked_detection(),
             DeletionPrompt::NotAsked,
@@ -681,8 +779,10 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn deleting_takes_two_explicit_choices() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let first_choices = choice_actions(
+            message_catalog,
             moment_formatters,
             &blocked_detection(),
             DeletionPrompt::NotAsked,
@@ -691,6 +791,7 @@ mod incident_timeline_presentation_tests {
         assert!(!first_choices.contains(&IncidentStepAction::DeleteIncidentFile));
         assert_eq!(
             choice_actions(
+                message_catalog,
                 moment_formatters,
                 &blocked_detection(),
                 DeletionPrompt::AwaitingAnswer
@@ -704,6 +805,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn a_file_found_only_by_the_schedule_is_not_reported_as_blocked() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let displayed_detection = DisplayedDetection {
             stored_detection: StoredDetection {
@@ -716,6 +818,7 @@ mod incident_timeline_presentation_tests {
             },
         };
         let incident_steps = incident_timeline(
+            message_catalog,
             moment_formatters,
             &displayed_detection,
             DeletionPrompt::NotAsked,
@@ -736,6 +839,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn a_foreign_file_offers_no_move_or_delete_even_when_blocked() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         [FileAccess::BlockedOnAccess, FileAccess::Readable]
             .into_iter()
@@ -749,6 +853,7 @@ mod incident_timeline_presentation_tests {
                 };
                 assert_eq!(
                     choice_actions(
+                        message_catalog,
                         moment_formatters,
                         &displayed_detection,
                         DeletionPrompt::NotAsked
@@ -760,6 +865,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn an_unresolved_file_that_could_not_be_checked_still_needs_attention() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let displayed_detection = DisplayedDetection {
             file_state: DetectedFileState::StateUnknown,
@@ -768,6 +874,7 @@ mod incident_timeline_presentation_tests {
         assert!(detection_needs_attention(&displayed_detection));
         assert_eq!(
             choice_actions(
+                message_catalog,
                 moment_formatters,
                 &displayed_detection,
                 DeletionPrompt::NotAsked
@@ -797,6 +904,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn a_readable_file_found_on_access_is_not_blamed_on_the_schedule() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let displayed_detection = DisplayedDetection {
             stored_detection: StoredDetection {
@@ -809,6 +917,7 @@ mod incident_timeline_presentation_tests {
             },
         };
         let incident_steps = incident_timeline(
+            message_catalog,
             moment_formatters,
             &displayed_detection,
             DeletionPrompt::NotAsked,
@@ -825,6 +934,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn a_quarantined_file_that_came_back_reads_as_restored() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let displayed_detection = DisplayedDetection {
             stored_detection: StoredDetection {
                 detection_state: DetectionState::Resolved {
@@ -839,7 +949,7 @@ mod incident_timeline_presentation_tests {
             },
         };
         assert_eq!(
-            detection_state_text(&displayed_detection),
+            detection_state_text(message_catalog, &displayed_detection),
             "Restored from quarantine"
         );
     }
@@ -862,6 +972,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn test_patterns_are_labelled_in_the_summary() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let displayed_detection = DisplayedDetection {
             stored_detection: StoredDetection {
                 signature_name: "Eicar-Test-Signature".to_owned(),
@@ -869,13 +980,16 @@ mod incident_timeline_presentation_tests {
             },
             ..blocked_detection()
         };
-        assert!(detection_summary_text(&displayed_detection).contains("test file"));
+        assert!(
+            detection_summary_text(message_catalog, &displayed_detection).contains("test file")
+        );
     }
 
     #[test]
     fn an_unusable_key_swaps_look_up_for_set_up() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let chosen_actions = |service_access: &KnownServiceAccess| {
-            lookup_choices(service_access)
+            lookup_choices(message_catalog, service_access)
                 .into_iter()
                 .map(|choice_row| choice_row.chosen_action)
                 .collect::<Vec<_>>()
@@ -903,11 +1017,17 @@ mod incident_timeline_presentation_tests {
             vec![IncidentStepAction::OpenOnlineServices]
         );
         assert_eq!(
-            bazaar_status_text(&SignatureLookupState::NotLookedUp, &broken_access).as_deref(),
+            bazaar_status_text(
+                message_catalog,
+                &SignatureLookupState::NotLookedUp,
+                &broken_access
+            )
+            .as_deref(),
             Some("Key unreadable")
         );
         assert_eq!(
             bazaar_status_text(
+                message_catalog,
                 &SignatureLookupState::NotLookedUp,
                 &access_with_bazaar(ServiceAccess::KeyMissing)
             )
@@ -918,6 +1038,7 @@ mod incident_timeline_presentation_tests {
 
     #[test]
     fn lookup_results_summarise_families_and_the_earliest_date() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let known_sample = |malware_family: &str, first_seen: &str| {
             crate::host_services::threat_intel::malware_bazaar_client::SampleSummary {
                 malware_family: MalwareFamily::NamedFamily(malware_family.to_owned()),
@@ -926,19 +1047,21 @@ mod incident_timeline_presentation_tests {
             }
         };
         assert_eq!(
-            lookup_summary_text(&SignatureLookupState::LookupFinished(
-                KnownSampleLookup::SamplesFound {
+            lookup_summary_text(
+                message_catalog,
+                &SignatureLookupState::LookupFinished(KnownSampleLookup::SamplesFound {
                     known_samples: vec![
                         known_sample("AgentTesla", "2026-10-02"),
                         known_sample("AgentTesla", "2026-10-01"),
                     ],
-                }
-            )),
+                })
+            ),
             Some("2 known samples. Families: AgentTesla. Earliest seen: 2026-10-01.".to_owned())
         );
         assert_eq!(
-            lookup_summary_text(&SignatureLookupState::LookupFinished(
-                KnownSampleLookup::SamplesFound {
+            lookup_summary_text(
+                message_catalog,
+                &SignatureLookupState::LookupFinished(KnownSampleLookup::SamplesFound {
                     known_samples: vec![
                         crate::host_services::threat_intel::malware_bazaar_client::SampleSummary {
                             malware_family: MalwareFamily::UnnamedFamily,
@@ -946,12 +1069,12 @@ mod incident_timeline_presentation_tests {
                             sample_tags: Vec::new(),
                         }
                     ],
-                }
-            )),
+                })
+            ),
             Some("1 known samples. Families: unnamed family. Earliest seen: unknown.".to_owned())
         );
         assert_eq!(
-            lookup_summary_text(&SignatureLookupState::NotLookedUp),
+            lookup_summary_text(message_catalog, &SignatureLookupState::NotLookedUp),
             None
         );
     }

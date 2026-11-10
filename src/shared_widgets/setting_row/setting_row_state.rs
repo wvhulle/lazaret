@@ -9,6 +9,7 @@ use crate::{
         desktop::{locale_formatting::MomentFormatters, preference_keys::PreferenceKey},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -237,23 +238,34 @@ fn config_file_name(config_file: &RootOwnedConfigFile) -> String {
         )
 }
 
-fn file_source_texts(config_file: &RootOwnedConfigFile, file_entry: FileEntry) -> SourceTexts {
+fn file_source_texts(
+    message_catalog: &MessageCatalog,
+    config_file: &RootOwnedConfigFile,
+    file_entry: FileEntry,
+) -> SourceTexts {
     let (short_tag, explanation) = match (config_file.file_owner, file_entry) {
         (ConfigFileOwner::NixOsConfiguration, FileEntry::WrittenInFile) => (
-            translated_messages::widgets::source_nixos_tag(),
-            translated_messages::widgets::source_nixos_explanation(),
+            translated_messages::widgets::source_nixos_tag(message_catalog),
+            translated_messages::widgets::source_nixos_explanation(message_catalog),
         ),
         (ConfigFileOwner::NixOsConfiguration, FileEntry::ClamavBuiltInDefault) => (
-            translated_messages::widgets::source_clamav_default_tag(),
-            translated_messages::widgets::source_nixos_default_explanation(),
+            translated_messages::widgets::source_clamav_default_tag(message_catalog),
+            translated_messages::widgets::source_nixos_default_explanation(message_catalog),
         ),
         (ConfigFileOwner::SystemPackage, FileEntry::WrittenInFile) => (
-            translated_messages::widgets::source_config_file_tag(config_file_name(config_file)),
-            translated_messages::widgets::source_config_file_explanation(&config_file.config_path),
+            translated_messages::widgets::source_config_file_tag(
+                message_catalog,
+                config_file_name(config_file),
+            ),
+            translated_messages::widgets::source_config_file_explanation(
+                message_catalog,
+                &config_file.config_path,
+            ),
         ),
         (ConfigFileOwner::SystemPackage, FileEntry::ClamavBuiltInDefault) => (
-            translated_messages::widgets::source_clamav_default_tag(),
+            translated_messages::widgets::source_clamav_default_tag(message_catalog),
             translated_messages::widgets::source_config_file_default_explanation(
+                message_catalog,
                 &config_file.config_path,
             ),
         ),
@@ -266,19 +278,21 @@ fn file_source_texts(config_file: &RootOwnedConfigFile, file_entry: FileEntry) -
 }
 
 fn override_source_texts(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     config_file: &RootOwnedConfigFile,
     override_lifetime: OverrideLifetime,
 ) -> SourceTexts {
     match override_lifetime {
         OverrideLifetime::Permanent => SourceTexts {
-            short_tag: translated_messages::widgets::source_changed_here_tag(),
+            short_tag: translated_messages::widgets::source_changed_here_tag(message_catalog),
             explanation: match config_file.file_owner {
                 ConfigFileOwner::NixOsConfiguration => {
-                    translated_messages::widgets::source_runtime_nixos_explanation()
+                    translated_messages::widgets::source_runtime_nixos_explanation(message_catalog)
                 }
                 ConfigFileOwner::SystemPackage => {
                     translated_messages::widgets::source_runtime_file_explanation(
+                        message_catalog,
                         &config_file.config_path,
                     )
                 }
@@ -287,9 +301,11 @@ fn override_source_texts(
         },
         OverrideLifetime::ExpiresAt { expires_at } => SourceTexts {
             short_tag: translated_messages::widgets::source_reduced_until_tag(
+                message_catalog,
                 moment_formatters.exact_moment_text(expires_at),
             ),
             explanation: translated_messages::widgets::source_reduced_until_explanation(
+                message_catalog,
                 moment_formatters.exact_moment_text(expires_at),
             ),
             source_emphasis: SourceEmphasis::NeedsAttention,
@@ -297,38 +313,48 @@ fn override_source_texts(
     }
 }
 
-fn preference_source_texts(preference_source: &PreferenceSource) -> SourceTexts {
+fn preference_source_texts(
+    message_catalog: &MessageCatalog,
+    preference_source: &PreferenceSource,
+) -> SourceTexts {
     match preference_source {
         PreferenceSource::SchemaDefault => SourceTexts {
-            short_tag: translated_messages::widgets::source_default_tag(),
+            short_tag: translated_messages::widgets::source_default_tag(message_catalog),
             explanation: String::new(),
             source_emphasis: SourceEmphasis::PlainSource,
         },
         PreferenceSource::ChosenByYou => SourceTexts {
-            short_tag: translated_messages::widgets::source_your_choice_tag(),
+            short_tag: translated_messages::widgets::source_your_choice_tag(message_catalog),
             explanation: String::new(),
             source_emphasis: SourceEmphasis::PlainSource,
         },
         PreferenceSource::AdministratorDefault => SourceTexts {
-            short_tag: translated_messages::widgets::source_administrator_default_tag(),
-            explanation: translated_messages::widgets::source_administrator_default_explanation(),
+            short_tag: translated_messages::widgets::source_administrator_default_tag(
+                message_catalog,
+            ),
+            explanation: translated_messages::widgets::source_administrator_default_explanation(
+                message_catalog,
+            ),
             source_emphasis: SourceEmphasis::PlainSource,
         },
         PreferenceSource::FixedByConfiguration => SourceTexts {
-            short_tag: translated_messages::widgets::source_fixed_tag(),
-            explanation: translated_messages::widgets::source_fixed_explanation(),
+            short_tag: translated_messages::widgets::source_fixed_tag(message_catalog),
+            explanation: translated_messages::widgets::source_fixed_explanation(message_catalog),
             source_emphasis: SourceEmphasis::FixedValue,
         },
     }
 }
 
-pub fn shown_value_text(typed_value: &TypedSettingValue) -> String {
+pub fn shown_value_text(
+    message_catalog: &MessageCatalog,
+    typed_value: &TypedSettingValue,
+) -> String {
     match typed_value {
         TypedSettingValue::BooleanValue(switch_position) => {
             if switch_position.is_switched_on() {
-                translated_messages::widgets::switched_on_value()
+                translated_messages::widgets::switched_on_value(message_catalog)
             } else {
-                translated_messages::widgets::switched_off_value()
+                translated_messages::widgets::switched_off_value(message_catalog)
             }
         }
         TypedSettingValue::CountValue { .. }
@@ -340,6 +366,7 @@ pub fn shown_value_text(typed_value: &TypedSettingValue) -> String {
 }
 
 pub fn source_texts(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     setting_subject: &SettingSubject,
 ) -> SourceTexts {
@@ -349,52 +376,63 @@ pub fn source_texts(
             preference_source,
             ..
         } if *preference_source != PreferenceSource::FixedByConfiguration => SourceTexts {
-            short_tag: translated_messages::widgets::source_not_applied_tag(),
-            explanation: translated_messages::widgets::source_not_applied_explanation(),
+            short_tag: translated_messages::widgets::source_not_applied_tag(message_catalog),
+            explanation: translated_messages::widgets::source_not_applied_explanation(
+                message_catalog,
+            ),
             source_emphasis: SourceEmphasis::NeedsAttention,
         },
         SettingSubject::Preference {
             preference_source, ..
-        } => preference_source_texts(preference_source),
+        } => preference_source_texts(message_catalog, preference_source),
         SettingSubject::ClamavSetting { clamav_source, .. } => match clamav_source {
             ClamavSource::RootOwnedFile {
                 config_file,
                 file_entry,
                 ..
-            } => file_source_texts(config_file, *file_entry),
+            } => file_source_texts(message_catalog, config_file, *file_entry),
             ClamavSource::SetViaAdminService {
                 config_file,
                 override_lifetime,
                 ..
-            } => override_source_texts(moment_formatters, config_file, *override_lifetime),
+            } => override_source_texts(
+                message_catalog,
+                moment_formatters,
+                config_file,
+                *override_lifetime,
+            ),
             ClamavSource::ProtectedSetting { .. } => SourceTexts {
-                short_tag: translated_messages::widgets::source_protected_tag(),
-                explanation: translated_messages::widgets::source_protected_explanation(),
+                short_tag: translated_messages::widgets::source_protected_tag(message_catalog),
+                explanation: translated_messages::widgets::source_protected_explanation(
+                    message_catalog,
+                ),
                 source_emphasis: SourceEmphasis::FixedValue,
             },
         },
     }
 }
 
-pub fn route_explanation(route: ChangeRoute) -> String {
+pub fn route_explanation(message_catalog: &MessageCatalog, route: ChangeRoute) -> String {
     match route {
         ChangeRoute::ChangesImmediately
         | ChangeRoute::FixedByConfiguration
         | ChangeRoute::NeverChangedHere => String::new(),
         ChangeRoute::AsksAdministratorPassword => {
-            translated_messages::widgets::route_administrator_password_explanation()
+            translated_messages::widgets::route_administrator_password_explanation(message_catalog)
         }
         ChangeRoute::TakesEffectOnGroupApply => {
-            translated_messages::widgets::route_group_apply_explanation()
+            translated_messages::widgets::route_group_apply_explanation(message_catalog)
         }
         ChangeRoute::CopyLineForConfiguration(CopyOnlyReason::OutsideAllowlist) => {
-            translated_messages::widgets::route_outside_allowlist_explanation()
+            translated_messages::widgets::route_outside_allowlist_explanation(message_catalog)
         }
         ChangeRoute::CopyLineForConfiguration(CopyOnlyReason::AdminServiceNotInstalled) => {
-            translated_messages::widgets::route_admin_service_missing_explanation()
+            translated_messages::widgets::route_admin_service_missing_explanation(message_catalog)
         }
         ChangeRoute::CopyLineForConfiguration(CopyOnlyReason::AdminServiceUnreachable) => {
-            translated_messages::widgets::route_admin_service_unreachable_explanation()
+            translated_messages::widgets::route_admin_service_unreachable_explanation(
+                message_catalog,
+            )
         }
     }
 }
@@ -444,10 +482,11 @@ pub fn follow_up_actions(
 }
 
 pub fn row_needs_attention(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     setting_subject: &SettingSubject,
 ) -> bool {
-    source_texts(moment_formatters, setting_subject).source_emphasis
+    source_texts(message_catalog, moment_formatters, setting_subject).source_emphasis
         == SourceEmphasis::NeedsAttention
 }
 
@@ -467,18 +506,31 @@ pub fn draft_refusal(
     }
 }
 
-pub fn describe_parse_failure(parse_failure: SettingParseFailure) -> String {
+pub fn describe_parse_failure(
+    message_catalog: &MessageCatalog,
+    parse_failure: SettingParseFailure,
+) -> String {
     match parse_failure {
-        SettingParseFailure::UnknownOption => translated_messages::widgets::unknown_option(),
-        SettingParseFailure::NotYesOrNo => translated_messages::widgets::not_yes_no(),
-        SettingParseFailure::NotAWholeNumber => translated_messages::widgets::not_whole_number(),
-        SettingParseFailure::CountOutOfRange { minimum, maximum } => {
-            translated_messages::widgets::count_out_range(minimum, maximum)
+        SettingParseFailure::UnknownOption => {
+            translated_messages::widgets::unknown_option(message_catalog)
         }
-        SettingParseFailure::NotASize => translated_messages::widgets::not_size(),
-        SettingParseFailure::PathNotAbsolute => translated_messages::widgets::path_not_absolute(),
-        SettingParseFailure::EmptyText => translated_messages::widgets::empty_text(),
-        SettingParseFailure::NotAClockTime => translated_messages::widgets::not_clock_time(),
+        SettingParseFailure::NotYesOrNo => {
+            translated_messages::widgets::not_yes_no(message_catalog)
+        }
+        SettingParseFailure::NotAWholeNumber => {
+            translated_messages::widgets::not_whole_number(message_catalog)
+        }
+        SettingParseFailure::CountOutOfRange { minimum, maximum } => {
+            translated_messages::widgets::count_out_range(message_catalog, minimum, maximum)
+        }
+        SettingParseFailure::NotASize => translated_messages::widgets::not_size(message_catalog),
+        SettingParseFailure::PathNotAbsolute => {
+            translated_messages::widgets::path_not_absolute(message_catalog)
+        }
+        SettingParseFailure::EmptyText => translated_messages::widgets::empty_text(message_catalog),
+        SettingParseFailure::NotAClockTime => {
+            translated_messages::widgets::not_clock_time(message_catalog)
+        }
     }
 }
 
@@ -545,6 +597,7 @@ mod setting_row_state_tests {
 
     #[test]
     fn a_runtime_change_is_reverted_and_copied_from_its_own_row() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let changed_subject = runtime_override(OverrideLifetime::Permanent);
         assert_eq!(
@@ -558,8 +611,13 @@ mod setting_row_state_tests {
                 FollowUpAction::CopyConfigurationLine
             ]
         );
-        assert!(row_needs_attention(moment_formatters, &changed_subject));
         assert!(row_needs_attention(
+            message_catalog,
+            moment_formatters,
+            &changed_subject
+        ));
+        assert!(row_needs_attention(
+            message_catalog,
             moment_formatters,
             &runtime_override(OverrideLifetime::ExpiresAt {
                 expires_at: Timestamp::UNIX_EPOCH
@@ -569,15 +627,21 @@ mod setting_row_state_tests {
 
     #[test]
     fn an_allowed_setting_is_editable_without_unlocking_and_needs_no_follow_up() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let allowed_subject = file_setting(RuntimeRoute::ChangeableWithPassword);
         assert!(change_route(&allowed_subject).allows_editing());
         assert!(follow_up_actions(&allowed_subject, &switch_value()).is_empty());
-        assert!(!row_needs_attention(moment_formatters, &allowed_subject));
+        assert!(!row_needs_attention(
+            message_catalog,
+            moment_formatters,
+            &allowed_subject
+        ));
     }
 
     #[test]
     fn settings_outside_the_allowlist_offer_only_their_configuration_line() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         [
             CopyOnlyReason::OutsideAllowlist,
             CopyOnlyReason::AdminServiceNotInstalled,
@@ -595,12 +659,13 @@ mod setting_row_state_tests {
                 follow_up_actions(&copy_subject, &switch_value()),
                 vec![FollowUpAction::CopyConfigurationLine]
             );
-            assert!(!route_explanation(change_route(&copy_subject)).is_empty());
+            assert!(!route_explanation(message_catalog, change_route(&copy_subject)).is_empty());
         });
     }
 
     #[test]
     fn protected_settings_and_configured_preferences_are_fixed() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let protected_subject = clamav_subject(ClamavSource::ProtectedSetting {
             config_file: nixos_file(),
@@ -619,13 +684,14 @@ mod setting_row_state_tests {
             ChangeRoute::FixedByConfiguration
         );
         assert_eq!(
-            source_texts(moment_formatters, &locked_subject).source_emphasis,
+            source_texts(message_catalog, moment_formatters, &locked_subject).source_emphasis,
             SourceEmphasis::FixedValue
         );
     }
 
     #[test]
     fn preferences_offer_a_reset_only_when_you_chose_the_value() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         assert_eq!(
             follow_up_actions(
@@ -646,12 +712,17 @@ mod setting_row_state_tests {
             let quiet_subject =
                 preference_subject(preference_source, PreferenceApplyStage::AppliesImmediately);
             assert!(follow_up_actions(&quiet_subject, &switch_value()).is_empty());
-            assert!(!row_needs_attention(moment_formatters, &quiet_subject));
+            assert!(!row_needs_attention(
+                message_catalog,
+                moment_formatters,
+                &quiet_subject
+            ));
         });
     }
 
     #[test]
     fn a_staged_preference_waits_for_the_group_apply() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let staged_subject = preference_subject(
             PreferenceSource::ChosenByYou,
@@ -661,8 +732,13 @@ mod setting_row_state_tests {
             change_route(&staged_subject),
             ChangeRoute::TakesEffectOnGroupApply
         );
-        assert!(row_needs_attention(moment_formatters, &staged_subject));
+        assert!(row_needs_attention(
+            message_catalog,
+            moment_formatters,
+            &staged_subject
+        ));
         assert!(!row_needs_attention(
+            message_catalog,
             moment_formatters,
             &preference_subject(
                 PreferenceSource::ChosenByYou,

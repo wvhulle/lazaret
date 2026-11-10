@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
@@ -9,27 +11,31 @@ use crate::{
         removable_drives_presentation::{drive_decision_icon, drive_decision_text},
         removable_drives_state::DriveEvent,
     },
+    translated_messages::MessageCatalog,
 };
 
 pub struct DriveEventRow {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     drive_event: DriveEvent,
 }
 
 impl DriveEventRow {
     fn event_subtitle(&self) -> String {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         format!(
             "{} · {}",
             moment_formatters.exact_moment_text(self.drive_event.seen_at),
-            drive_decision_text(self.drive_event.drive_decision)
+            drive_decision_text(&message_catalog, self.drive_event.drive_decision)
         )
     }
 }
 
 pub struct DriveEventRowInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub drive_event: DriveEvent,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::factory(pub)]
@@ -54,6 +60,7 @@ impl FactoryComponent for DriveEventRow {
 
     fn init_model(
         DriveEventRowInit {
+            message_catalog,
             drive_event,
             moment_formatters,
         }: Self::Init,
@@ -61,6 +68,7 @@ impl FactoryComponent for DriveEventRow {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             drive_event,
             moment_formatters,
         }

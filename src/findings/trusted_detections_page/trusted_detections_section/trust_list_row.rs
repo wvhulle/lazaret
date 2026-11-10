@@ -1,7 +1,10 @@
+use std::rc::Rc;
+
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
     host_services::clamav_admin_service::trust_requests::TrustChoice, translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Debug)]
@@ -18,6 +21,7 @@ pub enum TrustPromotion {
 
 #[derive(Clone, Debug)]
 pub struct TrustListRow {
+    pub message_catalog: Rc<MessageCatalog>,
     pub row_title: String,
     pub row_subtitle: String,
     pub shows_hash: bool,
@@ -34,8 +38,9 @@ pub enum TrustListRowOutput {
 }
 
 impl TrustListRow {
-    pub fn empty_list(empty_text: String) -> Self {
+    pub fn empty_list(message_catalog: &Rc<MessageCatalog>, empty_text: String) -> Self {
         Self {
+            message_catalog: Rc::clone(message_catalog),
             row_title: empty_text,
             row_subtitle: String::new(),
             shows_hash: false,
@@ -81,8 +86,8 @@ impl FactoryComponent for TrustListRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "system-users-symbolic",
-                set_tooltip_text: Some(&translated_messages::findings::trust_for_all_users_tooltip()),
-                update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::trust_for_all_users_tooltip())],
+                set_tooltip_text: Some(&translated_messages::findings::trust_for_all_users_tooltip(&self.message_catalog)),
+                update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::trust_for_all_users_tooltip(&self.message_catalog))],
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_visible: matches!(self.trust_promotion, TrustPromotion::PromotableWith(_)),
@@ -95,8 +100,8 @@ impl FactoryComponent for TrustListRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "user-trash-symbolic",
-                set_tooltip_text: Some(&translated_messages::findings::remove_tooltip()),
-                update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::remove_tooltip())],
+                set_tooltip_text: Some(&translated_messages::findings::remove_tooltip(&self.message_catalog)),
+                update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::remove_tooltip(&self.message_catalog))],
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_visible: matches!(self.trust_removal, TrustRemoval::RemovableWith(_)),

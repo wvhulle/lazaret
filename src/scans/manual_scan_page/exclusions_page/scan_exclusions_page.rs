@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, gtk::gio,
     prelude::FactoryVecDeque,
@@ -15,12 +17,14 @@ use crate::{
         },
     },
     scans::manual_scan_page::exclusions_page::scan_exclusion_row::{
-        ScanExclusionRow, ScanExclusionRowOutput, is_preset_pattern,
+        ScanExclusionRow, ScanExclusionRowInit, ScanExclusionRowOutput, is_preset_pattern,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct ScanExclusionsSection {
+    pub message_catalog: Rc<MessageCatalog>,
     stored_settings: gio::Settings,
     exclusion_entries: Vec<ExclusionEntry>,
     draft_cleared: bool,
@@ -65,6 +69,7 @@ fn boxed_list() -> gtk::ListBox {
 
 impl ScanExclusionsSection {
     fn show_exclusion_entries(&mut self, exclusion_entries: Vec<ExclusionEntry>) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         if exclusion_entries == self.exclusion_entries {
             return;
         }
@@ -77,9 +82,15 @@ impl ScanExclusionsSection {
             .cloned()
             .for_each(|exclusion_entry| {
                 if is_preset_pattern(&exclusion_entry.exclusion_pattern) {
-                    preset_guard.push_back(exclusion_entry);
+                    preset_guard.push_back(ScanExclusionRowInit {
+                        exclusion_entry,
+                        message_catalog: Rc::clone(&message_catalog),
+                    });
                 } else {
-                    custom_guard.push_back(exclusion_entry);
+                    custom_guard.push_back(ScanExclusionRowInit {
+                        exclusion_entry,
+                        message_catalog: Rc::clone(&message_catalog),
+                    });
                 }
             });
         drop(preset_guard);
@@ -95,9 +106,13 @@ impl ScanExclusionsSection {
     }
 }
 
+pub struct ScanExclusionsSectionInit {
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::component(pub)]
 impl Component for ScanExclusionsSection {
-    type Init = ();
+    type Init = ScanExclusionsSectionInit;
     type Input = ScanExclusionsSectionInput;
     type Output = ();
     type CommandOutput = ();
@@ -109,16 +124,16 @@ impl Component for ScanExclusionsSection {
             set_spacing: 24,
 
             adw::PreferencesGroup {
-                set_title: &translated_messages::scans::preset_exclusions_title(),
-                set_description: Some(&translated_messages::scans::common_directories_exclude_description()),
+                set_title: &translated_messages::scans::preset_exclusions_title(&model.message_catalog),
+                set_description: Some(&translated_messages::scans::common_directories_exclude_description(&model.message_catalog)),
 
                 #[local_ref]
                 preset_list -> gtk::ListBox {},
             },
 
             adw::PreferencesGroup {
-                set_title: &translated_messages::scans::custom_exclusions_title(),
-                set_description: Some(&translated_messages::scans::enter_absolute_path_description()),
+                set_title: &translated_messages::scans::custom_exclusions_title(&model.message_catalog),
+                set_description: Some(&translated_messages::scans::enter_absolute_path_description(&model.message_catalog)),
 
                 gtk::ListBox {
                     add_css_class: "boxed-list",
@@ -126,7 +141,7 @@ impl Component for ScanExclusionsSection {
                     set_margin_bottom: 12,
 
                     adw::EntryRow {
-                        set_title: &translated_messages::scans::path_exclude_tmp_title(),
+                        set_title: &translated_messages::scans::path_exclude_tmp_title(&model.message_catalog),
                         set_show_apply_button: true,
                         #[track(model.draft_cleared)]
                         set_text: "",
@@ -146,7 +161,7 @@ impl Component for ScanExclusionsSection {
     }
 
     fn init(
-        _page_init: Self::Init,
+        ScanExclusionsSectionInit { message_catalog }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -158,6 +173,7 @@ impl Component for ScanExclusionsSection {
             |_changed_settings, _changed_key| ScanExclusionsSectionInput::StoredRulesChanged,
         );
         let mut model = Self {
+            message_catalog,
             exclusion_entries: Vec::new(),
             draft_cleared: false,
             preset_rows: FactoryVecDeque::builder()

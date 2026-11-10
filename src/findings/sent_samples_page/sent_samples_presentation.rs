@@ -31,6 +31,7 @@ use crate::{
         submission_outcome_text::history_failure_text,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const SHORT_HASH_LENGTH: usize = 12;
@@ -43,27 +44,36 @@ pub const fn service_name(submission_service: SubmissionService) -> &'static str
     }
 }
 
-pub fn kind_text(submission_kind: SubmissionKind) -> String {
+pub fn kind_text(message_catalog: &MessageCatalog, submission_kind: SubmissionKind) -> String {
     match submission_kind {
-        SubmissionKind::FalsePositive => translated_messages::findings::false_positive(),
-        SubmissionKind::MissedMalware => translated_messages::findings::missed_malware(),
-        SubmissionKind::MalwareSample => translated_messages::findings::malware_sample(),
+        SubmissionKind::FalsePositive => {
+            translated_messages::findings::false_positive(message_catalog)
+        }
+        SubmissionKind::MissedMalware => {
+            translated_messages::findings::missed_malware(message_catalog)
+        }
+        SubmissionKind::MalwareSample => {
+            translated_messages::findings::malware_sample(message_catalog)
+        }
     }
 }
 
-pub fn target_choice_label(submission_target: SubmissionTarget) -> String {
+pub fn target_choice_label(
+    message_catalog: &MessageCatalog,
+    submission_target: SubmissionTarget,
+) -> String {
     match submission_target {
         SubmissionTarget::ClamavFalsePositive => {
-            translated_messages::findings::clamav_false_positive()
+            translated_messages::findings::clamav_false_positive(message_catalog)
         }
         SubmissionTarget::ClamavMissedMalware => {
-            translated_messages::findings::clamav_missed_malware()
+            translated_messages::findings::clamav_missed_malware(message_catalog)
         }
         SubmissionTarget::MalwareBazaarSample => {
-            translated_messages::findings::malwarebazaar_sample_choice()
+            translated_messages::findings::malwarebazaar_sample_choice(message_catalog)
         }
         SubmissionTarget::VirusTotalSample => {
-            translated_messages::findings::virustotal_sample_choice()
+            translated_messages::findings::virustotal_sample_choice(message_catalog)
         }
     }
 }
@@ -85,11 +95,11 @@ fn settled_version_text(
     }
 }
 
-fn awaiting_clamav_text() -> String {
-    translated_messages::findings::awaiting_clamav()
+fn awaiting_clamav_text(message_catalog: &MessageCatalog) -> String {
+    translated_messages::findings::awaiting_clamav(message_catalog)
 }
 
-pub fn status_text(submission_state: &SubmissionState) -> String {
+pub fn status_text(message_catalog: &MessageCatalog, submission_state: &SubmissionState) -> String {
     match submission_state {
         SubmissionState::ClamavFalsePositive {
             review_status: FalsePositiveReview::AwaitingClamavReview,
@@ -97,38 +107,44 @@ pub fn status_text(submission_state: &SubmissionState) -> String {
         }
         | SubmissionState::ClamavMissedMalware {
             review_status: MissedMalwareReview::AwaitingClamavReview,
-        } => awaiting_clamav_text(),
+        } => awaiting_clamav_text(message_catalog),
         SubmissionState::ClamavFalsePositive {
             review_status: FalsePositiveReview::FixedInDatabase { database_version },
             ..
         } => settled_version_text(
             *database_version,
-            |version_text| translated_messages::findings::fixed_database_version(version_text),
-            translated_messages::findings::fixed_current_signature_database(),
+            |version_text| {
+                translated_messages::findings::fixed_database_version(message_catalog, version_text)
+            },
+            translated_messages::findings::fixed_current_signature_database(message_catalog),
         ),
         SubmissionState::ClamavMissedMalware {
             review_status: MissedMalwareReview::NowDetected { database_version },
         } => settled_version_text(
             *database_version,
             |version_text| {
-                translated_messages::findings::detected_since_database_version(version_text)
+                translated_messages::findings::detected_since_database_version(
+                    message_catalog,
+                    version_text,
+                )
             },
-            translated_messages::findings::detected_current_signature_database(),
+            translated_messages::findings::detected_current_signature_database(message_catalog),
         ),
         SubmissionState::MalwareBazaarSample {
             bazaar_status: BazaarSampleStatus::UploadAccepted,
-        } => translated_messages::findings::uploaded_waiting_malwarebazaar_list(),
+        } => translated_messages::findings::uploaded_waiting_malwarebazaar_list(message_catalog),
         SubmissionState::MalwareBazaarSample {
             bazaar_status: BazaarSampleStatus::ListedOnMalwareBazaar,
-        } => translated_messages::findings::listed_malwarebazaar(),
+        } => translated_messages::findings::listed_malwarebazaar(message_catalog),
         SubmissionState::MalwareBazaarSample {
             bazaar_status: BazaarSampleStatus::SubmissionRefused { refusal_reason },
-        } => translated_messages::findings::malwarebazaar_refused_reason(sanitize_scanner_line(
-            refusal_reason,
-        )),
+        } => translated_messages::findings::malwarebazaar_refused_reason(
+            message_catalog,
+            sanitize_scanner_line(refusal_reason),
+        ),
         SubmissionState::VirusTotalSample {
             virustotal_status: VirusTotalSampleStatus::VirusTotalAnalysisQueued { .. },
-        } => translated_messages::findings::queued_analysis_virustotal(),
+        } => translated_messages::findings::queued_analysis_virustotal(message_catalog),
         SubmissionState::VirusTotalSample {
             virustotal_status:
                 VirusTotalSampleStatus::VirusTotalAnalysed {
@@ -136,14 +152,17 @@ pub fn status_text(submission_state: &SubmissionState) -> String {
                     engine_count,
                     ..
                 },
-        } => {
-            translated_messages::findings::count_total_engine_flags(*engine_count, malicious_count)
-        }
+        } => translated_messages::findings::count_total_engine_flags(
+            message_catalog,
+            *engine_count,
+            malicious_count,
+        ),
         SubmissionState::VirusTotalSample {
             virustotal_status: VirusTotalSampleStatus::SubmissionRefused { refusal_reason },
-        } => translated_messages::findings::virustotal_refused_reason(sanitize_scanner_line(
-            refusal_reason,
-        )),
+        } => translated_messages::findings::virustotal_refused_reason(
+            message_catalog,
+            sanitize_scanner_line(refusal_reason),
+        ),
     }
 }
 
@@ -156,13 +175,15 @@ pub struct SubmittedRowView {
 }
 
 pub fn submitted_row_view(
+    message_catalog: &MessageCatalog,
     submission_record: &SubmissionRecord,
     moment_formatters: &MomentFormatters,
 ) -> SubmittedRowView {
     let submission_target = submission_record.submission_state.submission_target();
     let summary_line = translated_messages::findings::service_kind_hash_date(
+        message_catalog,
         service_name(submission_target.submission_service()),
-        kind_text(submission_target.submission_kind()),
+        kind_text(message_catalog, submission_target.submission_kind()),
         short_hash(&submission_record.submitted_file.content_sha256),
         moment_formatters.exact_moment_text(submission_record.submitted_at),
     );
@@ -170,7 +191,7 @@ pub fn submitted_row_view(
         row_title: sanitize_scanner_line(&submission_record.submitted_file.file_name),
         row_subtitle: format!(
             "{summary_line}\n{}",
-            status_text(&submission_record.submission_state)
+            status_text(message_catalog, &submission_record.submission_state)
         ),
         needs_attention: submission_record.submission_state.submission_progress()
             == SubmissionProgress::RefusedByService,
@@ -195,10 +216,11 @@ impl CandidateRowView {
 }
 
 pub fn candidate_row_view(
+    message_catalog: &MessageCatalog,
     entry_record: &QuarantineEntryRecord,
     uploads_in_flight: &UploadsInFlight,
 ) -> CandidateRowView {
-    let detection_text = displayed_threat_name(&entry_record.threat_identity);
+    let detection_text = displayed_threat_name(message_catalog, &entry_record.threat_identity);
     CandidateRowView {
         entry_id: entry_record.entry_id,
         row_title: shown_file_name(&entry_record.original_path),
@@ -207,7 +229,10 @@ pub fn candidate_row_view(
                 format!("{detection_text} · {}", short_hash(sha256_hex))
             }
             RecordedPayloadHash::IntegrityUnknown => {
-                translated_messages::findings::integrity_unknown_candidate(&detection_text)
+                translated_messages::findings::integrity_unknown_candidate(
+                    message_catalog,
+                    &detection_text,
+                )
             }
         },
         send_availability: send_availability(&offered_target_activities(
@@ -217,96 +242,131 @@ pub fn candidate_row_view(
     }
 }
 
-pub fn service_filter_label(service_filter: ServiceFilter) -> String {
+pub fn service_filter_label(
+    message_catalog: &MessageCatalog,
+    service_filter: ServiceFilter,
+) -> String {
     match service_filter {
-        ServiceFilter::AllServices => translated_messages::findings::all_services(),
+        ServiceFilter::AllServices => translated_messages::findings::all_services(message_catalog),
         ServiceFilter::OnlyService(submission_service) => {
             service_name(submission_service).to_owned()
         }
     }
 }
 
-pub fn progress_filter_label(progress_filter: ProgressFilter) -> String {
+pub fn progress_filter_label(
+    message_catalog: &MessageCatalog,
+    progress_filter: ProgressFilter,
+) -> String {
     match progress_filter {
-        ProgressFilter::AllProgress => translated_messages::findings::any_status_option(),
+        ProgressFilter::AllProgress => {
+            translated_messages::findings::any_status_option(message_catalog)
+        }
         ProgressFilter::OnlyProgress(SubmissionProgress::AwaitingOutcome) => {
-            translated_messages::findings::waiting_label()
+            translated_messages::findings::waiting_label(message_catalog)
         }
         ProgressFilter::OnlyProgress(SubmissionProgress::OutcomeKnown) => {
-            translated_messages::findings::settled_label()
+            translated_messages::findings::settled_label(message_catalog)
         }
         ProgressFilter::OnlyProgress(SubmissionProgress::RefusedByService) => {
-            translated_messages::findings::refused_label()
+            translated_messages::findings::refused_label(message_catalog)
         }
     }
 }
 
-pub fn filter_summary_text(submission_filters: &SubmissionFilters) -> String {
+pub fn filter_summary_text(
+    message_catalog: &MessageCatalog,
+    submission_filters: &SubmissionFilters,
+) -> String {
     match (
         submission_filters.service_filter,
         submission_filters.progress_filter,
     ) {
         (ServiceFilter::AllServices, ProgressFilter::AllProgress) => {
-            translated_messages::findings::all_submissions_option()
+            translated_messages::findings::all_submissions_option(message_catalog)
         }
-        (ServiceFilter::AllServices, progress_filter) => progress_filter_label(progress_filter),
-        (service_filter, ProgressFilter::AllProgress) => service_filter_label(service_filter),
+        (ServiceFilter::AllServices, progress_filter) => {
+            progress_filter_label(message_catalog, progress_filter)
+        }
+        (service_filter, ProgressFilter::AllProgress) => {
+            service_filter_label(message_catalog, service_filter)
+        }
         (service_filter, progress_filter) => format!(
             "{} · {}",
-            service_filter_label(service_filter),
-            progress_filter_label(progress_filter)
+            service_filter_label(message_catalog, service_filter),
+            progress_filter_label(message_catalog, progress_filter)
         ),
     }
 }
 
-pub fn empty_submissions_text(submission_listing: &SubmissionListing) -> String {
+pub fn empty_submissions_text(
+    message_catalog: &MessageCatalog,
+    submission_listing: &SubmissionListing,
+) -> String {
     match submission_listing {
-        SubmissionListing::ListingLoading => translated_messages::findings::listing_loading(),
+        SubmissionListing::ListingLoading => {
+            translated_messages::findings::listing_loading(message_catalog)
+        }
         SubmissionListing::ListingLoaded(listed_submissions) if listed_submissions.is_empty() => {
-            translated_messages::findings::nothing_submitted()
+            translated_messages::findings::nothing_submitted(message_catalog)
         }
         SubmissionListing::ListingLoaded(_) => {
-            translated_messages::findings::no_submission_matches_filters()
+            translated_messages::findings::no_submission_matches_filters(message_catalog)
         }
-        SubmissionListing::ListingFailed(history_failure) => history_failure_text(history_failure),
+        SubmissionListing::ListingFailed(history_failure) => {
+            history_failure_text(message_catalog, history_failure)
+        }
     }
 }
 
-pub fn empty_candidates_text(candidate_listing: &CandidateListing) -> String {
+pub fn empty_candidates_text(
+    message_catalog: &MessageCatalog,
+    candidate_listing: &CandidateListing,
+) -> String {
     match candidate_listing {
-        CandidateListing::CandidatesLoading => translated_messages::findings::candidates_loading(),
+        CandidateListing::CandidatesLoading => {
+            translated_messages::findings::candidates_loading(message_catalog)
+        }
         CandidateListing::CandidatesLoaded(_) => {
-            translated_messages::findings::quarantine_empty_sent()
+            translated_messages::findings::quarantine_empty_sent(message_catalog)
         }
         CandidateListing::CandidatesFailed(quarantine_failure) => {
-            describe_quarantine_failure(quarantine_failure)
+            describe_quarantine_failure(message_catalog, quarantine_failure)
         }
     }
 }
 
-fn refresh_failure_text(refresh_failure: &RemoteRefreshFailure) -> String {
+fn refresh_failure_text(
+    message_catalog: &MessageCatalog,
+    refresh_failure: &RemoteRefreshFailure,
+) -> String {
     match refresh_failure {
         RemoteRefreshFailure::BazaarLookupFailed(bazaar_failure) => {
-            describe_bazaar_failure(bazaar_failure)
+            describe_bazaar_failure(message_catalog, bazaar_failure)
         }
         RemoteRefreshFailure::VirusTotalLookupFailed(virustotal_failure) => {
-            describe_virustotal_failure(virustotal_failure)
+            describe_virustotal_failure(message_catalog, virustotal_failure)
         }
         RemoteRefreshFailure::HistoryFailed(history_failure) => {
-            history_failure_text(history_failure)
+            history_failure_text(message_catalog, history_failure)
         }
     }
 }
 
-pub fn refresh_summary_text(refresh_summary: &RemoteRefreshSummary) -> String {
+pub fn refresh_summary_text(
+    message_catalog: &MessageCatalog,
+    refresh_summary: &RemoteRefreshSummary,
+) -> String {
     let updated_text = match refresh_summary.updated_count {
-        0 => translated_messages::findings::no_upload_changed(),
-        updated_count => translated_messages::findings::count_upload_new_status(updated_count),
+        0 => translated_messages::findings::no_upload_changed(message_catalog),
+        updated_count => {
+            translated_messages::findings::count_upload_new_status(message_catalog, updated_count)
+        }
     };
     refresh_summary
         .refresh_failures
         .iter()
-        .map(refresh_failure_text)
+        .map(|refresh_failure| refresh_failure_text(message_catalog, refresh_failure))
         .fold(updated_text, |summary_text, failure_text| {
             format!("{summary_text}. {failure_text}")
         })
@@ -342,7 +402,9 @@ mod submissions_presentation_tests {
 
     #[test]
     fn a_submitted_row_shows_service_kind_hash_date_and_status() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let row_view = submitted_row_view(
+            message_catalog,
             &record_with(SubmissionState::ClamavFalsePositive {
                 reported_signature: "Win.Trojan.Agent".to_owned(),
                 review_status: FalsePositiveReview::FixedInDatabase {
@@ -370,17 +432,23 @@ mod submissions_presentation_tests {
 
     #[test]
     fn waiting_clamav_reports_mention_the_review_time() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert!(
-            status_text(&SubmissionState::ClamavMissedMalware {
-                review_status: MissedMalwareReview::AwaitingClamavReview,
-            })
+            status_text(
+                message_catalog,
+                &SubmissionState::ClamavMissedMalware {
+                    review_status: MissedMalwareReview::AwaitingClamavReview,
+                }
+            )
             .contains("at least 48 hours")
         );
     }
 
     #[test]
     fn refused_uploads_need_attention_and_link_nowhere() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let row_view = submitted_row_view(
+            message_catalog,
             &record_with(SubmissionState::MalwareBazaarSample {
                 bazaar_status: BazaarSampleStatus::SubmissionRefused {
                     refusal_reason: "file_expected".to_owned(),
@@ -395,7 +463,9 @@ mod submissions_presentation_tests {
 
     #[test]
     fn analysed_uploads_show_the_engine_counts_and_link_to_the_report() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let row_view = submitted_row_view(
+            message_catalog,
             &record_with(SubmissionState::VirusTotalSample {
                 virustotal_status: VirusTotalSampleStatus::VirusTotalAnalysed {
                     analysis_id: "analysis-1".to_owned(),
@@ -418,7 +488,9 @@ mod submissions_presentation_tests {
 
     #[test]
     fn an_unhashed_candidate_cannot_be_sent() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let candidate_view = candidate_row_view(
+            message_catalog,
             &QuarantineEntryRecord {
                 entry_id: 5,
                 original_path: PathBuf::from("/home/user/old.bin"),
@@ -443,13 +515,17 @@ mod submissions_presentation_tests {
 
     #[test]
     fn a_refresh_summary_lists_what_changed_and_what_failed() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
-            refresh_summary_text(&RemoteRefreshSummary {
-                updated_count: 2,
-                refresh_failures: vec![RemoteRefreshFailure::BazaarLookupFailed(
-                    MalwareBazaarFailure::UnexpectedStatus { status_code: 503 },
-                )],
-            }),
+            refresh_summary_text(
+                message_catalog,
+                &RemoteRefreshSummary {
+                    updated_count: 2,
+                    refresh_failures: vec![RemoteRefreshFailure::BazaarLookupFailed(
+                        MalwareBazaarFailure::UnexpectedStatus { status_code: 503 },
+                    )],
+                }
+            ),
             "2 uploads have a new status. MalwareBazaar answered with status 503"
         );
     }

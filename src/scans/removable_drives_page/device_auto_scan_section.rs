@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, adw,
     adw::prelude::*, gtk::gio,
@@ -15,9 +17,11 @@ use crate::{
         PreferenceApplyMode, PreferenceRowSpec, PreferenceRowsGroup, PreferenceRowsInit,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct DeviceAutoScanSection {
+    pub message_catalog: Rc<MessageCatalog>,
     stored_settings: gio::Settings,
     device_scan_rows: Controller<PreferenceRowsGroup>,
 }
@@ -32,28 +36,31 @@ pub enum DeviceAutoScanSectionOutput {
     SettingsChanged(DeviceAutoScanSettings),
 }
 
-fn device_scan_row_specs() -> Vec<PreferenceRowSpec> {
+fn device_scan_row_specs(message_catalog: &MessageCatalog) -> Vec<PreferenceRowSpec> {
     vec![
         PreferenceRowSpec {
             preference_key: PreferenceKey::DeviceScanEnabled,
-            setting_title: translated_messages::scans::enable_device_auto_title(),
+            setting_title: translated_messages::scans::enable_device_auto_title(message_catalog),
             setting_description: String::new(),
         },
         PreferenceRowSpec {
             preference_key: PreferenceKey::DeviceScanMaxGigabytes,
-            setting_title: translated_messages::scans::max_device_size_title(),
-            setting_description: translated_messages::scans::no_size_limit_subtitle(),
+            setting_title: translated_messages::scans::max_device_size_title(message_catalog),
+            setting_description: translated_messages::scans::no_size_limit_subtitle(
+                message_catalog,
+            ),
         },
         PreferenceRowSpec {
             preference_key: PreferenceKey::DeviceScanSkipOnBattery,
-            setting_title: translated_messages::scans::skip_battery_device_title(),
+            setting_title: translated_messages::scans::skip_battery_device_title(message_catalog),
             setting_description: String::new(),
         },
     ]
 }
 
 pub struct DeviceAutoScanSectionInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::component(pub)]
@@ -67,14 +74,17 @@ impl Component for DeviceAutoScanSection {
         adw::PreferencesGroup {
             #[local_ref]
             device_scan_group -> adw::PreferencesGroup {
-                set_title: &translated_messages::scans::device_auto_scan_title(),
-                set_description: Some(&translated_messages::scans::automatically_scan_removable_description()),
+                set_title: &translated_messages::scans::device_auto_scan_title(&model.message_catalog),
+                set_description: Some(&translated_messages::scans::automatically_scan_removable_description(&model.message_catalog)),
             },
         }
     }
 
     fn init(
-        DeviceAutoScanSectionInit { moment_formatters }: Self::Init,
+        DeviceAutoScanSectionInit {
+            message_catalog,
+            moment_formatters,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -86,11 +96,13 @@ impl Component for DeviceAutoScanSection {
             |_changed_settings, _changed_key| DeviceAutoScanSectionInput::StoredSettingChanged,
         );
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             stored_settings,
             device_scan_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     moment_formatters,
-                    row_specs: device_scan_row_specs(),
+                    row_specs: device_scan_row_specs(&message_catalog),
                     apply_mode: PreferenceApplyMode::AppliesImmediately,
                 })
                 .detach(),

@@ -12,6 +12,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -179,12 +180,18 @@ impl SystemScanControl {
         matches!(self.scan_run, SystemScanRun::UnitRunning { .. })
     }
 
-    pub fn run_status_title(&self) -> String {
+    pub fn run_status_title(&self, message_catalog: &MessageCatalog) -> String {
         match self.scan_run {
             SystemScanRun::RunIdle => String::new(),
-            SystemScanRun::RunRequested => translated_messages::scans::starting_scan_tooltip(),
-            SystemScanRun::UnitRunning { .. } => translated_messages::scans::scanning_title(),
-            SystemScanRun::StopRequested { .. } => translated_messages::scans::stopping_scan(),
+            SystemScanRun::RunRequested => {
+                translated_messages::scans::starting_scan_tooltip(message_catalog)
+            }
+            SystemScanRun::UnitRunning { .. } => {
+                translated_messages::scans::scanning_title(message_catalog)
+            }
+            SystemScanRun::StopRequested { .. } => {
+                translated_messages::scans::stopping_scan(message_catalog)
+            }
         }
     }
 
@@ -203,29 +210,31 @@ impl SystemScanControl {
         }
     }
 
-    pub fn scanned_folders_text(&self) -> String {
+    pub fn scanned_folders_text(&self, message_catalog: &MessageCatalog) -> String {
         match &self.scan_availability {
             SystemScanAvailability::SystemScanService {
                 scanned_folders, ..
             } if !scanned_folders.is_empty() => scanned_folders.join(", "),
             SystemScanAvailability::SystemScanService { .. } => {
-                translated_messages::scans::unit_names_no_folders()
+                translated_messages::scans::unit_names_no_folders(message_catalog)
             }
             SystemScanAvailability::NoSystemScanService => String::new(),
         }
     }
 
-    pub fn group_description(&self) -> String {
+    pub fn group_description(&self, message_catalog: &MessageCatalog) -> String {
         match &self.scan_availability {
             SystemScanAvailability::SystemScanService {
                 service_unit,
                 daemon_answering: true,
                 ..
-            } => translated_messages::scans::system_scan_service_unit(service_unit),
+            } => {
+                translated_messages::scans::system_scan_service_unit(message_catalog, service_unit)
+            }
             SystemScanAvailability::SystemScanService {
                 daemon_answering: false,
                 ..
-            } => translated_messages::scans::needs_daemon_see_scan(),
+            } => translated_messages::scans::needs_daemon_see_scan(message_catalog),
             SystemScanAvailability::NoSystemScanService => String::new(),
         }
     }
@@ -261,53 +270,73 @@ pub fn scan_found_threats(
         )
 }
 
-fn systemd_failure_text(bus_failure: &SystemdBusFailure) -> String {
+fn systemd_failure_text(
+    message_catalog: &MessageCatalog,
+    bus_failure: &SystemdBusFailure,
+) -> String {
     match bus_failure {
         SystemdBusFailure::BusCallFailed(bus_error) => translated_messages::scans::bus_call_failed(
+            message_catalog,
             sanitize_scanner_line(&bus_error.to_string()),
         ),
         SystemdBusFailure::UnrecognizedLoadState => {
-            translated_messages::scans::unrecognized_load_state()
+            translated_messages::scans::unrecognized_load_state(message_catalog)
         }
     }
 }
 
-pub fn unit_stop_toast_text(stop_outcome: &UnitStartOutcome) -> Option<String> {
+pub fn unit_stop_toast_text(
+    message_catalog: &MessageCatalog,
+    stop_outcome: &UnitStartOutcome,
+) -> Option<String> {
     match stop_outcome {
         UnitStartOutcome::UnitFinished => None,
-        UnitStartOutcome::AuthorizationRefused => {
-            Some(translated_messages::scans::stop_authorization_refused())
+        UnitStartOutcome::AuthorizationRefused => Some(
+            translated_messages::scans::stop_authorization_refused(message_catalog),
+        ),
+        UnitStartOutcome::BusFailure(bus_failure) => {
+            Some(translated_messages::scans::not_stopped_error(
+                message_catalog,
+                systemd_failure_text(message_catalog, bus_failure),
+            ))
         }
-        UnitStartOutcome::BusFailure(bus_failure) => Some(
-            translated_messages::scans::not_stopped_error(systemd_failure_text(bus_failure)),
-        ),
-        UnitStartOutcome::JobEnded { job_result } => Some(
-            translated_messages::scans::not_stopped_error(sanitize_scanner_line(job_result)),
-        ),
+        UnitStartOutcome::JobEnded { job_result } => {
+            Some(translated_messages::scans::not_stopped_error(
+                message_catalog,
+                sanitize_scanner_line(job_result),
+            ))
+        }
     }
 }
 
 pub fn unit_run_toast_text(
+    message_catalog: &MessageCatalog,
     start_outcome: &UnitStartOutcome,
     scan_service: &ScanServiceEvidence,
 ) -> String {
     if scan_found_threats(start_outcome, scan_service) {
-        return translated_messages::scans::found_malware();
+        return translated_messages::scans::found_malware(message_catalog);
     }
     if scan_was_stopped(start_outcome, scan_service) {
-        return translated_messages::scans::scan_stopped();
+        return translated_messages::scans::scan_stopped(message_catalog);
     }
     match start_outcome {
-        UnitStartOutcome::UnitFinished => translated_messages::scans::unit_finished(),
+        UnitStartOutcome::UnitFinished => {
+            translated_messages::scans::unit_finished(message_catalog)
+        }
         UnitStartOutcome::JobEnded { job_result } => {
-            translated_messages::scans::not_finish_cleanly_result(sanitize_scanner_line(job_result))
+            translated_messages::scans::not_finish_cleanly_result(
+                message_catalog,
+                sanitize_scanner_line(job_result),
+            )
         }
         UnitStartOutcome::AuthorizationRefused => {
-            translated_messages::scans::authorization_refused()
+            translated_messages::scans::authorization_refused(message_catalog)
         }
-        UnitStartOutcome::BusFailure(bus_failure) => {
-            translated_messages::scans::not_started_error(systemd_failure_text(bus_failure))
-        }
+        UnitStartOutcome::BusFailure(bus_failure) => translated_messages::scans::not_started_error(
+            message_catalog,
+            systemd_failure_text(message_catalog, bus_failure),
+        ),
     }
 }
 
@@ -376,11 +405,15 @@ mod system_scan_run_tests {
 
     #[test]
     fn a_scan_the_timer_started_shows_as_running_and_can_be_stopped() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut system_scan_control = control_with(&running_scan_evidence());
         assert!(system_scan_control.shows_run_status());
         assert!(!system_scan_control.accepts_run());
         assert!(system_scan_control.accepts_stop());
-        assert_eq!(system_scan_control.run_status_title(), "Scanning");
+        assert_eq!(
+            system_scan_control.run_status_title(message_catalog),
+            "Scanning"
+        );
         assert_eq!(system_scan_control.run_started_at(), Some(SCAN_STARTED_AT));
         assert_eq!(
             system_scan_control.stop_requested(),
@@ -390,7 +423,10 @@ mod system_scan_run_tests {
         );
         assert!(!system_scan_control.accepts_stop());
         system_scan_control.evidence_gathered(&running_scan_evidence());
-        assert_eq!(system_scan_control.run_status_title(), "Stopping the scan…");
+        assert_eq!(
+            system_scan_control.run_status_title(message_catalog),
+            "Stopping the scan…"
+        );
         system_scan_control.evidence_gathered(&healthy_evidence());
         assert!(!system_scan_control.shows_run_status());
         assert!(system_scan_control.accepts_run());
@@ -407,10 +443,14 @@ mod system_scan_run_tests {
 
     #[test]
     fn a_requested_run_waits_for_authorization_while_the_unit_is_still_idle() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut system_scan_control = control_with(&healthy_evidence());
         let _started_unit = system_scan_control.run_requested();
         system_scan_control.evidence_gathered(&healthy_evidence());
-        assert_eq!(system_scan_control.run_status_title(), "Starting the scan…");
+        assert_eq!(
+            system_scan_control.run_status_title(message_catalog),
+            "Starting the scan…"
+        );
         system_scan_control.evidence_gathered(&running_scan_evidence());
         assert!(system_scan_control.accepts_stop());
         system_scan_control.run_finished();
@@ -439,6 +479,7 @@ mod system_scan_run_tests {
 
     #[test]
     fn a_stopped_daemon_shows_the_service_but_does_not_run_it() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut system_scan_control = control_with(&ProtectionEvidence {
             daemon_evidence: DaemonEvidence::UnitStopped {
                 service_unit: "clamav-daemon.service",
@@ -452,15 +493,16 @@ mod system_scan_run_tests {
             SystemScanStart::NothingToStart
         );
         assert_eq!(
-            system_scan_control.group_description(),
+            system_scan_control.group_description(message_catalog),
             "Needs the daemon, see Scan Engine"
         );
     }
 
     #[test]
     fn the_scanned_folders_come_from_the_scan_unit() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
-            control_with(&healthy_evidence()).scanned_folders_text(),
+            control_with(&healthy_evidence()).scanned_folders_text(message_catalog),
             "/tmp, /var/tmp"
         );
     }
@@ -476,36 +518,44 @@ mod system_scan_run_tests {
 
     #[test]
     fn finding_malware_is_not_reported_as_a_failed_scan() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let failed_job = UnitStartOutcome::JobEnded {
             job_result: "failed".to_owned(),
         };
         assert_eq!(
-            unit_run_toast_text(&failed_job, &loaded_scan_service(1)),
+            unit_run_toast_text(message_catalog, &failed_job, &loaded_scan_service(1)),
             "The scan found malware"
         );
         assert!(
-            unit_run_toast_text(&failed_job, &loaded_scan_service(2))
+            unit_run_toast_text(message_catalog, &failed_job, &loaded_scan_service(2))
                 .contains("did not finish cleanly")
         );
     }
 
     #[test]
     fn a_refused_stop_is_not_reported_as_a_failed_start() {
-        assert_eq!(unit_stop_toast_text(&UnitStartOutcome::UnitFinished), None);
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
-            unit_stop_toast_text(&UnitStartOutcome::AuthorizationRefused).as_deref(),
+            unit_stop_toast_text(message_catalog, &UnitStartOutcome::UnitFinished),
+            None
+        );
+        assert_eq!(
+            unit_stop_toast_text(message_catalog, &UnitStartOutcome::AuthorizationRefused)
+                .as_deref(),
             Some("Stopping the scan needs administrator authorization")
         );
         assert!(
-            unit_stop_toast_text(&UnitStartOutcome::BusFailure(
-                SystemdBusFailure::UnrecognizedLoadState
-            ))
+            unit_stop_toast_text(
+                message_catalog,
+                &UnitStartOutcome::BusFailure(SystemdBusFailure::UnrecognizedLoadState)
+            )
             .is_some_and(|stop_text| stop_text.starts_with("The scan could not be stopped"))
         );
     }
 
     #[test]
     fn a_scan_killed_by_a_signal_is_reported_as_stopped() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let failed_job = UnitStartOutcome::JobEnded {
             job_result: "failed".to_owned(),
         };
@@ -518,18 +568,20 @@ mod system_scan_run_tests {
             program_arguments: Vec::new(),
         });
         assert_eq!(
-            unit_run_toast_text(&failed_job, &killed_service),
+            unit_run_toast_text(message_catalog, &failed_job, &killed_service),
             "The scan was stopped"
         );
     }
 
     #[test]
     fn an_unreadable_scan_service_never_claims_malware_was_found() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let failed_job = UnitStartOutcome::JobEnded {
             job_result: "failed".to_owned(),
         };
         assert!(
             unit_run_toast_text(
+                message_catalog,
                 &failed_job,
                 &scan_service_evidence(ServiceUnitSnapshot::SystemdUnreachable(
                     SystemdBusFailure::UnrecognizedLoadState
@@ -539,6 +591,7 @@ mod system_scan_run_tests {
         );
         assert_eq!(
             unit_run_toast_text(
+                message_catalog,
                 &UnitStartOutcome::BusFailure(SystemdBusFailure::UnrecognizedLoadState),
                 &ScanServiceEvidence::ServiceMissing
             ),

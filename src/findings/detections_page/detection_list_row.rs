@@ -1,11 +1,17 @@
+use std::rc::Rc;
+
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
-use crate::findings::detections_page::incident_timeline_presentation::{
-    DisplayedDetection, detection_needs_attention, detection_summary_text, displayed_file_name,
-    displayed_file_path,
+use crate::{
+    findings::detections_page::incident_timeline_presentation::{
+        DisplayedDetection, detection_needs_attention, detection_summary_text, displayed_file_name,
+        displayed_file_path,
+    },
+    translated_messages::MessageCatalog,
 };
 
 pub struct DetectionListRow {
+    pub message_catalog: Rc<MessageCatalog>,
     displayed_detection: DisplayedDetection,
 }
 
@@ -27,7 +33,7 @@ impl DetectionListRow {
         }
     }
 
-    const fn attention_style(&self, needs_attention: bool) -> &'static str {
+    fn attention_style(&self, needs_attention: bool) -> &'static str {
         if needs_attention {
             "warning"
         } else {
@@ -36,9 +42,14 @@ impl DetectionListRow {
     }
 }
 
+pub struct DetectionListRowInit {
+    pub displayed_detection: DisplayedDetection,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::factory(pub)]
 impl FactoryComponent for DetectionListRow {
-    type Init = DisplayedDetection;
+    type Init = DetectionListRowInit;
     type Input = ();
     type Output = DetectionListRowOutput;
     type CommandOutput = ();
@@ -48,7 +59,7 @@ impl FactoryComponent for DetectionListRow {
         adw::ActionRow {
             set_use_markup: false,
             set_title: &displayed_file_name(&self.displayed_detection.stored_detection),
-            set_subtitle: &detection_summary_text(&self.displayed_detection),
+            set_subtitle: &detection_summary_text(&self.message_catalog, &self.displayed_detection),
             set_subtitle_lines: 0,
             set_tooltip_text: Some(&displayed_file_path(&self.displayed_detection.stored_detection)),
             set_activatable: true,
@@ -67,11 +78,15 @@ impl FactoryComponent for DetectionListRow {
     }
 
     fn init_model(
-        displayed_detection: Self::Init,
+        DetectionListRowInit {
+            displayed_detection,
+            message_catalog,
+        }: Self::Init,
         _row_index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             displayed_detection,
         }
     }

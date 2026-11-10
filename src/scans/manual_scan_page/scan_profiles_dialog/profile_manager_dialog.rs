@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     abstractions::Toaster,
@@ -13,7 +15,7 @@ use crate::{
         profile_editor_dialog::{
             ProfileEditorDialog, ProfileEditorDialogInit, ProfileEditorDialogOutput,
         },
-        scan_profile_row::{ScanProfileRow, ScanProfileRowOutput},
+        scan_profile_row::{ScanProfileRow, ScanProfileRowInit, ScanProfileRowOutput},
         scan_profile_store::{
             EditTarget, ProfileDraft, ProfileId, ProfileOrigin, ProfileStoreFailure, ScanProfile,
             ScanProfileStore, exported_profile_json, run_blocking_profile_task,
@@ -25,6 +27,7 @@ use crate::{
         exported_text, imported_file,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 enum OpenProfileEditor {
@@ -35,6 +38,7 @@ enum OpenProfileEditor {
 }
 
 pub struct ProfileManagerDialog {
+    pub message_catalog: Rc<MessageCatalog>,
     profile_store: ScanProfileStore,
     profile_rows: FactoryVecDeque<ScanProfileRow>,
     open_editor: OpenProfileEditor,
@@ -103,6 +107,7 @@ impl AlertChoice for ProfileChangeChoice {
 }
 
 fn present_change_confirmation(
+    message_catalog: &MessageCatalog,
     confirmation_title: String,
     confirmation_body: String,
     confirm_label: String,
@@ -114,7 +119,7 @@ fn present_change_confirmation(
         adw::AlertDialog::new(Some(&confirmation_title), Some(&confirmation_body));
     add_dismissing_choice::<ProfileChangeChoice>(
         &confirmation_dialog,
-        &translated_messages::scans::cancel_profile(),
+        &translated_messages::scans::cancel_profile(message_catalog),
     );
     add_alert_choice(
         &confirmation_dialog,
@@ -137,11 +142,20 @@ fn present_change_confirmation(
     );
 }
 
-fn completed_change_text(completed_change: CompletedProfileChange) -> String {
+fn completed_change_text(
+    message_catalog: &MessageCatalog,
+    completed_change: CompletedProfileChange,
+) -> String {
     match completed_change {
-        CompletedProfileChange::DefaultsRestored => translated_messages::scans::defaults_restored(),
-        CompletedProfileChange::ProfileDeleted => translated_messages::scans::profile_deleted(),
-        CompletedProfileChange::ProfileImported => translated_messages::scans::profile_imported(),
+        CompletedProfileChange::DefaultsRestored => {
+            translated_messages::scans::defaults_restored(message_catalog)
+        }
+        CompletedProfileChange::ProfileDeleted => {
+            translated_messages::scans::profile_deleted(message_catalog)
+        }
+        CompletedProfileChange::ProfileImported => {
+            translated_messages::scans::profile_imported(message_catalog)
+        }
     }
 }
 
@@ -191,8 +205,10 @@ impl ProfileManagerDialog {
         root: &adw::Dialog,
         sender: &ComponentSender<Self>,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let profile_editor = ProfileEditorDialog::builder()
             .launch(ProfileEditorDialogInit {
+                message_catalog,
                 profile_store: self.profile_store.clone(),
                 edit_target,
                 profile_draft,
@@ -209,16 +225,21 @@ impl ProfileManagerDialog {
     }
 }
 
+pub struct ProfileManagerDialogInit {
+    pub profile_store: ScanProfileStore,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::component(pub)]
 impl Component for ProfileManagerDialog {
-    type Init = ScanProfileStore;
+    type Init = ProfileManagerDialogInit;
     type Input = ProfileManagerDialogInput;
     type Output = ProfileManagerDialogOutput;
     type CommandOutput = ProfileManagerDialogCommand;
 
     view! {
         adw::Dialog {
-            set_title: &translated_messages::scans::manage_profiles_title(),
+            set_title: &translated_messages::scans::manage_profiles_title(&model.message_catalog),
             set_content_width: 560,
             set_content_height: 520,
 
@@ -230,20 +251,20 @@ impl Component for ProfileManagerDialog {
                     add_top_bar = &adw::HeaderBar {
                         pack_start = &gtk::Button {
                             set_icon_name: "edit-undo-symbolic",
-                            set_tooltip_text: Some(&translated_messages::scans::restore_defaults_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::restore_defaults_tooltip(&model.message_catalog)),
                             connect_clicked => ProfileManagerDialogInput::RestoreDefaultsRequested,
                         },
 
                         pack_end = &gtk::Button {
                             set_icon_name: "list-add-symbolic",
-                            set_tooltip_text: Some(&translated_messages::scans::new_profile_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::new_profile_tooltip(&model.message_catalog)),
                             add_css_class: "suggested-action",
                             connect_clicked => ProfileManagerDialogInput::NewProfileRequested,
                         },
 
                         pack_end = &gtk::Button {
                             set_icon_name: "document-open-symbolic",
-                            set_tooltip_text: Some(&translated_messages::scans::import_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::import_tooltip(&model.message_catalog)),
                             connect_clicked => ProfileManagerDialogInput::ImportRequested,
                         },
                     },
@@ -251,8 +272,8 @@ impl Component for ProfileManagerDialog {
                     #[wrap(Some)]
                     set_content = &adw::PreferencesPage {
                         add = &adw::PreferencesGroup {
-                            set_title: &translated_messages::scans::profiles_title(),
-                            set_description: Some(&translated_messages::scans::select_profile_edit_description()),
+                            set_title: &translated_messages::scans::profiles_title(&model.message_catalog),
+                            set_description: Some(&translated_messages::scans::select_profile_edit_description(&model.message_catalog)),
 
                             #[local_ref]
                             profile_list -> gtk::ListBox {
@@ -267,7 +288,10 @@ impl Component for ProfileManagerDialog {
     }
 
     fn init(
-        profile_store: ScanProfileStore,
+        ProfileManagerDialogInit {
+            profile_store,
+            message_catalog,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -288,6 +312,7 @@ impl Component for ProfileManagerDialog {
                 }
             });
         let model = Self {
+            message_catalog,
             profile_store,
             profile_rows,
             open_editor: OpenProfileEditor::NoEditorOpen,
@@ -306,6 +331,7 @@ impl Component for ProfileManagerDialog {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match manager_input {
             ProfileManagerDialogInput::ReloadRequested => {
                 self.reload_profiles(&sender);
@@ -321,7 +347,7 @@ impl Component for ProfileManagerDialog {
             }
             ProfileManagerDialogInput::ImportRequested => deliver_local_outcome(
                 sender.command_sender().clone(),
-                imported_file(translated_messages::scans::import_tooltip()),
+                imported_file(translated_messages::scans::import_tooltip(&message_catalog)),
                 |import_outcome| {
                     Some(ProfileManagerDialogCommand::ImportedFileRead(
                         import_outcome,
@@ -329,9 +355,10 @@ impl Component for ProfileManagerDialog {
                 },
             ),
             ProfileManagerDialogInput::RestoreDefaultsRequested => present_change_confirmation(
-                translated_messages::scans::restore_default_profiles(),
-                translated_messages::scans::restore_built_default_profiles(),
-                translated_messages::scans::restore_defaults_tooltip(),
+                &message_catalog,
+                translated_messages::scans::restore_default_profiles(&message_catalog),
+                translated_messages::scans::restore_built_default_profiles(&message_catalog),
+                translated_messages::scans::restore_defaults_tooltip(&message_catalog),
                 ConfirmedProfileChange::DefaultsRestored,
                 root,
                 &sender,
@@ -355,12 +382,16 @@ impl Component for ProfileManagerDialog {
             }
             ProfileManagerDialogInput::DeleteRequested(row_index) => {
                 if let Some(deleted_profile) = self.profile_at(&row_index) {
-                    let deleted_name = displayed_profile_name(&deleted_profile);
+                    let deleted_name = displayed_profile_name(&message_catalog, &deleted_profile);
                     match deleted_profile.profile_origin {
                         ProfileOrigin::Custom { profile_id } => present_change_confirmation(
-                            translated_messages::scans::delete_profile(),
-                            translated_messages::scans::delete_profile_name(&deleted_name),
-                            translated_messages::scans::delete_label(),
+                            &message_catalog,
+                            translated_messages::scans::delete_profile(&message_catalog),
+                            translated_messages::scans::delete_profile_name(
+                                &message_catalog,
+                                &deleted_name,
+                            ),
+                            translated_messages::scans::delete_label(&message_catalog),
                             ConfirmedProfileChange::ProfileDeleted { profile_id },
                             root,
                             &sender,
@@ -394,7 +425,11 @@ impl Component for ProfileManagerDialog {
                 {
                     Some(Ok(exported_json)) => deliver_local_outcome(
                         sender.command_sender().clone(),
-                        exported_text("lazaret-profile.json".to_owned(), exported_json),
+                        exported_text(
+                            Rc::clone(&message_catalog),
+                            "lazaret-profile.json".to_owned(),
+                            exported_json,
+                        ),
                         |export_outcome| {
                             Some(ProfileManagerDialogCommand::ExportFinished(export_outcome))
                         },
@@ -402,6 +437,7 @@ impl Component for ProfileManagerDialog {
                     Some(Err(export_failure)) => {
                         self.toaster
                             .add_toast(plain_text_toast(&describe_profile_store_failure(
+                                &message_catalog,
                                 &export_failure,
                             )))
                     }
@@ -417,17 +453,22 @@ impl Component for ProfileManagerDialog {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match manager_command {
             ProfileManagerDialogCommand::ProfilesLoaded(Ok(loaded_profiles)) => {
                 let mut profile_rows_guard = self.profile_rows.guard();
                 profile_rows_guard.clear();
                 loaded_profiles.into_iter().for_each(|loaded_profile| {
-                    profile_rows_guard.push_back(loaded_profile);
+                    profile_rows_guard.push_back(ScanProfileRowInit {
+                        scan_profile: loaded_profile,
+                        message_catalog: Rc::clone(&message_catalog),
+                    });
                 });
             }
             ProfileManagerDialogCommand::ProfilesLoaded(Err(load_failure)) => {
                 self.toaster
                     .add_toast(plain_text_toast(&describe_profile_store_failure(
+                        &message_catalog,
                         &load_failure,
                     )));
             }
@@ -450,14 +491,20 @@ impl Component for ProfileManagerDialog {
                 read_failure,
             )) => {
                 self.toaster
-                    .add_toast(plain_text_toast(&describe_export_failure(&read_failure)));
+                    .add_toast(plain_text_toast(&describe_export_failure(
+                        &message_catalog,
+                        &read_failure,
+                    )));
             }
             ProfileManagerDialogCommand::StoreChangeFinished {
                 completed_change,
                 change_outcome: Ok(()),
             } => {
                 self.toaster
-                    .add_toast(plain_text_toast(&completed_change_text(completed_change)));
+                    .add_toast(plain_text_toast(&completed_change_text(
+                        &message_catalog,
+                        completed_change,
+                    )));
                 sender.input(ProfileManagerDialogInput::ReloadRequested);
             }
             ProfileManagerDialogCommand::StoreChangeFinished {
@@ -466,18 +513,22 @@ impl Component for ProfileManagerDialog {
             } => self
                 .toaster
                 .add_toast(plain_text_toast(&describe_profile_store_failure(
+                    &message_catalog,
                     &change_failure,
                 ))),
             ProfileManagerDialogCommand::ExportFinished(TextExportOutcome::TextSaved) => {
                 self.toaster.add_toast(plain_text_toast(
-                    &translated_messages::scans::profile_exported(),
+                    &translated_messages::scans::profile_exported(&message_catalog),
                 ));
             }
             ProfileManagerDialogCommand::ExportFinished(TextExportOutcome::ExportFailed(
                 export_failure,
             )) => {
                 self.toaster
-                    .add_toast(plain_text_toast(&describe_export_failure(&export_failure)));
+                    .add_toast(plain_text_toast(&describe_export_failure(
+                        &message_catalog,
+                        &export_failure,
+                    )));
             }
         }
     }

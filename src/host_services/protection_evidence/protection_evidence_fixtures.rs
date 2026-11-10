@@ -104,7 +104,3 @@ pub fn empty_trust_list() -> TrustListContents {
         foreign_allowlists: Vec::new(),
     }
 }
-
-pub fn leaked_english_formatters() -> &'static MomentFormatters {
-    Box::leak(Box::new(english_formatters()))
-}

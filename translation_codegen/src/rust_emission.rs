@@ -36,18 +36,23 @@ fn argument_value(
     }
 }
 
+const CATALOG_PARAMETER: &str = "message_catalog: &super::MessageCatalog";
+
 fn emit_parameter_list(catalog_message: &CatalogMessage) -> String {
-    catalog_message
-        .references
-        .variables_in_order
-        .iter()
-        .filter_map(|variable_name| {
-            let parameter_name = rust_name_for(variable_name)?;
-            Some(format!(
-                "{parameter_name}: {}",
-                parameter_bound(catalog_message, variable_name)
-            ))
-        })
+    std::iter::once(CATALOG_PARAMETER.to_owned())
+        .chain(
+            catalog_message
+                .references
+                .variables_in_order
+                .iter()
+                .filter_map(|variable_name| {
+                    let parameter_name = rust_name_for(variable_name)?;
+                    Some(format!(
+                        "{parameter_name}: {}",
+                        parameter_bound(catalog_message, variable_name)
+                    ))
+                }),
+        )
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -104,7 +109,7 @@ fn emit_message_function(
     if catalog_message.references.variables_in_order.is_empty() {
         let _ = writeln!(
             generated_code,
-            "        super::translated_message_text({message_id:?}, None)"
+            "        message_catalog.translated_text({message_id:?}, None)"
         );
     } else {
         let _ = writeln!(
@@ -123,7 +128,7 @@ fn emit_message_function(
         }
         let _ = writeln!(
             generated_code,
-            "        super::translated_message_text({message_id:?}, Some(&message_arguments))"
+            "        message_catalog.translated_text({message_id:?}, Some(&message_arguments))"
         );
     }
     let _ = writeln!(generated_code, "    }}");

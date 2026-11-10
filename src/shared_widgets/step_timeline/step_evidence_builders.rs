@@ -17,6 +17,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -41,8 +42,8 @@ impl CheckedCondition {
     }
 }
 
-pub fn daemon_awaited_text() -> String {
-    translated_messages::widgets::daemon_awaited()
+pub fn daemon_awaited_text(message_catalog: &MessageCatalog) -> String {
+    translated_messages::widgets::daemon_awaited(message_catalog)
 }
 
 pub const fn evidence_row(evidence_name: String, evidence_value: String) -> StepEvidenceRow {
@@ -50,6 +51,7 @@ pub const fn evidence_row(evidence_name: String, evidence_value: String) -> Step
 }
 
 pub fn timed_evidence_row(
+    message_catalog: &MessageCatalog,
     evidence_name: String,
     evidence_moment: EvidenceMoment,
     moment_details: String,
@@ -62,6 +64,7 @@ pub fn timed_evidence_row(
         ..evidence_row(
             evidence_name,
             moment_value_text(
+                message_catalog,
                 moment_formatters,
                 evidence_moment,
                 moment_details,
@@ -101,6 +104,12 @@ pub fn remedy_commands(
         .collect()
 }
 
-pub fn unknown_run_text(read_failure: UnitJournalReadFailure) -> String {
-    translated_messages::widgets::unknown_run(unit_journal_failure_text(read_failure))
+pub fn unknown_run_text(
+    message_catalog: &MessageCatalog,
+    read_failure: UnitJournalReadFailure,
+) -> String {
+    translated_messages::widgets::unknown_run(
+        message_catalog,
+        unit_journal_failure_text(message_catalog, read_failure),
+    )
 }

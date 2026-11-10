@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
 };
@@ -7,7 +9,7 @@ use crate::{
         profile_display_text::{
             builtin_profile_description, builtin_profile_name, describe_profile_store_failure,
         },
-        profile_value_row::{ProfileValueRow, ProfileValueRowOutput},
+        profile_value_row::{ProfileValueRow, ProfileValueRowInit, ProfileValueRowOutput},
         scan_profile_store::{
             EditTarget, ProfileDraft, ProfileOrigin, ProfileStoreFailure, ScanProfileStore,
             run_blocking_profile_task,
@@ -15,6 +17,7 @@ use crate::{
     },
     shared_widgets::awaited_dialogs::{chosen_folders_to_open, deliver_local_outcome},
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -24,6 +27,7 @@ pub enum ProfileListKind {
 }
 
 pub struct ProfileEditorDialog {
+    pub message_catalog: Rc<MessageCatalog>,
     profile_store: ScanProfileStore,
     edit_target: EditTarget,
     profile_draft: ProfileDraft,
@@ -45,6 +49,7 @@ enum ClearedEntry {
 }
 
 pub struct ProfileEditorDialogInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub profile_store: ScanProfileStore,
     pub edit_target: EditTarget,
     pub profile_draft: ProfileDraft,
@@ -77,6 +82,7 @@ pub enum ProfileEditorDialogCommand {
 }
 
 fn value_rows(
+    message_catalog: &Rc<MessageCatalog>,
     listed_values: &[String],
     list_kind: ProfileListKind,
     sender: &ComponentSender<ProfileEditorDialog>,
@@ -93,7 +99,10 @@ fn value_rows(
         });
     let mut row_guard = value_rows.guard();
     listed_values.iter().cloned().for_each(|listed_value| {
-        row_guard.push_back(listed_value);
+        row_guard.push_back(ProfileValueRowInit {
+            listed_value,
+            message_catalog: Rc::clone(message_catalog),
+        });
     });
     drop(row_guard);
     value_rows
@@ -117,9 +126,10 @@ impl ProfileEditorDialog {
     }
 
     fn shown_profile_name(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match self.edit_target {
             EditTarget::ExistingProfile(ProfileOrigin::Builtin(builtin_profile)) => {
-                builtin_profile_name(builtin_profile)
+                builtin_profile_name(&message_catalog, builtin_profile)
             }
             EditTarget::NewProfile | EditTarget::ExistingProfile(ProfileOrigin::Custom { .. }) => {
                 self.profile_draft.profile_name.clone()
@@ -128,9 +138,10 @@ impl ProfileEditorDialog {
     }
 
     fn shown_profile_description(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match self.edit_target {
             EditTarget::ExistingProfile(ProfileOrigin::Builtin(builtin_profile)) => {
-                builtin_profile_description(builtin_profile)
+                builtin_profile_description(&message_catalog, builtin_profile)
             }
             EditTarget::NewProfile | EditTarget::ExistingProfile(ProfileOrigin::Custom { .. }) => {
                 self.profile_draft.profile_description.clone()
@@ -139,9 +150,12 @@ impl ProfileEditorDialog {
     }
 
     fn save_notice_text(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.save_notice {
             SaveNotice::NoSaveFailure => String::new(),
-            SaveNotice::SaveFailed(save_failure) => describe_profile_store_failure(save_failure),
+            SaveNotice::SaveFailed(save_failure) => {
+                describe_profile_store_failure(&message_catalog, save_failure)
+            }
         }
     }
 
@@ -169,7 +183,7 @@ impl Component for ProfileEditorDialog {
 
     view! {
         adw::Dialog {
-            set_title: &translated_messages::scans::edit_profile_title(),
+            set_title: &translated_messages::scans::edit_profile_title(&model.message_catalog),
             set_content_width: 520,
             set_content_height: 560,
 
@@ -177,7 +191,7 @@ impl Component for ProfileEditorDialog {
             set_child = &adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     pack_end = &gtk::Button {
-                        set_label: &translated_messages::scans::save_label(),
+                        set_label: &translated_messages::scans::save_label(&model.message_catalog),
                         add_css_class: "suggested-action",
                         connect_clicked => ProfileEditorDialogInput::SaveRequested,
                     },
@@ -187,7 +201,7 @@ impl Component for ProfileEditorDialog {
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
                         adw::EntryRow {
-                            set_title: &translated_messages::scans::name_title(),
+                            set_title: &translated_messages::scans::name_title(&model.message_catalog),
                             set_text: &model.shown_profile_name(),
                             set_sensitive: model.naming_is_editable(),
                             connect_changed[sender] => move |edited_row| {
@@ -196,7 +210,7 @@ impl Component for ProfileEditorDialog {
                         },
 
                         adw::EntryRow {
-                            set_title: &translated_messages::scans::description_title(),
+                            set_title: &translated_messages::scans::description_title(&model.message_catalog),
                             set_text: &model.shown_profile_description(),
                             set_sensitive: model.naming_is_editable(),
                             connect_changed[sender] => move |edited_row| {
@@ -206,11 +220,11 @@ impl Component for ProfileEditorDialog {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &translated_messages::scans::targets_profile_title(),
+                        set_title: &translated_messages::scans::targets_profile_title(&model.message_catalog),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::Button {
                             set_icon_name: "folder-new-symbolic",
-                            set_tooltip_text: Some(&translated_messages::scans::add_folder_profile_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::add_folder_profile_tooltip(&model.message_catalog)),
                             set_valign: gtk::Align::Center,
                             add_css_class: "flat",
                             connect_clicked => ProfileEditorDialogInput::AddFolderRequested,
@@ -221,7 +235,7 @@ impl Component for ProfileEditorDialog {
                             set_selection_mode: gtk::SelectionMode::None,
 
                             adw::EntryRow {
-                                set_title: &translated_messages::scans::add_path_title(),
+                                set_title: &translated_messages::scans::add_path_title(&model.message_catalog),
                                 set_show_apply_button: true,
                                 #[track(model.entry_was_cleared(ProfileListKind::ScanTargets))]
                                 set_text: "",
@@ -243,15 +257,15 @@ impl Component for ProfileEditorDialog {
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &translated_messages::scans::exclusions_title(),
-                        set_description: Some(&translated_messages::scans::added_exclusions_preferences_description()),
+                        set_title: &translated_messages::scans::exclusions_title(&model.message_catalog),
+                        set_description: Some(&translated_messages::scans::added_exclusions_preferences_description(&model.message_catalog)),
 
                         gtk::ListBox {
                             add_css_class: "boxed-list",
                             set_selection_mode: gtk::SelectionMode::None,
 
                             adw::EntryRow {
-                                set_title: &translated_messages::scans::add_pattern_title(),
+                                set_title: &translated_messages::scans::add_pattern_title(&model.message_catalog),
                                 set_show_apply_button: true,
                                 #[track(model.entry_was_cleared(ProfileListKind::ExcludedPatterns))]
                                 set_text: "",
@@ -293,16 +307,20 @@ impl Component for ProfileEditorDialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = dialog_init.message_catalog;
         let profile_draft = dialog_init.profile_draft;
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             profile_store: dialog_init.profile_store,
             edit_target: dialog_init.edit_target,
             target_rows: value_rows(
+                &message_catalog,
                 &profile_draft.scan_targets,
                 ProfileListKind::ScanTargets,
                 &sender,
             ),
             pattern_rows: value_rows(
+                &message_catalog,
                 &profile_draft.excluded_patterns,
                 ProfileListKind::ExcludedPatterns,
                 &sender,
@@ -323,6 +341,7 @@ impl Component for ProfileEditorDialog {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         self.cleared_entry = ClearedEntry::NoEntryCleared;
         match editor_input {
             ProfileEditorDialogInput::NameChanged(profile_name) => {
@@ -333,7 +352,9 @@ impl Component for ProfileEditorDialog {
             }
             ProfileEditorDialogInput::AddFolderRequested => deliver_local_outcome(
                 sender.input_sender().clone(),
-                chosen_folders_to_open(translated_messages::scans::add_folder_profile_tooltip()),
+                chosen_folders_to_open(translated_messages::scans::add_folder_profile_tooltip(
+                    &message_catalog,
+                )),
                 |chosen_paths| {
                     chosen_paths.first().map(|folder_path| {
                         ProfileEditorDialogInput::ListValueAdded {
@@ -353,7 +374,12 @@ impl Component for ProfileEditorDialog {
                 self.cleared_entry = ClearedEntry::EntryCleared(list_kind);
                 if !self.edited_values(list_kind).contains(&added_value) {
                     self.edited_values(list_kind).push(added_value.clone());
-                    self.value_rows_of(list_kind).guard().push_back(added_value);
+                    self.value_rows_of(list_kind)
+                        .guard()
+                        .push_back(ProfileValueRowInit {
+                            listed_value: added_value,
+                            message_catalog: Rc::clone(&message_catalog),
+                        });
                 }
             }
             ProfileEditorDialogInput::ListValueRemoved {

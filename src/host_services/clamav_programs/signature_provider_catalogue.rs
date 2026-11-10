@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use crate::translated_messages;
+use crate::{translated_messages, translated_messages::MessageCatalog};
 
 const HIDDEN_ADDRESS_TEXT: &str = "[address hidden]";
 pub const NIXOS_URLHAUS_SNIPPET: &str =
@@ -190,12 +190,17 @@ pub fn signature_source_name(signature_source: SignatureSource) -> String {
     }
 }
 
-pub fn signature_file_source_name(file_source: SignatureFileSource) -> String {
+pub fn signature_file_source_name(
+    message_catalog: &MessageCatalog,
+    file_source: SignatureFileSource,
+) -> String {
     match file_source {
         SignatureFileSource::ThirdPartyFile(third_party_provider) => {
             third_party_provider.provider_name().to_owned()
         }
-        SignatureFileSource::UnrecognizedSource => translated_messages::host::unrecognized_source(),
+        SignatureFileSource::UnrecognizedSource => {
+            translated_messages::host::unrecognized_source(message_catalog)
+        }
     }
 }
 
@@ -235,12 +240,13 @@ mod signature_provider_catalogue_tests {
 
     #[test]
     fn signature_files_name_their_source() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
             provider_of_signature_file("urlhaus_clamav.ndb"),
             SignatureFileSource::ThirdPartyFile(ThirdPartyProvider::AbuseChUrlhaus)
         );
         assert_eq!(
-            signature_file_source_name(provider_of_signature_file("custom.ndb")),
+            signature_file_source_name(message_catalog, provider_of_signature_file("custom.ndb")),
             "Other source"
         );
     }

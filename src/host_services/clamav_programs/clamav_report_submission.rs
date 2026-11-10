@@ -21,6 +21,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const SUBMISSION_TIMEOUT: Duration = Duration::from_secs(300);
@@ -186,26 +187,34 @@ async fn run_submitter(
     })
 }
 
-pub fn clamsubmit_failure_text(clamsubmit_failure: &ClamsubmitFailure) -> String {
+pub fn clamsubmit_failure_text(
+    message_catalog: &MessageCatalog,
+    clamsubmit_failure: &ClamsubmitFailure,
+) -> String {
     match clamsubmit_failure {
-        ClamsubmitFailure::ContactIncomplete => translated_messages::host::contact_incomplete(),
-        ClamsubmitFailure::SubmitterMissing => translated_messages::host::submitter_missing(),
+        ClamsubmitFailure::ContactIncomplete => {
+            translated_messages::host::contact_incomplete(message_catalog)
+        }
+        ClamsubmitFailure::SubmitterMissing => {
+            translated_messages::host::submitter_missing(message_catalog)
+        }
         ClamsubmitFailure::SubmitterReplaceable => {
-            translated_messages::host::submitter_replaceable()
+            translated_messages::host::submitter_replaceable(message_catalog)
         }
         ClamsubmitFailure::ContentPipeFailed(pipe_failure) => {
-            translated_messages::host::report_not_sent_error(pipe_failure)
+            translated_messages::host::report_not_sent_error(message_catalog, pipe_failure)
         }
         ClamsubmitFailure::SubmitterRunFailed(run_failure) => {
-            translated_messages::host::report_not_sent_error(run_failure)
+            translated_messages::host::report_not_sent_error(message_catalog, run_failure)
         }
         ClamsubmitFailure::UploadTimedOut(_elapsed) => {
-            translated_messages::host::upload_timed_out()
+            translated_messages::host::upload_timed_out(message_catalog)
         }
         ClamsubmitFailure::ReportedBySubmitter { submitter_output } => {
-            translated_messages::host::report_not_sent_error(sanitize_scanner_line(
-                submitter_output,
-            ))
+            translated_messages::host::report_not_sent_error(
+                message_catalog,
+                sanitize_scanner_line(submitter_output),
+            )
         }
     }
 }

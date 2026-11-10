@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use futures::{StreamExt, stream::BoxStream};
 use jiff::tz::TimeZone;
 use relm4::{
@@ -27,10 +29,12 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct ServiceLogGroupInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub group_title: String,
     pub missing_log_title: String,
     pub export_file_name: &'static str,
@@ -38,7 +42,8 @@ pub struct ServiceLogGroupInit {
 }
 
 pub struct ServiceLogGroup {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     export_file_name: &'static str,
     log_view: ServiceLogView,
     row_filter: LogRowFilter,
@@ -81,6 +86,7 @@ impl ServiceLogGroup {
     }
 
     fn refill_log_table(&mut self) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let shown_rows = match &self.log_view {
             ServiceLogView::LogRead(log_contents) => {
                 filtered_log_rows(log_contents, &self.row_filter)
@@ -89,13 +95,11 @@ impl ServiceLogGroup {
         };
         self.shown_row_count = shown_rows.len();
         self.log_list.clear();
-        let moment_formatters = self.moment_formatters;
-        self.log_list.extend_from_iter(
-            shown_rows
-                .into_iter()
-                .rev()
-                .map(|shown_log_row| log_entry_row(moment_formatters, shown_log_row)),
-        );
+        let moment_formatters = Rc::clone(&self.moment_formatters);
+        self.log_list
+            .extend_from_iter(shown_rows.into_iter().rev().map(|shown_log_row| {
+                log_entry_row(&message_catalog, &moment_formatters, shown_log_row)
+            }));
     }
 }
 
@@ -110,7 +114,7 @@ impl Component for ServiceLogGroup {
         adw::PreferencesGroup {
             set_title: &group_title,
             #[watch]
-            set_description: Some(&gtk::glib::markup_escape_text(&model.log_view.source_text())),
+            set_description: Some(&gtk::glib::markup_escape_text(&model.log_view.source_text(&model.message_catalog))),
             #[wrap(Some)]
             set_header_suffix = &gtk::Box {
                 set_spacing: 6,
@@ -118,7 +122,7 @@ impl Component for ServiceLogGroup {
 
                 gtk::ToggleButton {
                     set_icon_name: "dialog-warning-symbolic",
-                    set_tooltip_text: Some(&translated_messages::widgets::detections_warnings_errors_tooltip()),
+                    set_tooltip_text: Some(&translated_messages::widgets::detections_warnings_errors_tooltip(&model.message_catalog)),
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: model.log_view.has_log_rows(),
@@ -131,7 +135,7 @@ impl Component for ServiceLogGroup {
 
                 gtk::Button {
                     set_icon_name: "edit-copy-symbolic",
-                    set_tooltip_text: Some(&translated_messages::widgets::copy_service_tooltip()),
+                    set_tooltip_text: Some(&translated_messages::widgets::copy_service_tooltip(&model.message_catalog)),
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: model.log_view.has_log_rows(),
@@ -140,7 +144,7 @@ impl Component for ServiceLogGroup {
 
                 gtk::Button {
                     set_icon_name: "document-save-symbolic",
-                    set_tooltip_text: Some(&translated_messages::widgets::export_text_tooltip()),
+                    set_tooltip_text: Some(&translated_messages::widgets::export_text_tooltip(&model.message_catalog)),
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: model.log_view.has_log_rows(),
@@ -153,7 +157,7 @@ impl Component for ServiceLogGroup {
                 set_spacing: 6,
 
                 gtk::SearchEntry {
-                    set_placeholder_text: Some(&translated_messages::widgets::search_log_placeholder()),
+                    set_placeholder_text: Some(&translated_messages::widgets::search_log_placeholder(&model.message_catalog)),
                     #[watch]
                     set_visible: model.log_view.has_log_rows(),
                     connect_search_changed[sender] => move |search_entry| {
@@ -167,7 +171,7 @@ impl Component for ServiceLogGroup {
                     add_named[Some(LOADING_PAGE_NAME)] = &gtk::ListBox {
                         add_css_class: "boxed-list",
                         set_selection_mode: gtk::SelectionMode::None,
-                        append: &loading_placeholder_row(&translated_messages::widgets::reading_log()),
+                        append: &loading_placeholder_row(&translated_messages::widgets::reading_log(&model.message_catalog)),
                     },
                     add_named[Some(MISSING_LOG_PAGE_NAME)] = &gtk::ListBox {
                         add_css_class: "boxed-list",
@@ -177,7 +181,7 @@ impl Component for ServiceLogGroup {
                     add_named[Some(NO_MATCHING_ROWS_PAGE_NAME)] = &gtk::ListBox {
                         add_css_class: "boxed-list",
                         set_selection_mode: gtk::SelectionMode::None,
-                        append: &empty_placeholder_row(&translated_messages::widgets::no_log_lines_match()),
+                        append: &empty_placeholder_row(&translated_messages::widgets::no_log_lines_match(&model.message_catalog)),
                     },
                     add_named[Some(LOADED_PAGE_NAME)] = &gtk::Frame {
                         gtk::ScrolledWindow {
@@ -204,8 +208,9 @@ impl Component for ServiceLogGroup {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let _moment_formatters = group_init.moment_formatters;
+        let _moment_formatters = Rc::clone(&group_init.moment_formatters);
         let ServiceLogGroupInit {
+            message_catalog,
             moment_formatters,
             group_title,
             missing_log_title,
@@ -213,6 +218,7 @@ impl Component for ServiceLogGroup {
             log_updates,
         } = group_init;
         let model = Self {
+            message_catalog,
             moment_formatters,
             export_file_name,
             log_view: ServiceLogView::LogReading,
@@ -235,13 +241,14 @@ impl Component for ServiceLogGroup {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match group_input {
             ServiceLogGroupInput::CopyLogRequested => {
                 if let Some(log_text) = self.exported_log() {
                     root.clipboard().set_text(&log_text);
                     Self::request_toast(
                         &sender,
-                        translated_messages::widgets::log_copied_clipboard(),
+                        translated_messages::widgets::log_copied_clipboard(&message_catalog),
                     );
                 }
             }
@@ -249,7 +256,11 @@ impl Component for ServiceLogGroup {
                 if let Some(log_text) = self.exported_log() {
                     deliver_local_outcome(
                         sender.command_sender().clone(),
-                        exported_text(self.export_file_name.to_owned(), log_text),
+                        exported_text(
+                            Rc::clone(&message_catalog),
+                            self.export_file_name.to_owned(),
+                            log_text,
+                        ),
                         |export_outcome| {
                             Some(ServiceLogGroupCommand::TextExportFinished(export_outcome))
                         },
@@ -273,6 +284,7 @@ impl Component for ServiceLogGroup {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match group_command {
             ServiceLogGroupCommand::LogContentsRead(log_contents) => {
                 self.log_view = ServiceLogView::LogRead(log_contents);
@@ -281,14 +293,17 @@ impl Component for ServiceLogGroup {
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::TextSaved) => {
                 Self::request_toast(
                     &sender,
-                    translated_messages::widgets::text_export_finished(),
+                    translated_messages::widgets::text_export_finished(&message_catalog),
                 );
             }
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::ExportCancelled) => {}
             ServiceLogGroupCommand::TextExportFinished(TextExportOutcome::ExportFailed(
                 export_failure,
             )) => {
-                Self::request_toast(&sender, describe_export_failure(&export_failure));
+                Self::request_toast(
+                    &sender,
+                    describe_export_failure(&message_catalog, &export_failure),
+                );
             }
         }
     }

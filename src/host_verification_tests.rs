@@ -390,6 +390,7 @@ async fn host_status_probes_read_the_real_system() {
 #[tokio::test]
 #[ignore = "needs a real ClamAV host with OnAccessPrevention on ~/Downloads"]
 async fn host_background_detection_flows_from_journal_to_quarantine() {
+    let message_catalog = &crate::translated_messages::english_catalog();
     let moment_formatters = &english_formatters();
     let home_directory = PathBuf::from(std::env::var_os("HOME").expect("home directory"));
     let eicar_path = home_directory
@@ -463,6 +464,7 @@ async fn host_background_detection_flows_from_journal_to_quarantine() {
     );
 
     let incident_steps = incident_timeline(
+        message_catalog,
         moment_formatters,
         &DisplayedDetection {
             stored_detection: stored_detection.clone(),

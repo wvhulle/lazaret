@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf, rc::Rc};
 
 use futures::{Stream, StreamExt, stream};
 use jiff::Timestamp;
@@ -21,7 +21,7 @@ use crate::{
             DetectionAlert, JournalReplay, JournalResume, plan_detection_alerts,
             send_detection_alerts, withdraw_detection_alert,
         },
-        detection_list_row::{DetectionListRow, DetectionListRowOutput},
+        detection_list_row::{DetectionListRow, DetectionListRowInit, DetectionListRowOutput},
         detections_view_state::{
             IncidentRequest, IncidentView, JournalBatch, detections_needing_attention_first,
             file_state_for_detection, file_states_to_keep, split_journal_batch,
@@ -67,10 +67,13 @@ use crate::{
         quarantine_failure_text::describe_quarantine_failure,
         step_timeline::{
             timeline_step_contents::TimelineStepRowOutput,
-            timeline_step_row::{TimelineStepRow, TimelineStepRowInput, show_timeline_steps},
+            timeline_step_row::{
+                TimelineStepRow, TimelineStepRowInit, TimelineStepRowInput, show_timeline_steps,
+            },
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const JOURNAL_BATCH_SIZE: usize = 256;
@@ -78,7 +81,8 @@ const LIST_VIEW_NAME: &str = "list";
 const INCIDENT_VIEW_NAME: &str = "incident";
 
 pub struct BackgroundDetectionsPage {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     activity_history: ActivityHistory,
     quarantine_vault: QuarantineVault,
     distribution_family: DistributionFamily,
@@ -98,7 +102,8 @@ pub struct BackgroundDetectionsPage {
 }
 
 pub struct BackgroundDetectionsPageInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub sandbox_kind: SandboxKind,
     pub activity_history: ActivityHistory,
     pub quarantine_vault: QuarantineVault,
@@ -196,27 +201,31 @@ impl ResolvingIncidentAction {
     }
 }
 
-fn describe_incident_action_failure(action_failure: &IncidentActionFailure) -> String {
+fn describe_incident_action_failure(
+    message_catalog: &MessageCatalog,
+    action_failure: &IncidentActionFailure,
+) -> String {
     match action_failure {
         IncidentActionFailure::FileOwnedByOtherUser => {
-            translated_messages::findings::file_owned_other_user()
+            translated_messages::findings::file_owned_other_user(message_catalog)
         }
         IncidentActionFailure::FileNotCheckable => {
-            translated_messages::findings::file_not_checkable()
+            translated_messages::findings::file_not_checkable(message_catalog)
         }
         IncidentActionFailure::RemovalFailed(removal_failure) => {
-            translated_messages::findings::removal_failed(removal_failure)
+            translated_messages::findings::removal_failed(message_catalog, removal_failure)
         }
         IncidentActionFailure::FileCheckInterrupted(_) => {
-            translated_messages::findings::file_check_interrupted()
+            translated_messages::findings::file_check_interrupted(message_catalog)
         }
         IncidentActionFailure::QuarantineFailed(move_failure) => {
-            describe_quarantine_failure(move_failure)
+            describe_quarantine_failure(message_catalog, move_failure)
         }
         IncidentActionFailure::HistoryNotUpdated(history_failure) => {
-            translated_messages::findings::history_not_updated(describe_history_failure(
-                history_failure,
-            ))
+            translated_messages::findings::history_not_updated(
+                message_catalog,
+                describe_history_failure(message_catalog, history_failure),
+            )
         }
     }
 }
@@ -466,36 +475,42 @@ impl BackgroundDetectionsPage {
     }
 
     fn list_description(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.journal_access {
             JournalAccess::JournalUnreadable => {
-                translated_messages::findings::journal_unreadable_list()
+                translated_messages::findings::journal_unreadable_list(&message_catalog)
             }
             JournalAccess::FollowingFailed(follow_failure) => {
-                journal_follow_failure_text(follow_failure)
+                journal_follow_failure_text(&message_catalog, follow_failure)
             }
             JournalAccess::FollowingJournal if self.first_load == FirstLoad::StillLoading => {
-                translated_messages::findings::loading_detections()
+                translated_messages::findings::loading_detections(&message_catalog)
             }
             JournalAccess::FollowingJournal if self.displayed_detections.is_empty() => {
-                translated_messages::findings::nothing_detected_background()
+                translated_messages::findings::nothing_detected_background(&message_catalog)
             }
             JournalAccess::FollowingJournal => {
-                translated_messages::findings::access_scanning_scheduled_scans()
+                translated_messages::findings::access_scanning_scheduled_scans(&message_catalog)
             }
         }
     }
 
     fn show_detection_list(&mut self) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let mut row_guard = self.detection_list_rows.guard();
         row_guard.clear();
         detections_needing_attention_first(&self.displayed_detections)
             .into_iter()
             .for_each(|displayed_detection| {
-                row_guard.push_back(displayed_detection);
+                row_guard.push_back(DetectionListRowInit {
+                    displayed_detection,
+                    message_catalog: Rc::clone(&message_catalog),
+                });
             });
     }
 
     fn show_alert_steps(&mut self) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let GatheredEvidence::Gathered {
             protection_evidence,
             ..
@@ -504,8 +519,10 @@ impl BackgroundDetectionsPage {
             return;
         };
         show_timeline_steps(
+            &message_catalog,
             &mut self.alert_rows,
             alert_group_steps(
+                &message_catalog,
                 protection_evidence,
                 &AlertReadiness {
                     journal_access: self.journal_access.clone(),
@@ -517,6 +534,7 @@ impl BackgroundDetectionsPage {
     }
 
     fn report_area_summary(&self, sender: &ComponentSender<Self>) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let GatheredEvidence::Gathered {
             protection_evidence,
             ..
@@ -526,6 +544,7 @@ impl BackgroundDetectionsPage {
         };
         let _shell_closed = sender.output(BackgroundDetectionsPageOutput::AreaSummaryChanged(
             detections_summary(
+                &message_catalog,
                 protection_evidence,
                 unresolved_detection_count(&self.displayed_detections),
                 &AlertReadiness {
@@ -545,7 +564,8 @@ impl BackgroundDetectionsPage {
     }
 
     fn opened_incident_steps(&self) -> Vec<IncidentStep> {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let IncidentView::IncidentOpen {
             deletion_prompt,
             signature_lookup,
@@ -557,7 +577,8 @@ impl BackgroundDetectionsPage {
         self.opened_detection()
             .map(|displayed_detection| {
                 incident_timeline(
-                    moment_formatters,
+                    &message_catalog,
+                    &moment_formatters,
                     displayed_detection,
                     *deletion_prompt,
                     signature_lookup,
@@ -583,7 +604,10 @@ impl BackgroundDetectionsPage {
             let mut row_guard = self.incident_rows.guard();
             row_guard.clear();
             incident_steps.into_iter().for_each(|timeline_step| {
-                row_guard.push_back(timeline_step);
+                row_guard.push_back(TimelineStepRowInit {
+                    timeline_step,
+                    message_catalog: Rc::clone(&self.message_catalog),
+                });
             });
         }
     }
@@ -741,14 +765,14 @@ impl Component for BackgroundDetectionsPage {
                 add_top_bar = &adw::HeaderBar {
                     #[wrap(Some)]
                     set_title_widget = &adw::WindowTitle {
-                        set_title: &translated_messages::findings::detections_title(),
+                        set_title: &translated_messages::findings::detections_title(&model.message_catalog),
                         #[watch]
                         set_subtitle: &model.opened_file_name(),
                     },
 
                     pack_start = &gtk::Button {
                         set_icon_name: "go-previous-symbolic",
-                        set_tooltip_text: Some(&translated_messages::findings::back_detections_tooltip()),
+                        set_tooltip_text: Some(&translated_messages::findings::back_detections_tooltip(&model.message_catalog)),
                         #[watch]
                         set_visible: model.opened_detection().is_some(),
                         connect_clicked => BackgroundDetectionsPageInput::BackToListRequested,
@@ -760,11 +784,11 @@ impl Component for BackgroundDetectionsPage {
                     set_transition_type: gtk::StackTransitionType::Crossfade,
 
                     add_named[Some(LIST_VIEW_NAME)] = &adw::PreferencesPage {
-                        set_title: &translated_messages::findings::detections_title(),
+                        set_title: &translated_messages::findings::detections_title(&model.message_catalog),
 
                         #[local_ref]
                         add = detection_list_group -> adw::PreferencesGroup {
-                            set_title: &translated_messages::findings::detections_title(),
+                            set_title: &translated_messages::findings::detections_title(&model.message_catalog),
                             #[watch]
                             set_description: Some(&gtk::glib::markup_escape_text(&model.list_description())),
                             #[wrap(Some)]
@@ -778,13 +802,13 @@ impl Component for BackgroundDetectionsPage {
 
                         #[local_ref]
                         add = alert_group -> adw::PreferencesGroup {
-                            set_title: &translated_messages::findings::alerts_title(),
-                            set_description: Some(&translated_messages::findings::detections_reach_keeps_description()),
+                            set_title: &translated_messages::findings::alerts_title(&model.message_catalog),
+                            set_description: Some(&translated_messages::findings::detections_reach_keeps_description(&model.message_catalog)),
                             #[wrap(Some)]
                             set_header_suffix = &gtk::Stack {
                                 add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                                     set_icon_name: "view-refresh-symbolic",
-                                    set_tooltip_text: Some(&translated_messages::findings::check_again_background_tooltip()),
+                                    set_tooltip_text: Some(&translated_messages::findings::check_again_background_tooltip(&model.message_catalog)),
                                     set_valign: gtk::Align::Center,
                                     add_css_class: "flat",
                                     connect_clicked => BackgroundDetectionsPageInput::AlertsRefreshRequested,
@@ -792,7 +816,7 @@ impl Component for BackgroundDetectionsPage {
                                 add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
                                     set_halign: gtk::Align::Center,
                                     set_valign: gtk::Align::Center,
-                                    set_tooltip_text: Some(&translated_messages::findings::checking_background_tooltip()),
+                                    set_tooltip_text: Some(&translated_messages::findings::checking_background_tooltip(&model.message_catalog)),
                                 },
                                 #[watch]
                                 set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -801,7 +825,7 @@ impl Component for BackgroundDetectionsPage {
                     },
 
                     add_named[Some(INCIDENT_VIEW_NAME)] = &adw::PreferencesPage {
-                        set_title: &translated_messages::findings::detection_title(),
+                        set_title: &translated_messages::findings::detection_title(&model.message_catalog),
 
                         #[local_ref]
                         add = incident_group -> adw::PreferencesGroup {},
@@ -819,9 +843,11 @@ impl Component for BackgroundDetectionsPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = page_init.message_catalog;
         let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let model = Self {
+            message_catalog,
             moment_formatters,
             activity_history: page_init.activity_history.clone(),
             quarantine_vault: page_init.quarantine_vault,
@@ -873,6 +899,7 @@ impl Component for BackgroundDetectionsPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_input {
             BackgroundDetectionsPageInput::ReloadRequested => {
                 self.start_reload(&sender, IncidentRequest::KeepShownIncident);
@@ -891,7 +918,9 @@ impl Component for BackgroundDetectionsPage {
             )) => {
                 root.clipboard().set_text(&copied_text);
                 self.toaster
-                    .toast(&translated_messages::findings::copied_clipboard_toast());
+                    .toast(&translated_messages::findings::copied_clipboard_toast(
+                        &message_catalog,
+                    ));
             }
             BackgroundDetectionsPageInput::StepRequested(TimelineStepRowOutput::ActionChosen(
                 chosen_action,
@@ -928,8 +957,11 @@ impl Component for BackgroundDetectionsPage {
                 TimelineStepRowOutput::CopyRequested(copied_command),
             ) => {
                 root.clipboard().set_text(&copied_command);
-                self.toaster
-                    .toast(&translated_messages::findings::command_copied_clipboard_toast());
+                self.toaster.toast(
+                    &translated_messages::findings::command_copied_clipboard_toast(
+                        &message_catalog,
+                    ),
+                );
             }
         }
     }
@@ -940,16 +972,16 @@ impl Component for BackgroundDetectionsPage {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_command {
             BackgroundDetectionsPageCommand::DetectionsRecorded {
                 newly_opened,
                 journal_replay,
             } => {
-                send_detection_alerts(&plan_detection_alerts(
-                    &newly_opened,
-                    journal_replay,
-                    self.application_started,
-                ));
+                send_detection_alerts(
+                    &message_catalog,
+                    &plan_detection_alerts(&newly_opened, journal_replay, self.application_started),
+                );
                 self.refresh_after_sightings(&newly_opened, &sender);
             }
             BackgroundDetectionsPageCommand::JournalAccessChanged(journal_access) => {
@@ -958,10 +990,14 @@ impl Component for BackgroundDetectionsPage {
                 self.report_area_summary(&sender);
             }
             BackgroundDetectionsPageCommand::JournalCursorUnreadable(cursor_failure) => {
-                send_detection_alerts(&[DetectionAlert::MissedDetectionsUncountable]);
+                send_detection_alerts(
+                    &message_catalog,
+                    &[DetectionAlert::MissedDetectionsUncountable],
+                );
                 self.toaster.add_toast(plain_text_toast(
                     &translated_messages::findings::detections_lazaret_stopped(
-                        describe_history_failure(&cursor_failure),
+                        &message_catalog,
+                        describe_history_failure(&message_catalog, &cursor_failure),
                     ),
                 ));
             }
@@ -985,7 +1021,8 @@ impl Component for BackgroundDetectionsPage {
             BackgroundDetectionsPageCommand::LoadingFailed(history_failure) => {
                 self.toaster.add_toast(plain_text_toast(
                     &translated_messages::findings::detections_not_read_error(
-                        describe_history_failure(&history_failure),
+                        &message_catalog,
+                        describe_history_failure(&message_catalog, &history_failure),
                     ),
                 ));
             }
@@ -1015,7 +1052,7 @@ impl Component for BackgroundDetectionsPage {
                     Ok(IncidentActionEffect::OnlyHistoryChanged) => {}
                     Err(action_failure) => {
                         self.toaster.add_toast(plain_text_toast(
-                            &describe_incident_action_failure(&action_failure),
+                            &describe_incident_action_failure(&message_catalog, &action_failure),
                         ));
                     }
                 }

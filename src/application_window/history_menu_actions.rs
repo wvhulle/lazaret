@@ -9,6 +9,7 @@ use crate::{
         awaited_dialogs::{AlertChoice, add_alert_choice, add_dismissing_choice},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub const EXPORT_HISTORY_ACTION: &str = "win.export-history";
@@ -67,13 +68,14 @@ pub struct ExportedHistoryFile {
 }
 
 pub fn exported_history_file(
+    message_catalog: &MessageCatalog,
     export_format: HistoryExportFormat,
     activity_entries: &[ActivityEntryRecord],
 ) -> serde_json::Result<ExportedHistoryFile> {
     Ok(match export_format {
         HistoryExportFormat::CsvExport => ExportedHistoryFile {
             suggested_name: "lazaret-history.csv",
-            exported_text: activity_entries_as_csv(activity_entries),
+            exported_text: activity_entries_as_csv(message_catalog, activity_entries),
         },
         HistoryExportFormat::JsonExport => ExportedHistoryFile {
             suggested_name: "lazaret-history.json",
@@ -82,60 +84,74 @@ pub fn exported_history_file(
     })
 }
 
-pub fn primary_menu_entries() -> Vec<(String, &'static str)> {
+pub fn primary_menu_entries(message_catalog: &MessageCatalog) -> Vec<(String, &'static str)> {
     vec![
         (
-            translated_messages::window::export_history_menu_item(),
+            translated_messages::window::export_history_menu_item(message_catalog),
             EXPORT_HISTORY_ACTION,
         ),
         (
-            translated_messages::window::clear_history_menu_item(),
+            translated_messages::window::clear_history_menu_item(message_catalog),
             CLEAR_HISTORY_ACTION,
         ),
         (
-            translated_messages::window::preferences_label(),
+            translated_messages::window::preferences_label(message_catalog),
             "app.preferences",
         ),
-        (translated_messages::window::about_menu_item(), "app.about"),
-        (translated_messages::window::quit_menu_item(), "app.quit"),
+        (
+            translated_messages::window::about_menu_item(message_catalog),
+            "app.about",
+        ),
+        (
+            translated_messages::window::quit_menu_item(message_catalog),
+            "app.quit",
+        ),
     ]
 }
 
-pub fn history_export_dialog() -> adw::AlertDialog {
+pub fn history_export_dialog(message_catalog: &MessageCatalog) -> adw::AlertDialog {
     let export_dialog = adw::AlertDialog::new(
-        Some(&translated_messages::window::export_history_heading()),
-        Some(&translated_messages::window::export_history_body()),
+        Some(&translated_messages::window::export_history_heading(
+            message_catalog,
+        )),
+        Some(&translated_messages::window::export_history_body(
+            message_catalog,
+        )),
     );
     add_dismissing_choice::<HistoryExportChoice>(
         &export_dialog,
-        &translated_messages::window::cancel_history_button(),
+        &translated_messages::window::cancel_history_button(message_catalog),
     );
     add_alert_choice(
         &export_dialog,
         HistoryExportChoice::FormatChosen(HistoryExportFormat::JsonExport),
-        &translated_messages::window::json_label(),
+        &translated_messages::window::json_label(message_catalog),
     );
     add_alert_choice(
         &export_dialog,
         HistoryExportChoice::FormatChosen(HistoryExportFormat::CsvExport),
-        &translated_messages::window::csv_label(),
+        &translated_messages::window::csv_label(message_catalog),
     );
     export_dialog
 }
 
-pub fn clear_history_dialog() -> adw::AlertDialog {
+pub fn clear_history_dialog(message_catalog: &MessageCatalog) -> adw::AlertDialog {
     let confirmation_dialog = adw::AlertDialog::new(
-        Some(&translated_messages::window::clear_history_heading()),
-        Some(&translated_messages::window::clear_history_body()),
+        Some(&translated_messages::window::clear_history_heading(
+            message_catalog,
+        )),
+        Some(&translated_messages::window::clear_history_body(
+            message_catalog,
+        )),
     );
     add_dismissing_choice::<ClearHistoryChoice>(
         &confirmation_dialog,
-        &translated_messages::window::cancel_history_button(),
+        &translated_messages::window::cancel_history_button(message_catalog),
     );
     add_alert_choice(
         &confirmation_dialog,
         ClearHistoryChoice::ClearAllChosen,
-        &translated_messages::window::clear_label(),
+        &translated_messages::window::clear_label(message_catalog),
     );
     confirmation_dialog.set_response_appearance(
         ClearHistoryChoice::ClearAllChosen.response_id(),
@@ -151,7 +167,8 @@ mod history_menu_actions_tests {
 
     #[test]
     fn the_primary_menu_offers_export_and_clear_of_the_whole_history() {
-        let menu_actions = primary_menu_entries()
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let menu_actions = primary_menu_entries(message_catalog)
             .into_iter()
             .map(|(_entry_label, action_name)| action_name)
             .collect::<Vec<_>>();
@@ -165,8 +182,11 @@ mod history_menu_actions_tests {
                 "app.quit"
             ]
         );
-        assert_eq!(primary_menu_entries()[0].0, "Export History…");
-        assert_eq!(primary_menu_entries()[1].0, "Clear History…");
+        assert_eq!(
+            primary_menu_entries(message_catalog)[0].0,
+            "Export History…"
+        );
+        assert_eq!(primary_menu_entries(message_catalog)[1].0, "Clear History…");
     }
 
     #[test]
@@ -199,10 +219,16 @@ mod history_menu_actions_tests {
 
     #[test]
     fn the_export_writes_the_same_csv_and_json_as_the_activity_formats() {
-        let csv_file = exported_history_file(HistoryExportFormat::CsvExport, &[]).unwrap();
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let csv_file =
+            exported_history_file(message_catalog, HistoryExportFormat::CsvExport, &[]).unwrap();
         assert_eq!(csv_file.suggested_name, "lazaret-history.csv");
-        assert_eq!(csv_file.exported_text, activity_entries_as_csv(&[]));
-        let json_file = exported_history_file(HistoryExportFormat::JsonExport, &[]).unwrap();
+        assert_eq!(
+            csv_file.exported_text,
+            activity_entries_as_csv(message_catalog, &[])
+        );
+        let json_file =
+            exported_history_file(message_catalog, HistoryExportFormat::JsonExport, &[]).unwrap();
         assert_eq!(json_file.suggested_name, "lazaret-history.json");
         assert_eq!(
             json_file.exported_text,

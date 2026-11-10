@@ -33,11 +33,14 @@ fn id_prefix_becomes_module_and_variables_become_typed_parameters() {
     assert!(rust_source.contains("pub(crate) mod scans {"));
     assert!(rust_source.contains("pub(crate) mod findings {"));
     assert!(rust_source.contains(
-        "pub(crate) fn files_left(count: impl \
+        "pub(crate) fn files_left(message_catalog: &super::MessageCatalog, count: impl \
          ::core::convert::Into<::fluent_bundle::types::FluentNumber>, folder: impl \
          ::core::fmt::Display) -> ::std::string::String"
     ));
-    assert!(rust_source.contains("pub(crate) fn finished_title() -> ::std::string::String"));
+    assert!(rust_source.contains(
+        "pub(crate) fn finished_title(message_catalog: &super::MessageCatalog) -> \
+         ::std::string::String"
+    ));
 }
 
 #[test]
@@ -198,7 +201,7 @@ fn number_function_types_a_variable_as_number_without_selecting() {
     let generated_messages =
         generate_message_functions(locales_directory.path(), "en").expect("valid catalogs");
     assert!(generated_messages.rust_source.contains(
-        "pub(crate) fn engine_verdict(total: impl \
+        "pub(crate) fn engine_verdict(message_catalog: &super::MessageCatalog, total: impl \
          ::core::convert::Into<::fluent_bundle::types::FluentNumber>, count: impl \
          ::core::convert::Into<::fluent_bundle::types::FluentNumber>)"
     ));
@@ -244,7 +247,10 @@ fn non_plural_variant_keys_become_a_choice_enum() {
     );
     assert!(rust_source.contains("        CustomerIdentifier,\n        PurchaseReceipt,\n"));
     assert!(rust_source.contains("Self::PurchaseReceipt => \"purchase-receipt\","));
-    assert!(rust_source.contains("pub(crate) fn credential_needed(credential: CredentialChoice)"));
+    assert!(rust_source.contains(
+        "pub(crate) fn credential_needed(message_catalog: &super::MessageCatalog, credential: \
+         CredentialChoice)"
+    ));
 }
 
 #[test]

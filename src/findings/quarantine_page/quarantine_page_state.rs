@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    rc::Rc,
+};
 
 use crate::{
     findings::quarantine_page::quarantine_entries_page::entry_matches_search,
@@ -19,6 +22,7 @@ use crate::{
         component_streams::RunningStream,
         loading_indicators::{LOAD_FAILED_PAGE_NAME, LOADED_PAGE_NAME, LOADING_PAGE_NAME},
     },
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Debug)]
@@ -105,7 +109,8 @@ pub struct EntryRowState {
 
 #[derive(Clone, Debug)]
 pub struct QuarantineRowInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub entry_record: QuarantineEntryRecord,
     pub row_state: EntryRowState,
 }
@@ -438,14 +443,16 @@ impl QuarantinePageState {
 
     pub fn row_init(
         &self,
-        moment_formatters: &'static MomentFormatters,
+        message_catalog: &Rc<MessageCatalog>,
+        moment_formatters: &Rc<MomentFormatters>,
         entry_id: i64,
     ) -> Option<QuarantineRowInit> {
         self.listed_entries()
             .iter()
             .find(|entry_record| entry_record.entry_id == entry_id)
             .map(|entry_record| QuarantineRowInit {
-                moment_formatters,
+                message_catalog: Rc::clone(message_catalog),
+                moment_formatters: Rc::clone(moment_formatters),
                 entry_record: entry_record.clone(),
                 row_state: self.row_state(entry_id),
             })
@@ -453,14 +460,16 @@ impl QuarantinePageState {
 
     pub fn matching_rows(
         &self,
-        moment_formatters: &'static MomentFormatters,
+        message_catalog: &Rc<MessageCatalog>,
+        moment_formatters: &Rc<MomentFormatters>,
         search_text: &str,
     ) -> Vec<QuarantineRowInit> {
         self.listed_entries()
             .iter()
-            .filter(|entry_record| entry_matches_search(entry_record, search_text))
+            .filter(|entry_record| entry_matches_search(message_catalog, entry_record, search_text))
             .map(|entry_record| QuarantineRowInit {
-                moment_formatters,
+                message_catalog: Rc::clone(message_catalog),
+                moment_formatters: Rc::clone(moment_formatters),
                 entry_record: entry_record.clone(),
                 row_state: self.row_state(entry_record.entry_id),
             })
@@ -475,7 +484,7 @@ mod quarantine_page_state_tests {
     use super::*;
     use crate::host_services::{
         clamav_scanner::scanner_output_parser::ThreatIdentity,
-        protection_evidence::protection_evidence_fixtures::leaked_english_formatters,
+        protection_evidence::protection_evidence_fixtures::english_formatters,
         quarantine_vault::{
             quarantine_entry_database::StoredDetectionDate,
             quarantine_file_moves::RecordedPayloadHash,
@@ -535,6 +544,7 @@ mod quarantine_page_state_tests {
 
     #[test]
     fn a_load_failure_never_shows_the_empty_state() {
+        let message_catalog = &Rc::new(crate::translated_messages::english_catalog());
         let mut page_state = state_listing(&[1, 2]);
         page_state.record_loaded_entries(Err(QuarantineMoveFailure::DatabaseNotRegularFile));
         assert_eq!(
@@ -543,7 +553,7 @@ mod quarantine_page_state_tests {
         );
         assert!(
             page_state
-                .matching_rows(leaked_english_formatters(), "")
+                .matching_rows(message_catalog, &Rc::new(english_formatters()), "")
                 .is_empty()
         );
     }
@@ -691,6 +701,7 @@ mod quarantine_page_state_tests {
 
     #[test]
     fn row_reputation_survives_a_search_refresh() {
+        let message_catalog = &Rc::new(crate::translated_messages::english_catalog());
         let mut page_state = state_listing(&[1, 2]);
         page_state
             .begin_reputation_check(1)
@@ -702,12 +713,13 @@ mod quarantine_page_state_tests {
         page_state.record_reputation_answers(1, checked_answers());
         assert!(
             page_state
-                .matching_rows(leaked_english_formatters(), "sample-2")
+                .matching_rows(message_catalog, &Rc::new(english_formatters()), "sample-2")
                 .len()
                 == 1
         );
         page_state.record_loaded_entries(Ok(vec![quarantined_entry(1), quarantined_entry(2)]));
-        let shown_rows = page_state.matching_rows(leaked_english_formatters(), "sample-1");
+        let shown_rows =
+            page_state.matching_rows(message_catalog, &Rc::new(english_formatters()), "sample-1");
         assert!(matches!(
             shown_rows.as_slice(),
             [QuarantineRowInit {
@@ -719,7 +731,7 @@ mod quarantine_page_state_tests {
             }] if matches!(
                 &reputation_answers.virustotal_answer,
                 KeyedSourceAnswer::KeyedAnswer(virustotal_answer)
-                    if virustotal_answer.displayed_text() == "Unknown to VirusTotal"
+                    if virustotal_answer.displayed_text(message_catalog) == "Unknown to VirusTotal"
             ) && matches!(reputation_answers.bazaar_answer, KeyedSourceAnswer::SkippedWithoutKey)
         ));
     }

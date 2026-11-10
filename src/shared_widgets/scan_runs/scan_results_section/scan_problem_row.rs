@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -11,34 +13,47 @@ use crate::{
         ProblemPathGroup, ScanResultsView,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const PROBLEM_PATH_ROW_LIMIT: usize = 200;
 
-pub enum ScanProblemRow {
+pub enum ScanProblemKind {
     SkippedPaths(ProblemPathGroup),
     ScanNotice(String),
     ScanDetails(String),
 }
 
-pub fn problem_rows_of(results_view: &ScanResultsView) -> Vec<ScanProblemRow> {
+pub struct ScanProblemRow {
+    problem_kind: ScanProblemKind,
+    message_catalog: Rc<MessageCatalog>,
+}
+
+pub fn problem_rows_of(
+    message_catalog: &Rc<MessageCatalog>,
+    results_view: &ScanResultsView,
+) -> Vec<ScanProblemRow> {
     results_view
         .problem_path_groups
         .iter()
         .cloned()
-        .map(ScanProblemRow::SkippedPaths)
+        .map(ScanProblemKind::SkippedPaths)
         .chain(
             results_view
                 .notice_lines
                 .iter()
                 .cloned()
-                .map(ScanProblemRow::ScanNotice),
+                .map(ScanProblemKind::ScanNotice),
         )
         .chain(
             Some(results_view.noteworthy_output.clone())
                 .filter(|noteworthy_output| !noteworthy_output.is_empty())
-                .map(ScanProblemRow::ScanDetails),
+                .map(ScanProblemKind::ScanDetails),
         )
+        .map(|problem_kind| ScanProblemRow {
+            problem_kind,
+            message_catalog: Rc::clone(message_catalog),
+        })
         .collect()
 }
 
@@ -55,7 +70,10 @@ fn notice_row(notice_line: &str) -> adw::ActionRow {
     notice_row
 }
 
-fn problem_path_expander(path_group: &ProblemPathGroup) -> adw::ExpanderRow {
+fn problem_path_expander(
+    message_catalog: &MessageCatalog,
+    path_group: &ProblemPathGroup,
+) -> adw::ExpanderRow {
     let path_expander = adw::ExpanderRow::new();
     path_expander.set_use_markup(false);
     path_expander.set_title(&path_group.group_title);
@@ -76,6 +94,7 @@ fn problem_path_expander(path_group: &ProblemPathGroup) -> adw::ExpanderRow {
             &adw::ActionRow::builder()
                 .use_markup(false)
                 .title(translated_messages::widgets::count_more_file_title(
+                    message_catalog,
                     hidden_path_count,
                 ))
                 .css_classes(["dim-label"])
@@ -85,9 +104,14 @@ fn problem_path_expander(path_group: &ProblemPathGroup) -> adw::ExpanderRow {
     path_expander
 }
 
-fn scan_details_expander(noteworthy_output: &str) -> adw::ExpanderRow {
+fn scan_details_expander(
+    message_catalog: &MessageCatalog,
+    noteworthy_output: &str,
+) -> adw::ExpanderRow {
     let details_expander = adw::ExpanderRow::builder()
-        .title(translated_messages::widgets::scan_details_title())
+        .title(translated_messages::widgets::scan_details_title(
+            message_catalog,
+        ))
         .build();
     details_expander.add_row(
         &gtk::Label::builder()
@@ -126,11 +150,13 @@ impl FactoryComponent for ScanProblemRow {
     }
 
     fn init_root(&self) -> Self::Root {
-        match self {
-            Self::SkippedPaths(path_group) => problem_path_expander(path_group).upcast(),
-            Self::ScanNotice(notice_line) => notice_row(notice_line).upcast(),
-            Self::ScanDetails(noteworthy_output) => {
-                scan_details_expander(noteworthy_output).upcast()
+        match &self.problem_kind {
+            ScanProblemKind::SkippedPaths(path_group) => {
+                problem_path_expander(&self.message_catalog, path_group).upcast()
+            }
+            ScanProblemKind::ScanNotice(notice_line) => notice_row(notice_line).upcast(),
+            ScanProblemKind::ScanDetails(noteworthy_output) => {
+                scan_details_expander(&self.message_catalog, noteworthy_output).upcast()
             }
         }
     }

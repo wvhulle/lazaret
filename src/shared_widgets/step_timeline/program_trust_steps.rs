@@ -10,6 +10,7 @@ use crate::{
         timeline_step_contents::{SettledStep, StepActionButton, StepEvidenceRow, TimelineStep},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -31,19 +32,22 @@ impl TrustedProgramGroup {
     }
 }
 
-fn program_trust_rows(program_trust_finding: &ProgramTrustFinding) -> Vec<StepEvidenceRow> {
+fn program_trust_rows(
+    message_catalog: &MessageCatalog,
+    program_trust_finding: &ProgramTrustFinding,
+) -> Vec<StepEvidenceRow> {
     match program_trust_finding {
         ProgramTrustFinding::ReplaceableProgramIgnored {
             program_name,
             trusted_path,
             ignored_paths,
         } => std::iter::once(evidence_row(
-            translated_messages::widgets::program_use(program_name),
+            translated_messages::widgets::program_use(message_catalog, program_name),
             trusted_path.clone(),
         ))
         .chain(ignored_paths.iter().map(|ignored_path| {
             evidence_row(
-                translated_messages::widgets::ignored_program(program_name),
+                translated_messages::widgets::ignored_program(message_catalog, program_name),
                 ignored_path.clone(),
             )
         }))
@@ -55,7 +59,7 @@ fn program_trust_rows(program_trust_finding: &ProgramTrustFinding) -> Vec<StepEv
             .iter()
             .map(|replaceable_path| {
                 evidence_row(
-                    translated_messages::widgets::refused_program(program_name),
+                    translated_messages::widgets::refused_program(message_catalog, program_name),
                     replaceable_path.clone(),
                 )
             })
@@ -107,32 +111,42 @@ pub fn program_trust_condition(
     }
 }
 
-fn program_trust_title(program_group: TrustedProgramGroup) -> String {
+fn program_trust_title(
+    message_catalog: &MessageCatalog,
+    program_group: TrustedProgramGroup,
+) -> String {
     match program_group {
         TrustedProgramGroup::ScannerPrograms => {
-            translated_messages::widgets::scanner_programs_trusted()
+            translated_messages::widgets::scanner_programs_trusted(message_catalog)
         }
-        TrustedProgramGroup::UpdaterPrograms => translated_messages::widgets::freshclam_trusted(),
+        TrustedProgramGroup::UpdaterPrograms => {
+            translated_messages::widgets::freshclam_trusted(message_catalog)
+        }
     }
 }
 
-fn program_trust_details(program_group: TrustedProgramGroup) -> String {
+fn program_trust_details(
+    message_catalog: &MessageCatalog,
+    program_group: TrustedProgramGroup,
+) -> String {
     match program_group {
         TrustedProgramGroup::ScannerPrograms => {
-            translated_messages::widgets::malware_running_clamdscan()
+            translated_messages::widgets::malware_running_clamdscan(message_catalog)
         }
         TrustedProgramGroup::UpdaterPrograms => {
-            translated_messages::widgets::malware_running_freshclam()
+            translated_messages::widgets::malware_running_freshclam(message_catalog)
         }
     }
 }
 
 pub fn program_trust_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     program_trust: &ProgramTrustInspection,
     program_group: TrustedProgramGroup,
 ) -> Option<TimelineStep<StepAction>> {
     match program_trust {
         ProgramTrustInspection::ProgramsChecked(program_trust_findings) => program_findings_step(
+            message_catalog,
             &program_trust_findings
                 .iter()
                 .filter(|program_trust_finding| {
@@ -142,15 +156,16 @@ pub fn program_trust_step<StepAction: StepActionButton>(
             program_group,
         ),
         ProgramTrustInspection::CheckInterrupted => Some(no_guidance_step(
-            program_trust_title(program_group),
-            program_trust_details(program_group),
+            program_trust_title(message_catalog, program_group),
+            program_trust_details(message_catalog, program_group),
             program_trust_condition(program_trust, program_group).node_state(),
-            translated_messages::widgets::check_interrupted(),
+            translated_messages::widgets::check_interrupted(message_catalog),
         )),
     }
 }
 
 fn program_findings_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     program_trust_findings: &[&ProgramTrustFinding],
     program_group: TrustedProgramGroup,
 ) -> Option<TimelineStep<StepAction>> {
@@ -166,20 +181,18 @@ fn program_findings_step<StepAction: StepActionButton>(
     let node_state =
         program_findings_condition(program_trust_findings.iter().copied()).node_state();
     let status_text = if any_program_refused {
-        translated_messages::widgets::clamav_program_replaced_account()
+        translated_messages::widgets::clamav_program_replaced_account(message_catalog)
     } else {
-        translated_messages::widgets::clamav_program_account_shadows()
+        translated_messages::widgets::clamav_program_account_shadows(message_catalog)
     };
     Some(TimelineStep::settled(
-        program_trust_title(program_group),
-        program_trust_details(program_group),
+        program_trust_title(message_catalog, program_group),
+        program_trust_details(message_catalog, program_group),
         status_text,
         SettledStep {
-            evidence_rows: plain_rows(
-                program_trust_findings
-                    .iter()
-                    .flat_map(|program_trust_finding| program_trust_rows(program_trust_finding)),
-            ),
+            evidence_rows: plain_rows(program_trust_findings.iter().flat_map(
+                |program_trust_finding| program_trust_rows(message_catalog, program_trust_finding),
+            )),
             ..SettledStep::without_offers(node_state)
         },
     ))

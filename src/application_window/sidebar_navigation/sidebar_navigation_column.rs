@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, gtk::gio,
     prelude::FactoryVecDeque,
@@ -10,14 +12,16 @@ use crate::{
         sidebar_area_status::SidebarAreaSummary,
         sidebar_navigation::{
             sidebar_entry_presentation::{EntrySummary, SidebarGroup},
-            sidebar_entry_row::SidebarEntryRow,
+            sidebar_entry_row::{SidebarEntryRow, SidebarEntryRowInit},
         },
     },
     shared_widgets::named_menu_items::NamedMenuItems,
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct SidebarNavigationColumn {
+    pub message_catalog: Rc<MessageCatalog>,
     selected_page: ApplicationPage,
     signatures_rows: FactoryVecDeque<SidebarEntryRow>,
     scans_rows: FactoryVecDeque<SidebarEntryRow>,
@@ -30,9 +34,9 @@ pub enum SidebarNavigationColumnInput {
     AreaSummariesChanged(Vec<SidebarAreaSummary>),
 }
 
-fn primary_menu() -> gio::Menu {
+fn primary_menu(message_catalog: &MessageCatalog) -> gio::Menu {
     let primary_menu = gio::Menu::new();
-    primary_menu_entries()
+    primary_menu_entries(message_catalog)
         .into_iter()
         .for_each(|(entry_label, action_name)| {
             primary_menu.append(Some(&entry_label), Some(action_name));
@@ -40,7 +44,10 @@ fn primary_menu() -> gio::Menu {
     primary_menu
 }
 
-fn launched_group_rows(sidebar_group: SidebarGroup) -> FactoryVecDeque<SidebarEntryRow> {
+fn launched_group_rows(
+    message_catalog: &Rc<MessageCatalog>,
+    sidebar_group: SidebarGroup,
+) -> FactoryVecDeque<SidebarEntryRow> {
     let mut group_rows = FactoryVecDeque::builder()
         .launch(gtk::ListBox::default())
         .detach();
@@ -48,7 +55,10 @@ fn launched_group_rows(sidebar_group: SidebarGroup) -> FactoryVecDeque<SidebarEn
         .group_rows()
         .into_iter()
         .for_each(|application_page| {
-            group_rows.guard().push_back(application_page);
+            group_rows.guard().push_back(SidebarEntryRowInit {
+                application_page,
+                message_catalog: Rc::clone(message_catalog),
+            });
         });
     group_rows
 }
@@ -73,9 +83,14 @@ fn show_area_summaries(
     });
 }
 
+pub struct SidebarNavigationColumnInit {
+    pub selected_page: ApplicationPage,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::component(pub)]
 impl Component for SidebarNavigationColumn {
-    type Init = ApplicationPage;
+    type Init = SidebarNavigationColumnInit;
     type Input = SidebarNavigationColumnInput;
     type Output = ();
     type CommandOutput = ();
@@ -89,8 +104,8 @@ impl Component for SidebarNavigationColumn {
                 add_top_bar = &adw::HeaderBar {
                     pack_end = &gtk::MenuButton {
                         set_icon_name: "open-menu-symbolic",
-                        set_tooltip_text: Some(&translated_messages::window::menu_tooltip()),
-                        set_named_menu_model: &primary_menu(),
+                        set_tooltip_text: Some(&translated_messages::window::menu_tooltip(&model.message_catalog)),
+                        set_named_menu_model: &primary_menu(&model.message_catalog),
                         set_primary: true,
                     },
                 },
@@ -109,8 +124,8 @@ impl Component for SidebarNavigationColumn {
                         set_margin_end: 12,
 
                         adw::PreferencesGroup {
-                            set_title: &SidebarGroup::SignaturesGroup.group_title(),
-                            set_description: Some(&SidebarGroup::SignaturesGroup.group_description()),
+                            set_title: &SidebarGroup::SignaturesGroup.group_title(&model.message_catalog),
+                            set_description: Some(&SidebarGroup::SignaturesGroup.group_description(&model.message_catalog)),
 
                             #[local_ref]
                             signatures_list -> gtk::ListBox {
@@ -122,8 +137,8 @@ impl Component for SidebarNavigationColumn {
                         },
 
                         adw::PreferencesGroup {
-                            set_title: &SidebarGroup::ScansGroup.group_title(),
-                            set_description: Some(&SidebarGroup::ScansGroup.group_description()),
+                            set_title: &SidebarGroup::ScansGroup.group_title(&model.message_catalog),
+                            set_description: Some(&SidebarGroup::ScansGroup.group_description(&model.message_catalog)),
 
                             #[local_ref]
                             scans_list -> gtk::ListBox {
@@ -135,8 +150,8 @@ impl Component for SidebarNavigationColumn {
                         },
 
                         adw::PreferencesGroup {
-                            set_title: &SidebarGroup::FindingsGroup.group_title(),
-                            set_description: Some(&SidebarGroup::FindingsGroup.group_description()),
+                            set_title: &SidebarGroup::FindingsGroup.group_title(&model.message_catalog),
+                            set_description: Some(&SidebarGroup::FindingsGroup.group_description(&model.message_catalog)),
 
                             #[local_ref]
                             findings_list -> gtk::ListBox {
@@ -153,15 +168,19 @@ impl Component for SidebarNavigationColumn {
     }
 
     fn init(
-        selected_page: Self::Init,
+        SidebarNavigationColumnInit {
+            selected_page,
+            message_catalog,
+        }: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             selected_page,
-            signatures_rows: launched_group_rows(SidebarGroup::SignaturesGroup),
-            scans_rows: launched_group_rows(SidebarGroup::ScansGroup),
-            findings_rows: launched_group_rows(SidebarGroup::FindingsGroup),
+            signatures_rows: launched_group_rows(&message_catalog, SidebarGroup::SignaturesGroup),
+            scans_rows: launched_group_rows(&message_catalog, SidebarGroup::ScansGroup),
+            findings_rows: launched_group_rows(&message_catalog, SidebarGroup::FindingsGroup),
         };
         let signatures_list = model.signatures_rows.widget();
         let scans_list = model.scans_rows.widget();

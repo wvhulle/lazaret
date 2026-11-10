@@ -1,5 +1,8 @@
-use crate::host_services::desktop::{
-    flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters,
+use std::rc::Rc;
+
+use crate::{
+    host_services::desktop::{flatpak_sandbox::SandboxKind, locale_formatting::MomentFormatters},
+    translated_messages::MessageCatalog,
 };
 mod application_window;
 mod findings;
@@ -43,18 +46,18 @@ pub(crate) const APPLICATION_ID: &str = RELEASE_APPLICATION_ID;
 pub(crate) const APPLICATION_ID: &str = "page.codeberg.wvhulle.Lazaret.Devel";
 pub(crate) const APPLICATION_DATA_NAME: &str = "lazaret";
 fn main() -> ExitCode {
+    let message_catalog = Rc::new(MessageCatalog::for_host_messages_locale());
     let sandbox_kind = SandboxKind::detect();
-    let moment_formatters: &'static MomentFormatters =
-        Box::leak(Box::new(MomentFormatters::for_host_locale()));
+    let moment_formatters = Rc::new(MomentFormatters::for_host_locale());
     if !settings_schema_is_installed() {
         eprintln!(
             "{}",
-            translated_messages::startup::settings_schema_missing()
+            translated_messages::startup::settings_schema_missing(&message_catalog)
         );
         return ExitCode::FAILURE;
     }
     if let Some(scan_options) = parse_scheduled_scan_options(std::env::args()) {
-        return run_scheduled_scan(sandbox_kind, scan_options);
+        return run_scheduled_scan(&message_catalog, sandbox_kind, scan_options);
     }
     let startup_request = parse_startup_arguments(std::env::args());
     if let StartupPageRequest::UnrecognizedPage {
@@ -64,6 +67,7 @@ fn main() -> ExitCode {
         eprintln!(
             "{}",
             translated_messages::startup::unknown_page_name(
+                &message_catalog,
                 requested_page_name,
                 known_startup_page_names().join(", ")
             )
@@ -86,6 +90,7 @@ fn main() -> ExitCode {
         .with_args(Vec::new())
         .visible_on_activate(!start_hidden)
         .run_async::<ApplicationWindowShell>(ApplicationWindowShellInit {
+            message_catalog,
             startup_request,
             sandbox_kind,
             moment_formatters,

@@ -1,6 +1,6 @@
 use crate::application_window::{
     application_window_shell::ApplicationWindowShellInput,
-    system_tray_menu::{SystemTrayMenu, spawn_system_tray},
+    system_tray_menu::{SystemTrayMenu, TrayMenuLabels, spawn_system_tray},
 };
 
 #[derive(Clone)]
@@ -25,9 +25,12 @@ pub enum TrayStartFailure {
 }
 
 pub async fn start_system_tray(
+    menu_labels: TrayMenuLabels,
     shell_sender: relm4::Sender<ApplicationWindowShellInput>,
 ) -> Result<RunningTrayHandle, TrayStartFailure> {
-    Ok(RunningTrayHandle(spawn_system_tray(shell_sender).await?))
+    Ok(RunningTrayHandle(
+        spawn_system_tray(menu_labels, shell_sender).await?,
+    ))
 }
 
 pub async fn show_unresolved_detections(

@@ -6,6 +6,7 @@ use crate::{
         scanner_exit_classification::{AbnormalScannerExit, ScannerExit},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -362,10 +363,15 @@ pub fn is_blocked_by_on_access(file_path: &std::path::Path) -> bool {
     )
 }
 
-pub fn displayed_threat_name(threat_identity: &ThreatIdentity) -> String {
+pub fn displayed_threat_name(
+    message_catalog: &MessageCatalog,
+    threat_identity: &ThreatIdentity,
+) -> String {
     match threat_identity {
         ThreatIdentity::Signature { signature_name } => sanitize_scanner_line(signature_name),
-        ThreatIdentity::BlockedByOnAccess => translated_messages::host::blocked_access(),
+        ThreatIdentity::BlockedByOnAccess => {
+            translated_messages::host::blocked_access(message_catalog)
+        }
     }
 }
 

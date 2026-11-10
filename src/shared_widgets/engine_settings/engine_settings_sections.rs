@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use clamd_configuration::protection_rules::ProtectionReduction;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, adw,
@@ -46,6 +48,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56,11 +59,15 @@ pub enum EngineSettingsSection {
 }
 
 impl EngineSettingsSection {
-    fn group_title(self) -> String {
+    fn group_title(self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::ScannerEngine => translated_messages::widgets::clamd_settings(),
-            Self::OnAccessScanning => translated_messages::widgets::access_scanning_settings(),
-            Self::SignatureUpdates => translated_messages::widgets::update_settings(),
+            Self::ScannerEngine => translated_messages::widgets::clamd_settings(message_catalog),
+            Self::OnAccessScanning => {
+                translated_messages::widgets::access_scanning_settings(message_catalog)
+            }
+            Self::SignatureUpdates => {
+                translated_messages::widgets::update_settings(message_catalog)
+            }
         }
     }
 
@@ -220,13 +227,15 @@ const fn confirmation_verdict(change_readiness: LiveChangeReadiness) -> Confirma
 }
 
 pub struct EngineSettingsSectionsInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub settings_layout: EngineSettingsLayout,
     pub sandbox_kind: SandboxKind,
 }
 
 pub struct EngineSettingsSections {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     sandbox_kind: SandboxKind,
     settings_layout: EngineSettingsLayout,
     settings_section: EngineSettingsSection,
@@ -276,47 +285,69 @@ pub enum EngineSettingsSectionsCommand {
     },
 }
 
-pub fn describe_engine_settings_notice(settings_notice: &EngineSettingsNotice) -> String {
+pub fn describe_engine_settings_notice(
+    message_catalog: &MessageCatalog,
+    settings_notice: &EngineSettingsNotice,
+) -> String {
     match settings_notice {
         EngineSettingsNotice::ChangeSnippetCopied => {
-            translated_messages::widgets::change_snippet_copied()
+            translated_messages::widgets::change_snippet_copied(message_catalog)
         }
         EngineSettingsNotice::StaleConfirmationDropped => {
-            translated_messages::widgets::stale_confirmation_dropped()
+            translated_messages::widgets::stale_confirmation_dropped(message_catalog)
         }
         EngineSettingsNotice::LiveChangeReported(change_outcome) => {
-            describe_live_change_outcome(change_outcome)
+            describe_live_change_outcome(message_catalog, change_outcome)
         }
     }
 }
 
-pub fn engine_settings_notice_toast(settings_notice: &EngineSettingsNotice) -> adw::Toast {
+pub fn engine_settings_notice_toast(
+    message_catalog: &MessageCatalog,
+    settings_notice: &EngineSettingsNotice,
+) -> adw::Toast {
     adw::Toast::builder()
-        .title(describe_engine_settings_notice(settings_notice))
+        .title(describe_engine_settings_notice(
+            message_catalog,
+            settings_notice,
+        ))
         .use_markup(false)
         .build()
 }
 
-fn describe_live_change_outcome(change_outcome: &LiveChangeOutcome) -> String {
+fn describe_live_change_outcome(
+    message_catalog: &MessageCatalog,
+    change_outcome: &LiveChangeOutcome,
+) -> String {
     match change_outcome {
-        LiveChangeOutcome::SettingsApplied => translated_messages::widgets::settings_applied(),
-        LiveChangeOutcome::PreviousRestored => translated_messages::widgets::previous_restored(),
+        LiveChangeOutcome::SettingsApplied => {
+            translated_messages::widgets::settings_applied(message_catalog)
+        }
+        LiveChangeOutcome::PreviousRestored => {
+            translated_messages::widgets::previous_restored(message_catalog)
+        }
         LiveChangeOutcome::NothingChanged(change_failure) => {
-            live_change_failure_text(change_failure)
+            live_change_failure_text(message_catalog, change_failure)
         }
     }
 }
 
-fn live_change_failure_text(change_failure: &LiveChangeFailure) -> String {
+fn live_change_failure_text(
+    message_catalog: &MessageCatalog,
+    change_failure: &LiveChangeFailure,
+) -> String {
     let change_not_made = |failure_reason: &str| {
-        translated_messages::widgets::change_not_made_error(sanitize_scanner_line(failure_reason))
+        translated_messages::widgets::change_not_made_error(
+            message_catalog,
+            sanitize_scanner_line(failure_reason),
+        )
     };
     match change_failure {
         LiveChangeFailure::AuthorizationRefused => {
-            translated_messages::widgets::authorization_refused()
+            translated_messages::widgets::authorization_refused(message_catalog)
         }
         LiveChangeFailure::AdminServiceMissing => {
-            translated_messages::widgets::admin_service_missing()
+            translated_messages::widgets::admin_service_missing(message_catalog)
         }
         LiveChangeFailure::UnknownAdminServiceAnswer {
             admin_service_answer,
@@ -356,6 +387,7 @@ impl AlertChoice for SettingChangeChoice {
 }
 
 fn present_live_change_confirmation(
+    message_catalog: &MessageCatalog,
     parent_widget: &impl IsA<gtk::Widget>,
     proposed_change: ProposedLiveChange,
     current_values: &[String],
@@ -368,8 +400,11 @@ fn present_live_change_confirmation(
     } = proposed_change;
     let effect = change_effect(&setting_key, current_values, &new_values);
     let confirmation_dialog = adw::AlertDialog::new(
-        Some(&translated_messages::widgets::change_setting()),
+        Some(&translated_messages::widgets::change_setting(
+            message_catalog,
+        )),
         Some(&change_confirmation_text(
+            message_catalog,
             &setting_key,
             current_values,
             &new_values,
@@ -378,15 +413,15 @@ fn present_live_change_confirmation(
     );
     add_dismissing_choice::<SettingChangeChoice>(
         &confirmation_dialog,
-        &translated_messages::widgets::cancel_engine(),
+        &translated_messages::widgets::cancel_engine(message_catalog),
     );
     add_alert_choice(
         &confirmation_dialog,
         SettingChangeChoice::ChangeApplied,
         &if effect != ProtectionReduction::NoReduction {
-            translated_messages::widgets::reduce_protection()
+            translated_messages::widgets::reduce_protection(message_catalog)
         } else {
-            translated_messages::widgets::apply_label()
+            translated_messages::widgets::apply_label(message_catalog)
         },
     );
     if effect != ProtectionReduction::NoReduction {
@@ -413,36 +448,51 @@ fn present_live_change_confirmation(
     );
 }
 
-fn detection_title(detection_option: DetectionOption) -> String {
+fn detection_title(message_catalog: &MessageCatalog, detection_option: DetectionOption) -> String {
     match detection_option {
         DetectionOption::PotentiallyUnwantedPrograms => {
-            translated_messages::widgets::detect_potentially_unwanted_programs()
+            translated_messages::widgets::detect_potentially_unwanted_programs(message_catalog)
         }
-        DetectionOption::HeuristicAlerts => translated_messages::widgets::heuristic_detections(),
-        DetectionOption::OfficeMacros => translated_messages::widgets::flag_office_files_macros(),
+        DetectionOption::HeuristicAlerts => {
+            translated_messages::widgets::heuristic_detections(message_catalog)
+        }
+        DetectionOption::OfficeMacros => {
+            translated_messages::widgets::flag_office_files_macros(message_catalog)
+        }
         DetectionOption::EncryptedContent => {
-            translated_messages::widgets::flag_encrypted_archives_documents()
+            translated_messages::widgets::flag_encrypted_archives_documents(message_catalog)
         }
-        DetectionOption::ArchiveContents => translated_messages::widgets::look_inside_archives(),
-        DetectionOption::OversizedFiles => translated_messages::widgets::flag_files_too_large(),
+        DetectionOption::ArchiveContents => {
+            translated_messages::widgets::look_inside_archives(message_catalog)
+        }
+        DetectionOption::OversizedFiles => {
+            translated_messages::widgets::flag_files_too_large(message_catalog)
+        }
     }
 }
 
-fn detection_description(detection_option: DetectionOption) -> String {
+fn detection_description(
+    message_catalog: &MessageCatalog,
+    detection_option: DetectionOption,
+) -> String {
     match detection_option {
         DetectionOption::PotentiallyUnwantedPrograms => {
-            translated_messages::widgets::adware_hacking_tools_remote()
+            translated_messages::widgets::adware_hacking_tools_remote(message_catalog)
         }
         DetectionOption::HeuristicAlerts => {
-            translated_messages::widgets::suspicious_files_no_signature()
+            translated_messages::widgets::suspicious_files_no_signature(message_catalog)
         }
-        DetectionOption::OfficeMacros => translated_messages::widgets::macros_common_way_deliver(),
+        DetectionOption::OfficeMacros => {
+            translated_messages::widgets::macros_common_way_deliver(message_catalog)
+        }
         DetectionOption::EncryptedContent => {
-            translated_messages::widgets::clamav_cannot_look_inside()
+            translated_messages::widgets::clamav_cannot_look_inside(message_catalog)
         }
-        DetectionOption::ArchiveContents => translated_messages::widgets::checks_files_inside_zip(),
+        DetectionOption::ArchiveContents => {
+            translated_messages::widgets::checks_files_inside_zip(message_catalog)
+        }
         DetectionOption::OversizedFiles => {
-            translated_messages::widgets::otherwise_files_above_size()
+            translated_messages::widgets::otherwise_files_above_size(message_catalog)
         }
     }
 }
@@ -458,7 +508,8 @@ fn shown_value_of(setting_key: &str, setting_value: &str) -> ShownSettingValue {
 }
 
 fn replace_row_states(
-    moment_formatters: &'static MomentFormatters,
+    message_catalog: &Rc<MessageCatalog>,
+    moment_formatters: &Rc<MomentFormatters>,
     row_factory: &mut FactoryVecDeque<SettingRow>,
     row_states: Vec<SettingRowState>,
 ) {
@@ -491,8 +542,9 @@ fn replace_row_states(
     row_guard.clear();
     row_states.into_iter().for_each(|row_state| {
         row_guard.push_back(SettingRowInit {
+            message_catalog: Rc::clone(message_catalog),
             row_state,
-            moment_formatters,
+            moment_formatters: Rc::clone(moment_formatters),
         });
     });
 }
@@ -591,6 +643,7 @@ impl EngineSettingsSections {
     }
 
     fn detection_row_state(&self, detection_option: DetectionOption) -> SettingRowState {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let setting_key = detection_option.setting_key();
         let file_entry = if configured_values(&self.configured_settings, setting_key).is_empty() {
             FileEntry::ClamavBuiltInDefault
@@ -600,8 +653,8 @@ impl EngineSettingsSections {
         let current_values = self.detection_values(detection_option);
         SettingRowState {
             setting_label: SettingLabel::DescribedSetting {
-                title: detection_title(detection_option),
-                description: detection_description(detection_option),
+                title: detection_title(&message_catalog, detection_option),
+                description: detection_description(&message_catalog, detection_option),
             },
             shown_value: ShownSettingValue::ReadableValue(TypedSettingValue::BooleanValue(
                 SwitchPosition::from_switch_active(effective_switch(
@@ -666,13 +719,18 @@ impl EngineSettingsSections {
     }
 
     fn config_group_description(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.config_load {
             ConfigLoad::ConfigShown {
                 config_path,
                 config_file_owner,
-            } => managed_config_description(*config_file_owner, config_path),
-            ConfigLoad::LoadingConfig => translated_messages::widgets::loading_config(),
-            ConfigLoad::ConfigMissing => translated_messages::widgets::config_missing(),
+            } => managed_config_description(&message_catalog, *config_file_owner, config_path),
+            ConfigLoad::LoadingConfig => {
+                translated_messages::widgets::loading_config(&message_catalog)
+            }
+            ConfigLoad::ConfigMissing => {
+                translated_messages::widgets::config_missing(&message_catalog)
+            }
         }
     }
 
@@ -686,7 +744,8 @@ impl EngineSettingsSections {
     }
 
     fn rebuild_rows(&mut self) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let detection_states = if self.settings_layout.shows_detection_switches() {
             DETECTION_OPTIONS
                 .into_iter()
@@ -696,12 +755,18 @@ impl EngineSettingsSections {
             Vec::new()
         };
         replace_row_states(
-            moment_formatters,
+            &message_catalog,
+            &moment_formatters,
             &mut self.detection_rows,
             detection_states,
         );
         let config_states = self.config_row_states();
-        replace_row_states(moment_formatters, &mut self.setting_rows, config_states);
+        replace_row_states(
+            &message_catalog,
+            &moment_formatters,
+            &mut self.setting_rows,
+            config_states,
+        );
     }
 
     fn refresh_row_activity(&self) {
@@ -791,6 +856,7 @@ impl EngineSettingsSections {
         sender: &ComponentSender<Self>,
         root: &adw::PreferencesGroup,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         if live_change_readiness(&self.change_progress) == LiveChangeReadiness::ChangeAlreadyRunning
         {
             return;
@@ -800,7 +866,13 @@ impl EngineSettingsSections {
         };
         let (proposed_change, current_values) =
             self.proposed_live_change(setting_address, written_value);
-        present_live_change_confirmation(root, proposed_change, &current_values, sender);
+        present_live_change_confirmation(
+            &message_catalog,
+            root,
+            proposed_change,
+            &current_values,
+            sender,
+        );
     }
 
     fn start_running_change(
@@ -828,8 +900,10 @@ impl EngineSettingsSections {
         sender: &ComponentSender<Self>,
         root: &adw::PreferencesGroup,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let copy_dialog = ConfigLineCopyDialog::builder()
             .launch(ConfigLineCopyInit {
+                message_catalog,
                 setting_key: setting_address.setting_key,
                 sibling_values: setting_address.sibling_values,
                 value_position: setting_address.value_position,
@@ -950,22 +1024,22 @@ impl Component for EngineSettingsSections {
 
                 #[local_ref]
                 detection_row_group -> adw::PreferencesGroup {
-                    set_title: &translated_messages::widgets::detection_title(),
-                    set_description: Some(&translated_messages::widgets::clamav_reports_every_description()),
+                    set_title: &translated_messages::widgets::detection_title(&model.message_catalog),
+                    set_description: Some(&translated_messages::widgets::clamav_reports_every_description(&model.message_catalog)),
                     #[watch]
                     set_visible: model.shows_detection_switches(),
                 },
 
                 #[local_ref]
                 setting_rows_group -> adw::PreferencesGroup {
-                    set_title: &model.settings_section.group_title(),
+                    set_title: &model.settings_section.group_title(&model.message_catalog),
                     #[watch]
                     set_description: Some(&glib::markup_escape_text(
                         &model.config_group_description(),
                     )),
 
                     adw::ActionRow {
-                        set_title: &translated_messages::widgets::no_settings_section_title(),
+                        set_title: &translated_messages::widgets::no_settings_section_title(&model.message_catalog),
                         #[watch]
                         set_visible: model.shows_empty_section_row(),
                     },
@@ -976,6 +1050,7 @@ impl Component for EngineSettingsSections {
 
     fn init(
         EngineSettingsSectionsInit {
+            message_catalog,
             moment_formatters,
             settings_layout,
             sandbox_kind,
@@ -997,6 +1072,7 @@ impl Component for EngineSettingsSections {
                 EngineSettingsSectionsInput::SettingRowReported,
             );
         let model = Self {
+            message_catalog,
             moment_formatters,
             sandbox_kind,
             settings_layout,
@@ -1190,21 +1266,29 @@ mod engine_settings_sections_tests {
 
     #[test]
     fn every_settings_notice_describes_its_own_toast() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
-            describe_engine_settings_notice(&EngineSettingsNotice::ChangeSnippetCopied),
+            describe_engine_settings_notice(
+                message_catalog,
+                &EngineSettingsNotice::ChangeSnippetCopied
+            ),
             "Copied. Add it to your configuration to apply it."
         );
         assert_eq!(
-            describe_engine_settings_notice(&EngineSettingsNotice::LiveChangeReported(
-                LiveChangeOutcome::NothingChanged(LiveChangeFailure::AuthorizationRefused)
-            )),
+            describe_engine_settings_notice(
+                message_catalog,
+                &EngineSettingsNotice::LiveChangeReported(LiveChangeOutcome::NothingChanged(
+                    LiveChangeFailure::AuthorizationRefused
+                ))
+            ),
             "Nothing changed without your password"
         );
         assert_eq!(
-            describe_engine_settings_notice(&EngineSettingsNotice::LiveChangeReported(
-                LiveChangeOutcome::SettingsApplied
-            )),
-            describe_live_change_outcome(&LiveChangeOutcome::SettingsApplied)
+            describe_engine_settings_notice(
+                message_catalog,
+                &EngineSettingsNotice::LiveChangeReported(LiveChangeOutcome::SettingsApplied)
+            ),
+            describe_live_change_outcome(message_catalog, &LiveChangeOutcome::SettingsApplied)
         );
     }
 

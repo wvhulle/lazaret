@@ -1,4 +1,4 @@
-use crate::translated_messages;
+use crate::{translated_messages, translated_messages::MessageCatalog};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AuditStatus {
@@ -20,14 +20,16 @@ const STATUS_SEVERITY_ORDER: [AuditStatus; 6] = [
 ];
 
 impl AuditStatus {
-    pub fn status_label(self) -> String {
+    pub fn status_label(self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::CheckPassed => translated_messages::signatures::check_passed(),
-            Self::NeedsReview => translated_messages::signatures::needs_review(),
-            Self::CheckFailed => translated_messages::signatures::check_failed(),
-            Self::StatusUnknown => translated_messages::signatures::status_unknown(),
-            Self::CheckSkipped => translated_messages::signatures::check_skipped(),
-            Self::CheckInProgress => translated_messages::signatures::check_progress(),
+            Self::CheckPassed => translated_messages::signatures::check_passed(message_catalog),
+            Self::NeedsReview => translated_messages::signatures::needs_review(message_catalog),
+            Self::CheckFailed => translated_messages::signatures::check_failed(message_catalog),
+            Self::StatusUnknown => translated_messages::signatures::status_unknown(message_catalog),
+            Self::CheckSkipped => translated_messages::signatures::check_skipped(message_catalog),
+            Self::CheckInProgress => {
+                translated_messages::signatures::check_progress(message_catalog)
+            }
         }
     }
 

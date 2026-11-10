@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -21,10 +23,12 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct QuarantineEntryRow {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     entry_record: QuarantineEntryRecord,
     row_state: EntryRowState,
 }
@@ -45,13 +49,16 @@ impl QuarantineEntryRow {
     }
 
     fn recheck_label(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.row_state.recheck_state {
-            RowRecheckState::Rechecking => translated_messages::findings::checking_label(),
+            RowRecheckState::Rechecking => {
+                translated_messages::findings::checking_label(&message_catalog)
+            }
             RowRecheckState::Rechecked(ContentVerdict::NoLongerDetected) => {
-                translated_messages::findings::no_longer_detected()
+                translated_messages::findings::no_longer_detected(&message_catalog)
             }
             RowRecheckState::Rechecked(ContentVerdict::StillDetected { .. }) => {
-                translated_messages::findings::still_detected()
+                translated_messages::findings::still_detected(&message_catalog)
             }
             RowRecheckState::Rechecked(ContentVerdict::VerdictUnavailable(_))
             | RowRecheckState::NotRechecked => String::new(),
@@ -69,7 +76,7 @@ impl QuarantineEntryRow {
     }
 
     fn integrity_unknown(&self) -> bool {
-        let _moment_formatters = self.moment_formatters;
+        let _moment_formatters = &self.moment_formatters;
         self.entry_record.payload_hash == RecordedPayloadHash::IntegrityUnknown
     }
 }
@@ -86,8 +93,8 @@ impl FactoryComponent for QuarantineEntryRow {
         #[root]
         adw::ActionRow {
             set_use_markup: false,
-            set_title: &displayed_threat_name(&self.entry_record.threat_identity),
-            set_subtitle: &entry_summary_text(self.moment_formatters, &self.entry_record),
+            set_title: &displayed_threat_name(&self.message_catalog, &self.entry_record.threat_identity),
+            set_subtitle: &entry_summary_text(&self.moment_formatters, &self.entry_record),
             set_subtitle_lines: 0,
             set_activatable: true,
             connect_activated[sender, entry_id = self.entry_record.entry_id] => move |_activated_row| {
@@ -105,7 +112,7 @@ impl FactoryComponent for QuarantineEntryRow {
             },
 
             add_suffix = &gtk::Label {
-                set_label: &translated_messages::findings::integrity_unknown_label(),
+                set_label: &translated_messages::findings::integrity_unknown_label(&self.message_catalog),
                 set_valign: gtk::Align::Center,
                 set_css_classes: &["caption-heading", "warning"],
                 set_visible: self.integrity_unknown(),
@@ -119,6 +126,7 @@ impl FactoryComponent for QuarantineEntryRow {
 
     fn init_model(
         QuarantineRowInit {
+            message_catalog,
             moment_formatters,
             entry_record,
             row_state,
@@ -127,6 +135,7 @@ impl FactoryComponent for QuarantineEntryRow {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             moment_formatters,
             entry_record,
             row_state,

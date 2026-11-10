@@ -62,6 +62,7 @@ use crate::{
         database_update_condition, third_party_source_condition, updater_failed,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -155,38 +156,49 @@ fn relative_text(
     moment_formatters.relative_moment_text(moment, reference_moment)
 }
 
-fn third_party_provider_count(third_party_listing: &ThirdPartySignatureListing) -> usize {
+fn third_party_provider_count(
+    message_catalog: &MessageCatalog,
+    third_party_listing: &ThirdPartySignatureListing,
+) -> usize {
     third_party_listing
         .listed_files()
         .iter()
         .map(|signature_file| {
-            signature_file_source_name(provider_of_signature_file(&signature_file.file_name))
+            signature_file_source_name(
+                message_catalog,
+                provider_of_signature_file(&signature_file.file_name),
+            )
         })
         .collect::<BTreeSet<_>>()
         .len()
 }
 
 fn signature_sources_summary(
+    message_catalog: &MessageCatalog,
     signature_evidence: &SignatureEvidence,
     reference_moment: Timestamp,
 ) -> AreaSummary {
     let source_condition =
         third_party_source_condition(&signature_evidence.third_party_listing, reference_moment);
-    let provider_count = third_party_provider_count(&signature_evidence.third_party_listing);
+    let provider_count =
+        third_party_provider_count(message_catalog, &signature_evidence.third_party_listing);
     let live_state_text = match &signature_evidence.third_party_listing {
         ThirdPartySignatureListing::FolderUnreadable(_) => {
-            translated_messages::window::other_sources_unknown()
+            translated_messages::window::other_sources_unknown(message_catalog)
         }
         ThirdPartySignatureListing::FilesListed(_)
             if source_condition != CheckedCondition::ConditionMet =>
         {
-            translated_messages::window::source_out_date()
+            translated_messages::window::source_out_date(message_catalog)
         }
         ThirdPartySignatureListing::FilesListed(_) if provider_count == 0 => {
-            translated_messages::window::official_signatures()
+            translated_messages::window::official_signatures(message_catalog)
         }
         ThirdPartySignatureListing::FilesListed(_) => {
-            translated_messages::window::official_count_other_source(provider_count)
+            translated_messages::window::official_count_other_source(
+                message_catalog,
+                provider_count,
+            )
         }
     };
     condition_summary(source_condition, live_state_text)
@@ -208,14 +220,17 @@ fn latest_completed_update(signature_evidence: &SignatureEvidence) -> Option<Tim
 }
 
 fn database_updates_text(
+    message_catalog: &MessageCatalog,
     signature_evidence: &SignatureEvidence,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
 ) -> String {
     match signature_evidence.database_evidence {
-        DatabaseEvidence::DatabaseMissing => translated_messages::window::database_missing(),
+        DatabaseEvidence::DatabaseMissing => {
+            translated_messages::window::database_missing(message_catalog)
+        }
         DatabaseEvidence::AgeUndetermined | DatabaseEvidence::InspectionInterrupted => {
-            translated_messages::window::age_definitions_unknown()
+            translated_messages::window::age_definitions_unknown(message_catalog)
         }
         DatabaseEvidence::BuiltAt { .. }
             if signature_evidence
@@ -223,49 +238,53 @@ fn database_updates_text(
                 .iter()
                 .any(updater_failed) =>
         {
-            translated_messages::window::last_update_failed()
+            translated_messages::window::last_update_failed(message_catalog)
         }
         DatabaseEvidence::BuiltAt { built_at } if built_at > reference_moment => {
-            translated_messages::window::definitions_dated_future()
+            translated_messages::window::definitions_dated_future(message_catalog)
         }
         DatabaseEvidence::BuiltAt { built_at } => {
             match latest_completed_update(signature_evidence) {
-                Some(finished_at) => translated_messages::window::updated_label(relative_text(
-                    moment_formatters,
-                    reference_moment,
-                    finished_at,
-                )),
-                None => translated_messages::window::definitions_label(relative_text(
-                    moment_formatters,
-                    reference_moment,
-                    built_at,
-                )),
+                Some(finished_at) => translated_messages::window::updated_label(
+                    message_catalog,
+                    relative_text(moment_formatters, reference_moment, finished_at),
+                ),
+                None => translated_messages::window::definitions_label(
+                    message_catalog,
+                    relative_text(moment_formatters, reference_moment, built_at),
+                ),
             }
         }
     }
 }
 
-fn updater_trust_summary(protection_evidence: &ProtectionEvidence) -> Option<AreaSummary> {
+fn updater_trust_summary(
+    message_catalog: &MessageCatalog,
+    protection_evidence: &ProtectionEvidence,
+) -> Option<AreaSummary> {
     let trust_condition = program_trust_condition(
         &protection_evidence.program_trust,
         TrustedProgramGroup::UpdaterPrograms,
     );
     match trust_condition {
         CheckedCondition::ConditionMet => None,
-        CheckedCondition::ConditionFailed => Some(translated_messages::window::freshclam_refused()),
+        CheckedCondition::ConditionFailed => Some(translated_messages::window::freshclam_refused(
+            message_catalog,
+        )),
         CheckedCondition::EvidenceUnknown => {
-            Some(translated_messages::window::unknown_whether_freshclam_trusted())
+            Some(translated_messages::window::unknown_whether_freshclam_trusted(message_catalog))
         }
         CheckedCondition::SetupSuggested
         | CheckedCondition::ReviewSuggested
-        | CheckedCondition::PrerequisiteMissing => {
-            Some(translated_messages::window::freshclam_copy_account_ignored())
-        }
+        | CheckedCondition::PrerequisiteMissing => Some(
+            translated_messages::window::freshclam_copy_account_ignored(message_catalog),
+        ),
     }
     .map(|live_state_text| condition_summary(trust_condition, live_state_text))
 }
 
 fn database_updates_summary(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -274,73 +293,89 @@ fn database_updates_summary(
     worst_summary(
         condition_summary(
             database_update_condition(signature_evidence, reference_moment),
-            database_updates_text(signature_evidence, moment_formatters, reference_moment),
+            database_updates_text(
+                message_catalog,
+                signature_evidence,
+                moment_formatters,
+                reference_moment,
+            ),
         ),
-        [updater_trust_summary(protection_evidence)],
+        [updater_trust_summary(message_catalog, protection_evidence)],
     )
 }
 
-fn daemon_text(daemon_evidence: &DaemonEvidence) -> String {
+fn daemon_text(message_catalog: &MessageCatalog, daemon_evidence: &DaemonEvidence) -> String {
     match daemon_evidence {
         DaemonEvidence::ClamdAnswering {
             loaded_signatures: LoadedSignatures::BehindDisk { .. },
-        } => translated_messages::window::clamd_uses_older_signatures(),
+        } => translated_messages::window::clamd_uses_older_signatures(message_catalog),
         DaemonEvidence::ClamdAnswering {
             loaded_signatures:
                 LoadedSignatures::MatchesDisk | LoadedSignatures::ComparisonUnavailable,
-        } => translated_messages::window::clamd_answering(),
+        } => translated_messages::window::clamd_answering(message_catalog),
         DaemonEvidence::UnitActiveNotAnswering { .. } => {
-            translated_messages::window::unit_active_not_answering()
+            translated_messages::window::unit_active_not_answering(message_catalog)
         }
         DaemonEvidence::UnitStateUnknown => {
-            translated_messages::window::unit_state_unknown_daemon()
+            translated_messages::window::unit_state_unknown_daemon(message_catalog)
         }
-        DaemonEvidence::UnitStopped { .. } => translated_messages::window::unit_stopped_daemon(),
-        DaemonEvidence::NeverSetUp => translated_messages::window::never_set_up_daemon(),
+        DaemonEvidence::UnitStopped { .. } => {
+            translated_messages::window::unit_stopped_daemon(message_catalog)
+        }
+        DaemonEvidence::NeverSetUp => {
+            translated_messages::window::never_set_up_daemon(message_catalog)
+        }
     }
 }
 
-fn engine_installation_summary(engine_installation: &EngineInstallation) -> Option<AreaSummary> {
+fn engine_installation_summary(
+    message_catalog: &MessageCatalog,
+    engine_installation: &EngineInstallation,
+) -> Option<AreaSummary> {
     match engine_installation {
         EngineInstallation::VersionReported { .. } => None,
         EngineInstallation::EngineMissing => Some(summary_of(
             AreaStatus::AreaFailing,
-            translated_messages::window::engine_missing(),
+            translated_messages::window::engine_missing(message_catalog),
         )),
         EngineInstallation::ScannerRefused { .. } => Some(condition_summary(
             engine_condition(engine_installation),
-            translated_messages::window::scanner_refused(),
+            translated_messages::window::scanner_refused(message_catalog),
         )),
         EngineInstallation::VersionUnverified(_) => Some(condition_summary(
             engine_condition(engine_installation),
-            translated_messages::window::version_unverified(),
+            translated_messages::window::version_unverified(message_catalog),
         )),
     }
 }
 
-fn scanner_trust_summary(protection_evidence: &ProtectionEvidence) -> Option<AreaSummary> {
+fn scanner_trust_summary(
+    message_catalog: &MessageCatalog,
+    protection_evidence: &ProtectionEvidence,
+) -> Option<AreaSummary> {
     let trust_condition = program_trust_condition(
         &protection_evidence.program_trust,
         TrustedProgramGroup::ScannerPrograms,
     );
     match trust_condition {
         CheckedCondition::ConditionMet => None,
-        CheckedCondition::ConditionFailed => {
-            Some(translated_messages::window::scanner_program_refused())
-        }
+        CheckedCondition::ConditionFailed => Some(
+            translated_messages::window::scanner_program_refused(message_catalog),
+        ),
         CheckedCondition::EvidenceUnknown => {
-            Some(translated_messages::window::unknown_whether_scanners_trusted())
+            Some(translated_messages::window::unknown_whether_scanners_trusted(message_catalog))
         }
         CheckedCondition::SetupSuggested
         | CheckedCondition::ReviewSuggested
-        | CheckedCondition::PrerequisiteMissing => {
-            Some(translated_messages::window::scanner_copy_account_ignored())
-        }
+        | CheckedCondition::PrerequisiteMissing => Some(
+            translated_messages::window::scanner_copy_account_ignored(message_catalog),
+        ),
     }
     .map(|live_state_text| condition_summary(trust_condition, live_state_text))
 }
 
 fn reduction_summary(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     setting_group: ReducedSettingGroup,
 ) -> Option<AreaSummary> {
@@ -348,36 +383,43 @@ fn reduction_summary(
         runtime_reduction_condition(&protection_evidence.runtime_reductions, setting_group);
     match reduction_condition {
         CheckedCondition::ConditionMet => None,
-        CheckedCondition::EvidenceUnknown => {
-            Some(translated_messages::window::runtime_changes_unknown())
-        }
+        CheckedCondition::EvidenceUnknown => Some(
+            translated_messages::window::runtime_changes_unknown(message_catalog),
+        ),
         CheckedCondition::SetupSuggested
         | CheckedCondition::ReviewSuggested
         | CheckedCondition::ConditionFailed
-        | CheckedCondition::PrerequisiteMissing => {
-            Some(translated_messages::window::settings_reduced_runtime())
-        }
+        | CheckedCondition::PrerequisiteMissing => Some(
+            translated_messages::window::settings_reduced_runtime(message_catalog),
+        ),
     }
     .map(|live_state_text| condition_summary(reduction_condition, live_state_text))
 }
 
-fn scan_engine_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary {
+fn scan_engine_summary(
+    message_catalog: &MessageCatalog,
+    protection_evidence: &ProtectionEvidence,
+) -> AreaSummary {
     let daemon_evidence = &protection_evidence.daemon_evidence;
     worst_summary(
         condition_summary(
             daemon_condition(daemon_evidence),
-            daemon_text(daemon_evidence),
+            daemon_text(message_catalog, daemon_evidence),
         ),
         [
-            engine_installation_summary(&protection_evidence.engine_installation),
-            scanner_trust_summary(protection_evidence),
-            reduction_summary(protection_evidence, ReducedSettingGroup::EngineSettings),
+            engine_installation_summary(message_catalog, &protection_evidence.engine_installation),
+            scanner_trust_summary(message_catalog, protection_evidence),
+            reduction_summary(
+                message_catalog,
+                protection_evidence,
+                ReducedSettingGroup::EngineSettings,
+            ),
         ],
     )
 }
 
-fn waiting_for_daemon_text() -> String {
-    translated_messages::window::waiting_daemon()
+fn waiting_for_daemon_text(message_catalog: &MessageCatalog) -> String {
+    translated_messages::window::waiting_daemon(message_catalog)
 }
 
 fn shown_coverage_text(coverage_summary: &str, home_directory: &str) -> String {
@@ -402,27 +444,34 @@ fn watched_paths_text(watch_scope: &WatchScope, home_directory: &str) -> String 
 }
 
 fn on_access_text(
+    message_catalog: &MessageCatalog,
     on_access_evidence: &OnAccessEvidence,
     daemon_answering: bool,
     home_directory: &str,
 ) -> String {
     match on_access_evidence.on_access_scanner {
         OnAccessScanner::UnitStateUnknown => {
-            translated_messages::window::unit_state_unknown_access()
+            translated_messages::window::unit_state_unknown_access(message_catalog)
         }
-        OnAccessScanner::NeverSetUp => translated_messages::window::never_set_up_access(),
+        OnAccessScanner::NeverSetUp => {
+            translated_messages::window::never_set_up_access(message_catalog)
+        }
         OnAccessScanner::UnitStopped { .. } | OnAccessScanner::MonitorRunning
             if !daemon_answering =>
         {
-            waiting_for_daemon_text()
+            waiting_for_daemon_text(message_catalog)
         }
-        OnAccessScanner::UnitStopped { .. } => translated_messages::window::unit_stopped_access(),
+        OnAccessScanner::UnitStopped { .. } => {
+            translated_messages::window::unit_stopped_access(message_catalog)
+        }
         OnAccessScanner::MonitorRunning => match &on_access_evidence.on_access_config {
-            OnAccessConfig::ConfigUnreadable(_) => translated_messages::window::config_unreadable(),
+            OnAccessConfig::ConfigUnreadable(_) => {
+                translated_messages::window::config_unreadable(message_catalog)
+            }
             OnAccessConfig::ConfigRead {
                 watch_scope: WatchScope::NothingWatched,
                 ..
-            } => translated_messages::window::nothing_watched(),
+            } => translated_messages::window::nothing_watched(message_catalog),
             OnAccessConfig::ConfigRead {
                 watch_scope: watch_scope @ WatchScope::WatchedLocations { .. },
                 configured_prevention,
@@ -435,26 +484,29 @@ fn on_access_text(
             ) {
                 OnAccessBlocking::PreventionOff
                 | OnAccessBlocking::PreventionConflictsWithMounts => {
-                    translated_messages::window::checks_files_not_block()
+                    translated_messages::window::checks_files_not_block(message_catalog)
                 }
                 OnAccessBlocking::KernelCannotBlock => {
-                    translated_messages::window::checks_files_kernel_cannot()
+                    translated_messages::window::checks_files_kernel_cannot(message_catalog)
                 }
                 OnAccessBlocking::KernelSupportUnknown(_) => {
-                    translated_messages::window::checks_files_blocking_unknown()
+                    translated_messages::window::checks_files_blocking_unknown(message_catalog)
                 }
                 OnAccessBlocking::BlocksDetectedFiles => {
-                    translated_messages::window::blocking_paths(watched_paths_text(
-                        watch_scope,
-                        home_directory,
-                    ))
+                    translated_messages::window::blocking_paths(
+                        message_catalog,
+                        watched_paths_text(watch_scope, home_directory),
+                    )
                 }
             },
         },
     }
 }
 
-fn on_access_setup_summary(on_access_evidence: &OnAccessEvidence) -> Option<AreaSummary> {
+fn on_access_setup_summary(
+    message_catalog: &MessageCatalog,
+    on_access_evidence: &OnAccessEvidence,
+) -> Option<AreaSummary> {
     let setup_findings = on_access_setup_findings(on_access_evidence);
     let first_finding = setup_findings.first()?;
     Some(
@@ -464,24 +516,24 @@ fn on_access_setup_summary(on_access_evidence: &OnAccessEvidence) -> Option<Area
         {
             condition_summary(
                 CheckedCondition::EvidenceUnknown,
-                translated_messages::window::folder_watch_limit_unknown(),
+                translated_messages::window::folder_watch_limit_unknown(message_catalog),
             )
         } else {
             condition_summary(
                 CheckedCondition::ReviewSuggested,
                 match first_finding {
                     OnAccessSetupFinding::MountWatchConflicts { .. } => {
-                        translated_messages::window::mount_watch_conflicts()
+                        translated_messages::window::mount_watch_conflicts(message_catalog)
                     }
                     OnAccessSetupFinding::ClamdUserNotExcluded => {
-                        translated_messages::window::clamd_user_not_excluded()
+                        translated_messages::window::clamd_user_not_excluded(message_catalog)
                     }
                     OnAccessSetupFinding::WholeRootIncluded => {
-                        translated_messages::window::whole_root_included()
+                        translated_messages::window::whole_root_included(message_catalog)
                     }
                     OnAccessSetupFinding::WatchLimitLow { .. }
                     | OnAccessSetupFinding::WatchLimitUnknown { .. } => {
-                        translated_messages::window::watch_limit_low()
+                        translated_messages::window::watch_limit_low(message_catalog)
                     }
                 },
             )
@@ -490,6 +542,7 @@ fn on_access_setup_summary(on_access_evidence: &OnAccessEvidence) -> Option<Area
 }
 
 fn on_access_summary(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     home_directory: &str,
 ) -> AreaSummary {
@@ -497,28 +550,40 @@ fn on_access_summary(
     let on_access_evidence = &protection_evidence.on_access_evidence;
     worst_summary(
         condition_summary(
-            on_access_condition(on_access_evidence, daemon_answering),
-            on_access_text(on_access_evidence, daemon_answering, home_directory),
+            on_access_condition(message_catalog, on_access_evidence, daemon_answering),
+            on_access_text(
+                message_catalog,
+                on_access_evidence,
+                daemon_answering,
+                home_directory,
+            ),
         ),
         [
-            on_access_setup_summary(on_access_evidence),
-            reduction_summary(protection_evidence, ReducedSettingGroup::OnAccessSettings),
+            on_access_setup_summary(message_catalog, on_access_evidence),
+            reduction_summary(
+                message_catalog,
+                protection_evidence,
+                ReducedSettingGroup::OnAccessSettings,
+            ),
         ],
     )
 }
 
 fn scheduled_scan_text(
+    message_catalog: &MessageCatalog,
     scheduled_scan_evidence: &ScheduledScanEvidence,
     daemon_answering: bool,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
 ) -> String {
     match scheduled_scan_evidence {
-        ScheduledScanEvidence::SystemTimer { .. } if !daemon_answering => waiting_for_daemon_text(),
+        ScheduledScanEvidence::SystemTimer { .. } if !daemon_answering => {
+            waiting_for_daemon_text(message_catalog)
+        }
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerInactive,
             ..
-        } => translated_messages::window::timer_not_active(),
+        } => translated_messages::window::timer_not_active(message_catalog),
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerActive { next_run },
             scan_service,
@@ -528,25 +593,32 @@ fn scheduled_scan_text(
                 if scheduled_scan_condition(scheduled_scan_evidence, daemon_answering)
                     != CheckedCondition::ConditionMet =>
             {
-                translated_messages::window::last_scan_failed()
+                translated_messages::window::last_scan_failed(message_catalog)
             }
             ScanServiceEvidence::ServiceConfigured { .. } => match next_run {
                 UnitTimestamp::RecordedAt { recorded_at } => {
-                    translated_messages::window::next_scan(relative_text(
-                        moment_formatters,
-                        reference_moment,
-                        *recorded_at,
-                    ))
+                    translated_messages::window::next_scan(
+                        message_catalog,
+                        relative_text(moment_formatters, reference_moment, *recorded_at),
+                    )
                 }
-                UnitTimestamp::NeverRecorded => translated_messages::window::no_next_scan_planned(),
+                UnitTimestamp::NeverRecorded => {
+                    translated_messages::window::no_next_scan_planned(message_catalog)
+                }
             },
-            ScanServiceEvidence::ServiceMissing => translated_messages::window::service_missing(),
+            ScanServiceEvidence::ServiceMissing => {
+                translated_messages::window::service_missing(message_catalog)
+            }
             ScanServiceEvidence::ServiceUnreadable => {
-                translated_messages::window::service_unreadable()
+                translated_messages::window::service_unreadable(message_catalog)
             }
         },
-        ScheduledScanEvidence::LazaretSchedule => translated_messages::window::lazaret_schedule(),
-        ScheduledScanEvidence::NoSchedule => translated_messages::window::no_schedule(),
+        ScheduledScanEvidence::LazaretSchedule => {
+            translated_messages::window::lazaret_schedule(message_catalog)
+        }
+        ScheduledScanEvidence::NoSchedule => {
+            translated_messages::window::no_schedule(message_catalog)
+        }
     }
 }
 
@@ -576,6 +648,7 @@ const fn excludes_broadly(account_finding: &AccountSettingFinding) -> bool {
 }
 
 fn scheduled_scans_summary(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -586,6 +659,7 @@ fn scheduled_scans_summary(
         condition_summary(
             scheduled_scan_condition(scheduled_scan_evidence, daemon_answering),
             scheduled_scan_text(
+                message_catalog,
                 scheduled_scan_evidence,
                 daemon_answering,
                 moment_formatters,
@@ -595,16 +669,19 @@ fn scheduled_scans_summary(
         [account_finding_summary(
             &protection_evidence.account_setting_findings,
             changes_schedule_unit,
-            translated_messages::window::schedule_changed_outside_lazaret(),
+            translated_messages::window::schedule_changed_outside_lazaret(message_catalog),
         )],
     )
 }
 
-fn manual_scan_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary {
+fn manual_scan_summary(
+    message_catalog: &MessageCatalog,
+    protection_evidence: &ProtectionEvidence,
+) -> AreaSummary {
     let scanner_summary = match protection_evidence.engine_installation {
         EngineInstallation::EngineMissing => summary_of(
             AreaStatus::AreaFailing,
-            translated_messages::window::engine_missing(),
+            translated_messages::window::engine_missing(message_catalog),
         ),
         EngineInstallation::VersionReported { .. }
         | EngineInstallation::ScannerRefused { .. }
@@ -613,14 +690,14 @@ fn manual_scan_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary 
         {
             summary_of(
                 AreaStatus::AreaHealthy,
-                translated_messages::window::ready_scan(),
+                translated_messages::window::ready_scan(message_catalog),
             )
         }
         EngineInstallation::VersionReported { .. }
         | EngineInstallation::ScannerRefused { .. }
         | EngineInstallation::VersionUnverified(_) => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::uses_slower_clamscan(),
+            translated_messages::window::uses_slower_clamscan(message_catalog),
         ),
     };
     worst_summary(
@@ -628,23 +705,26 @@ fn manual_scan_summary(protection_evidence: &ProtectionEvidence) -> AreaSummary 
         [account_finding_summary(
             &protection_evidence.account_setting_findings,
             excludes_broadly,
-            translated_messages::window::exclusion_skip_malware(),
+            translated_messages::window::exclusion_skip_malware(message_catalog),
         )],
     )
 }
 
-pub fn removable_drives_summary(removable_drives_status: &RemovableDrivesStatus) -> AreaSummary {
+pub fn removable_drives_summary(
+    message_catalog: &MessageCatalog,
+    removable_drives_status: &RemovableDrivesStatus,
+) -> AreaSummary {
     match &removable_drives_status.device_scan_status {
         DeviceScanStatus::DeviceScanRunning { drive_name } => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::device_scan_running(drive_name),
+            translated_messages::window::device_scan_running(message_catalog, drive_name),
         ),
         DeviceScanStatus::DeviceScanEnded {
             drive_name,
             scan_result: ScanResultsStatus::ThreatsDetected,
         } => summary_of(
             AreaStatus::AreaNeedsReview,
-            translated_messages::window::device_scan_ended(drive_name),
+            translated_messages::window::device_scan_ended(message_catalog, drive_name),
         ),
         DeviceScanStatus::NoDeviceScanYet
         | DeviceScanStatus::DeviceScanEnded {
@@ -655,12 +735,13 @@ pub fn removable_drives_summary(removable_drives_status: &RemovableDrivesStatus)
             ..
         } => summary_of(
             AreaStatus::AreaHealthy,
-            auto_scan_state_text(removable_drives_status.auto_scan_settings),
+            auto_scan_state_text(message_catalog, removable_drives_status.auto_scan_settings),
         ),
     }
 }
 
 fn alerts_summary(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     alert_readiness: &AlertReadiness,
 ) -> Option<AreaSummary> {
@@ -672,31 +753,41 @@ fn alerts_summary(
         return None;
     }
     let live_state_text = match alert_readiness.journal_access {
-        JournalAccess::JournalUnreadable => translated_messages::window::journal_unreadable(),
-        JournalAccess::FollowingFailed(_) => translated_messages::window::following_failed(),
-        JournalAccess::FollowingJournal if !alert_readiness.notifications_enabled => {
-            translated_messages::window::notifications_off()
+        JournalAccess::JournalUnreadable => {
+            translated_messages::window::journal_unreadable(message_catalog)
         }
-        JournalAccess::FollowingJournal => translated_messages::window::alerts_stop_lazaret_quits(),
+        JournalAccess::FollowingFailed(_) => {
+            translated_messages::window::following_failed(message_catalog)
+        }
+        JournalAccess::FollowingJournal if !alert_readiness.notifications_enabled => {
+            translated_messages::window::notifications_off(message_catalog)
+        }
+        JournalAccess::FollowingJournal => {
+            translated_messages::window::alerts_stop_lazaret_quits(message_catalog)
+        }
     };
     Some(condition_summary(alert_condition, live_state_text))
 }
 
-fn process_attach_summary(process_attach_scope: ProcessAttachScope) -> Option<AreaSummary> {
+fn process_attach_summary(
+    message_catalog: &MessageCatalog,
+    process_attach_scope: ProcessAttachScope,
+) -> Option<AreaSummary> {
     let attach_condition = process_attach_condition(process_attach_scope);
     match process_attach_scope {
         ProcessAttachScope::AttachRestricted => None,
-        ProcessAttachScope::AnyProgramMayAttach | ProcessAttachScope::YamaNotLoaded => {
-            Some(translated_messages::window::other_programs_attach_lazaret())
-        }
+        ProcessAttachScope::AnyProgramMayAttach | ProcessAttachScope::YamaNotLoaded => Some(
+            translated_messages::window::other_programs_attach_lazaret(message_catalog),
+        ),
         ProcessAttachScope::ScopeUnreadable(_) => {
-            Some(translated_messages::window::unknown_whether_programs_attach())
+            Some(translated_messages::window::unknown_whether_programs_attach(message_catalog))
         }
     }
     .map(|live_state_text| condition_summary(attach_condition, live_state_text))
 }
 
 pub fn detections_summary(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     unresolved_detections: usize,
     alert_readiness: &AlertReadiness,
@@ -704,110 +795,132 @@ pub fn detections_summary(
     let decision_summary = if unresolved_detections == 0 {
         summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::nothing_decide(),
+            translated_messages::window::nothing_decide(message_catalog),
         )
     } else {
         summary_of(
             AreaStatus::AreaNeedsReview,
-            translated_messages::window::count_needs_decision(unresolved_detections),
+            translated_messages::window::count_needs_decision(
+                message_catalog,
+                unresolved_detections,
+            ),
         )
     };
     worst_summary(
         decision_summary,
         [
-            alerts_summary(protection_evidence, alert_readiness),
-            process_attach_summary(protection_evidence.process_attach_scope),
+            alerts_summary(message_catalog, protection_evidence, alert_readiness),
+            process_attach_summary(message_catalog, protection_evidence.process_attach_scope),
         ],
     )
 }
 
-pub fn quarantine_summary(quarantine_entry_count: QuarantineEntryCount) -> AreaSummary {
+pub fn quarantine_summary(
+    message_catalog: &MessageCatalog,
+    quarantine_entry_count: QuarantineEntryCount,
+) -> AreaSummary {
     match quarantine_entry_count {
         QuarantineEntryCount::CountLoading => summary_of(
             AreaStatus::AreaUnknown,
-            translated_messages::window::loading_label(),
+            translated_messages::window::loading_label(message_catalog),
         ),
         QuarantineEntryCount::EntriesCounted { entry_count: 0 } => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::quarantine_empty(),
+            translated_messages::window::quarantine_empty(message_catalog),
         ),
         QuarantineEntryCount::EntriesCounted { entry_count } => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::count_item(entry_count),
+            translated_messages::window::count_item(message_catalog, entry_count),
         ),
         QuarantineEntryCount::CountUnavailable => summary_of(
             AreaStatus::AreaFailing,
-            translated_messages::window::quarantine_cannot_read(),
+            translated_messages::window::quarantine_cannot_read(message_catalog),
         ),
     }
 }
 
-fn trusted_entries_text(trusted_entries: usize) -> String {
+fn trusted_entries_text(message_catalog: &MessageCatalog, trusted_entries: usize) -> String {
     if trusted_entries == 0 {
-        return translated_messages::window::nothing_trusted();
+        return translated_messages::window::nothing_trusted(message_catalog);
     }
-    translated_messages::window::count_item_trusted(trusted_entries)
+    translated_messages::window::count_item_trusted(message_catalog, trusted_entries)
 }
 
-fn trusted_detections_summary(trust_list_reading: &TrustListReading) -> AreaSummary {
+fn trusted_detections_summary(
+    message_catalog: &MessageCatalog,
+    trust_list_reading: &TrustListReading,
+) -> AreaSummary {
     let live_state_text = match trust_list_reading {
         TrustListReading::FolderUnreadable(_) => {
-            translated_messages::window::signature_folder_unreadable()
+            translated_messages::window::signature_folder_unreadable(message_catalog)
         }
-        TrustListReading::FolderMissing => trusted_entries_text(0),
+        TrustListReading::FolderMissing => trusted_entries_text(message_catalog, 0),
         TrustListReading::ListsRead(trust_list) if !trust_list.foreign_allowlists.is_empty() => {
-            translated_messages::window::another_allowlist_silences_clamav()
+            translated_messages::window::another_allowlist_silences_clamav(message_catalog)
         }
         TrustListReading::ListsRead(trust_list) => {
             match (&trust_list.trusted_files, &trust_list.ignored_signatures) {
                 (
                     LazaretListReading::ListRead(trusted_files),
                     LazaretListReading::ListRead(ignored_signatures),
-                ) => trusted_entries_text(trusted_files.len() + ignored_signatures.len()),
+                ) => trusted_entries_text(
+                    message_catalog,
+                    trusted_files.len() + ignored_signatures.len(),
+                ),
                 (LazaretListReading::ListUnreadable(_), _)
                 | (LazaretListReading::ListRead(_), LazaretListReading::ListUnreadable(_)) => {
-                    translated_messages::window::lazaret_allowlist_unreadable()
+                    translated_messages::window::lazaret_allowlist_unreadable(message_catalog)
                 }
             }
         }
     };
-    condition_summary(trust_list_condition(trust_list_reading), live_state_text)
+    condition_summary(
+        trust_list_condition(message_catalog, trust_list_reading),
+        live_state_text,
+    )
 }
 
-pub fn sent_samples_summary(submission_tally: SubmissionTally) -> AreaSummary {
+pub fn sent_samples_summary(
+    message_catalog: &MessageCatalog,
+    submission_tally: SubmissionTally,
+) -> AreaSummary {
     match submission_tally {
         SubmissionTally::TallyLoading => summary_of(
             AreaStatus::AreaUnknown,
-            translated_messages::window::loading_label(),
+            translated_messages::window::loading_label(message_catalog),
         ),
         SubmissionTally::TallyUnavailable => summary_of(
             AreaStatus::AreaFailing,
-            translated_messages::window::sent_samples_cannot_read(),
+            translated_messages::window::sent_samples_cannot_read(message_catalog),
         ),
         SubmissionTally::TallyCounted {
             submitted_count: 0, ..
         } => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::nothing_sent(),
+            translated_messages::window::nothing_sent(message_catalog),
         ),
         SubmissionTally::TallyCounted { refused_count, .. } if refused_count > 0 => summary_of(
             AreaStatus::AreaNeedsReview,
-            translated_messages::window::count_samples_refused(refused_count),
+            translated_messages::window::count_samples_refused(message_catalog, refused_count),
         ),
         SubmissionTally::TallyCounted { awaiting_count, .. } if awaiting_count > 0 => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::count_samples_awaiting_review(awaiting_count),
+            translated_messages::window::count_samples_awaiting_review(
+                message_catalog,
+                awaiting_count,
+            ),
         ),
         SubmissionTally::TallyCounted {
             submitted_count, ..
         } => summary_of(
             AreaStatus::AreaHealthy,
-            translated_messages::window::count_samples_sent(submitted_count),
+            translated_messages::window::count_samples_sent(message_catalog, submitted_count),
         ),
     }
 }
 
 pub fn evidence_area_summaries(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -817,6 +930,7 @@ pub fn evidence_area_summaries(
         SidebarAreaSummary {
             application_page: ApplicationPage::SignatureSources,
             area_summary: signature_sources_summary(
+                message_catalog,
                 &protection_evidence.signature_evidence,
                 reference_moment,
             ),
@@ -824,6 +938,7 @@ pub fn evidence_area_summaries(
         SidebarAreaSummary {
             application_page: ApplicationPage::DatabaseUpdates,
             area_summary: database_updates_summary(
+                message_catalog,
                 protection_evidence,
                 moment_formatters,
                 reference_moment,
@@ -831,15 +946,16 @@ pub fn evidence_area_summaries(
         },
         SidebarAreaSummary {
             application_page: ApplicationPage::ScanEngine,
-            area_summary: scan_engine_summary(protection_evidence),
+            area_summary: scan_engine_summary(message_catalog, protection_evidence),
         },
         SidebarAreaSummary {
             application_page: ApplicationPage::OnAccessScanning,
-            area_summary: on_access_summary(protection_evidence, home_directory),
+            area_summary: on_access_summary(message_catalog, protection_evidence, home_directory),
         },
         SidebarAreaSummary {
             application_page: ApplicationPage::ScheduledScans,
             area_summary: scheduled_scans_summary(
+                message_catalog,
                 protection_evidence,
                 moment_formatters,
                 reference_moment,
@@ -847,11 +963,14 @@ pub fn evidence_area_summaries(
         },
         SidebarAreaSummary {
             application_page: ApplicationPage::ManualScan,
-            area_summary: manual_scan_summary(protection_evidence),
+            area_summary: manual_scan_summary(message_catalog, protection_evidence),
         },
         SidebarAreaSummary {
             application_page: ApplicationPage::TrustedDetections,
-            area_summary: trusted_detections_summary(&protection_evidence.trust_list),
+            area_summary: trusted_detections_summary(
+                message_catalog,
+                &protection_evidence.trust_list,
+            ),
         },
     ]
 }
@@ -949,9 +1068,13 @@ mod application_page_status_tests {
         }
     }
 
-    fn idle_summaries(protection_evidence: &ProtectionEvidence) -> Vec<SidebarAreaSummary> {
+    fn idle_summaries(
+        message_catalog: &MessageCatalog,
+        protection_evidence: &ProtectionEvidence,
+    ) -> Vec<SidebarAreaSummary> {
         with_reported_summaries(
             evidence_area_summaries(
+                message_catalog,
                 protection_evidence,
                 &english_formatters(),
                 REFERENCE_MOMENT,
@@ -960,14 +1083,18 @@ mod application_page_status_tests {
             [
                 SidebarAreaSummary {
                     application_page: ApplicationPage::RemovableDrives,
-                    area_summary: removable_drives_summary(&RemovableDrivesStatus {
-                        auto_scan_settings: idle_drive_settings(),
-                        device_scan_status: DeviceScanStatus::NoDeviceScanYet,
-                    }),
+                    area_summary: removable_drives_summary(
+                        message_catalog,
+                        &RemovableDrivesStatus {
+                            auto_scan_settings: idle_drive_settings(),
+                            device_scan_status: DeviceScanStatus::NoDeviceScanYet,
+                        },
+                    ),
                 },
                 SidebarAreaSummary {
                     application_page: ApplicationPage::Detections,
                     area_summary: detections_summary(
+                        message_catalog,
                         protection_evidence,
                         0,
                         &idle_alert_readiness(),
@@ -975,27 +1102,32 @@ mod application_page_status_tests {
                 },
                 SidebarAreaSummary {
                     application_page: ApplicationPage::Quarantine,
-                    area_summary: quarantine_summary(QuarantineEntryCount::EntriesCounted {
-                        entry_count: 0,
-                    }),
+                    area_summary: quarantine_summary(
+                        message_catalog,
+                        QuarantineEntryCount::EntriesCounted { entry_count: 0 },
+                    ),
                 },
                 SidebarAreaSummary {
                     application_page: ApplicationPage::SentSamples,
-                    area_summary: sent_samples_summary(SubmissionTally::TallyCounted {
-                        submitted_count: 0,
-                        awaiting_count: 0,
-                        refused_count: 0,
-                    }),
+                    area_summary: sent_samples_summary(
+                        message_catalog,
+                        SubmissionTally::TallyCounted {
+                            submitted_count: 0,
+                            awaiting_count: 0,
+                            refused_count: 0,
+                        },
+                    ),
                 },
             ],
         )
     }
 
     fn summary_for(
+        message_catalog: &MessageCatalog,
         application_page: ApplicationPage,
         protection_evidence: &ProtectionEvidence,
     ) -> AreaSummary {
-        idle_summaries(protection_evidence)
+        idle_summaries(message_catalog, protection_evidence)
             .into_iter()
             .find(|sidebar_summary| sidebar_summary.application_page == application_page)
             .map(|sidebar_summary| sidebar_summary.area_summary)
@@ -1003,10 +1135,11 @@ mod application_page_status_tests {
     }
 
     fn status_for(
+        message_catalog: &MessageCatalog,
         application_page: ApplicationPage,
         protection_evidence: &ProtectionEvidence,
     ) -> AreaStatus {
-        summary_for(application_page, protection_evidence).area_status
+        summary_for(message_catalog, application_page, protection_evidence).area_status
     }
 
     fn daemon_stopped_evidence() -> ProtectionEvidence {
@@ -1020,8 +1153,9 @@ mod application_page_status_tests {
 
     #[test]
     fn a_healthy_host_is_healthy_in_every_area_with_its_live_state() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let protection_evidence = healthy_evidence();
-        let area_summaries = idle_summaries(&protection_evidence);
+        let area_summaries = idle_summaries(message_catalog, &protection_evidence);
         assert!(area_summaries.iter().all(|sidebar_summary| {
             sidebar_summary.area_summary.area_status == AreaStatus::AreaHealthy
         }));
@@ -1053,9 +1187,14 @@ mod application_page_status_tests {
 
     #[test]
     fn a_stopped_daemon_fails_the_engine_and_leaves_the_clamd_scans_waiting() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let protection_evidence = daemon_stopped_evidence();
         assert_eq!(
-            summary_for(ApplicationPage::ScanEngine, &protection_evidence),
+            summary_for(
+                message_catalog,
+                ApplicationPage::ScanEngine,
+                &protection_evidence
+            ),
             AreaSummary {
                 area_status: AreaStatus::AreaFailing,
                 live_state_text: "clamd not running".to_owned(),
@@ -1068,7 +1207,7 @@ mod application_page_status_tests {
         .into_iter()
         .for_each(|waiting_area| {
             assert_eq!(
-                summary_for(waiting_area, &protection_evidence),
+                summary_for(message_catalog, waiting_area, &protection_evidence),
                 AreaSummary {
                     area_status: AreaStatus::AreaWaiting,
                     live_state_text: "Waiting for clamd".to_owned(),
@@ -1076,10 +1215,15 @@ mod application_page_status_tests {
             );
         });
         assert_eq!(
-            summary_for(ApplicationPage::ManualScan, &protection_evidence).live_state_text,
+            summary_for(
+                message_catalog,
+                ApplicationPage::ManualScan,
+                &protection_evidence
+            )
+            .live_state_text,
             "Uses the slower clamscan"
         );
-        let area_summaries = idle_summaries(&protection_evidence);
+        let area_summaries = idle_summaries(message_catalog, &protection_evidence);
         assert_eq!(
             first_area_needing_attention(&area_summaries),
             ApplicationPage::ScanEngine
@@ -1088,6 +1232,7 @@ mod application_page_status_tests {
 
     #[test]
     fn an_unreadable_clamd_config_leaves_on_access_unknown() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let protection_evidence = ProtectionEvidence {
             on_access_evidence: OnAccessEvidence {
                 on_access_config: OnAccessConfig::ConfigUnreadable(
@@ -1098,7 +1243,11 @@ mod application_page_status_tests {
             ..healthy_evidence()
         };
         assert_eq!(
-            summary_for(ApplicationPage::OnAccessScanning, &protection_evidence),
+            summary_for(
+                message_catalog,
+                ApplicationPage::OnAccessScanning,
+                &protection_evidence
+            ),
             AreaSummary {
                 area_status: AreaStatus::AreaUnknown,
                 live_state_text: "clamd.conf unreadable".to_owned(),
@@ -1108,6 +1257,7 @@ mod application_page_status_tests {
 
     #[test]
     fn a_failed_updater_needs_review_in_database_updates() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let protection_evidence = ProtectionEvidence {
             signature_evidence: SignatureEvidence {
                 updater_evidence: vec![UpdaterEvidence {
@@ -1122,20 +1272,25 @@ mod application_page_status_tests {
             ..healthy_evidence()
         };
         assert_eq!(
-            summary_for(ApplicationPage::DatabaseUpdates, &protection_evidence),
+            summary_for(
+                message_catalog,
+                ApplicationPage::DatabaseUpdates,
+                &protection_evidence
+            ),
             AreaSummary {
                 area_status: AreaStatus::AreaNeedsReview,
                 live_state_text: "Last update failed".to_owned(),
             }
         );
         assert_eq!(
-            first_area_needing_attention(&idle_summaries(&protection_evidence)),
+            first_area_needing_attention(&idle_summaries(message_catalog, &protection_evidence)),
             ApplicationPage::DatabaseUpdates
         );
     }
 
     #[test]
     fn a_completed_update_is_shown_as_the_update_time() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let protection_evidence = ProtectionEvidence {
             signature_evidence: SignatureEvidence {
                 updater_evidence: vec![UpdaterEvidence {
@@ -1152,7 +1307,11 @@ mod application_page_status_tests {
             ..healthy_evidence()
         };
         assert_eq!(
-            summary_for(ApplicationPage::DatabaseUpdates, &protection_evidence),
+            summary_for(
+                message_catalog,
+                ApplicationPage::DatabaseUpdates,
+                &protection_evidence
+            ),
             AreaSummary {
                 area_status: AreaStatus::AreaHealthy,
                 live_state_text: "Updated 2 hours ago".to_owned(),
@@ -1162,6 +1321,7 @@ mod application_page_status_tests {
 
     #[test]
     fn an_inactive_timer_fails_the_scheduled_scans() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let protection_evidence = ProtectionEvidence {
             scheduled_scan_evidence: ScheduledScanEvidence::SystemTimer {
                 service_unit: "clamdscan.service",
@@ -1176,7 +1336,11 @@ mod application_page_status_tests {
             ..healthy_evidence()
         };
         assert_eq!(
-            summary_for(ApplicationPage::ScheduledScans, &protection_evidence),
+            summary_for(
+                message_catalog,
+                ApplicationPage::ScheduledScans,
+                &protection_evidence
+            ),
             AreaSummary {
                 area_status: AreaStatus::AreaFailing,
                 live_state_text: "Timer not active".to_owned(),
@@ -1186,6 +1350,7 @@ mod application_page_status_tests {
 
     #[test]
     fn unreadable_evidence_is_never_reported_as_healthy() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let unknown_cases = [
             (
                 ApplicationPage::ScanEngine,
@@ -1268,7 +1433,7 @@ mod application_page_status_tests {
             .iter()
             .for_each(|(application_page, protection_evidence)| {
                 assert_eq!(
-                    status_for(*application_page, protection_evidence),
+                    status_for(message_catalog, *application_page, protection_evidence),
                     AreaStatus::AreaUnknown,
                     "{application_page:?}"
                 );
@@ -1277,6 +1442,7 @@ mod application_page_status_tests {
 
     #[test]
     fn a_runtime_reduction_counts_against_the_area_of_its_setting() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let protection_evidence = ProtectionEvidence {
             runtime_reductions: RuntimeReductions::SettingsReduced {
                 change_time: OverridesChangeTime::ChangeTimeUnknown,
@@ -1289,30 +1455,47 @@ mod application_page_status_tests {
             ..healthy_evidence()
         };
         assert_eq!(
-            summary_for(ApplicationPage::OnAccessScanning, &protection_evidence),
+            summary_for(
+                message_catalog,
+                ApplicationPage::OnAccessScanning,
+                &protection_evidence
+            ),
             AreaSummary {
                 area_status: AreaStatus::AreaNeedsReview,
                 live_state_text: "Settings reduced at runtime".to_owned(),
             }
         );
         assert_eq!(
-            status_for(ApplicationPage::ScanEngine, &protection_evidence),
+            status_for(
+                message_catalog,
+                ApplicationPage::ScanEngine,
+                &protection_evidence
+            ),
             AreaStatus::AreaHealthy
         );
     }
 
     #[test]
     fn detections_and_quarantine_follow_their_counts() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let protection_evidence = healthy_evidence();
         assert_eq!(
-            detections_summary(&protection_evidence, 2, &idle_alert_readiness()),
+            detections_summary(
+                message_catalog,
+                &protection_evidence,
+                2,
+                &idle_alert_readiness()
+            ),
             AreaSummary {
                 area_status: AreaStatus::AreaNeedsReview,
                 live_state_text: "2 need a decision".to_owned(),
             }
         );
         assert_eq!(
-            quarantine_summary(QuarantineEntryCount::EntriesCounted { entry_count: 1 }),
+            quarantine_summary(
+                message_catalog,
+                QuarantineEntryCount::EntriesCounted { entry_count: 1 }
+            ),
             AreaSummary {
                 area_status: AreaStatus::AreaHealthy,
                 live_state_text: "1 item".to_owned(),
@@ -1320,6 +1503,7 @@ mod application_page_status_tests {
         );
         assert_eq!(
             detections_summary(
+                message_catalog,
                 &protection_evidence,
                 2,
                 &AlertReadiness {
@@ -1334,12 +1518,13 @@ mod application_page_status_tests {
 
     #[test]
     fn the_process_attach_check_counts_toward_detections() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let attach_open = ProtectionEvidence {
             process_attach_scope: ProcessAttachScope::AnyProgramMayAttach,
             ..healthy_evidence()
         };
         assert_eq!(
-            summary_for(ApplicationPage::Detections, &attach_open),
+            summary_for(message_catalog, ApplicationPage::Detections, &attach_open),
             AreaSummary {
                 area_status: AreaStatus::AreaNeedsReview,
                 live_state_text: "Other programs can attach to Lazaret".to_owned(),
@@ -1352,23 +1537,35 @@ mod application_page_status_tests {
             ..healthy_evidence()
         };
         assert_eq!(
-            status_for(ApplicationPage::Detections, &attach_unreadable),
+            status_for(
+                message_catalog,
+                ApplicationPage::Detections,
+                &attach_unreadable
+            ),
             AreaStatus::AreaUnknown
         );
         assert_eq!(
-            status_for(ApplicationPage::Detections, &healthy_evidence()),
+            status_for(
+                message_catalog,
+                ApplicationPage::Detections,
+                &healthy_evidence()
+            ),
             AreaStatus::AreaHealthy
         );
     }
 
     #[test]
     fn sent_samples_show_their_count_and_review_refusals() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let counted = |submitted_count, awaiting_count, refused_count| {
-            sent_samples_summary(SubmissionTally::TallyCounted {
-                submitted_count,
-                awaiting_count,
-                refused_count,
-            })
+            sent_samples_summary(
+                message_catalog,
+                SubmissionTally::TallyCounted {
+                    submitted_count,
+                    awaiting_count,
+                    refused_count,
+                },
+            )
         };
         assert_eq!(
             counted(0, 0, 0),
@@ -1390,11 +1587,11 @@ mod application_page_status_tests {
             )
         );
         assert_eq!(
-            sent_samples_summary(SubmissionTally::TallyUnavailable).area_status,
+            sent_samples_summary(message_catalog, SubmissionTally::TallyUnavailable).area_status,
             AreaStatus::AreaFailing
         );
         assert_eq!(
-            sent_samples_summary(SubmissionTally::TallyLoading).area_status,
+            sent_samples_summary(message_catalog, SubmissionTally::TallyLoading).area_status,
             AreaStatus::AreaUnknown
         );
     }
@@ -1446,11 +1643,13 @@ mod application_page_status_tests {
 
     #[test]
     fn on_access_follows_the_kernel_and_the_setup_review() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let with_on_access = |on_access_evidence| ProtectionEvidence {
             on_access_evidence,
             ..healthy_evidence()
         };
         let unknown_kernel = summary_for(
+            message_catalog,
             ApplicationPage::OnAccessScanning,
             &with_on_access(OnAccessEvidence {
                 kernel_blocking_support: KernelBlockingSupport::KernelConfigUnreadable(
@@ -1465,6 +1664,7 @@ mod application_page_status_tests {
             "Checks files, blocking unknown"
         );
         let notify_only = summary_for(
+            message_catalog,
             ApplicationPage::OnAccessScanning,
             &with_on_access(OnAccessEvidence {
                 kernel_blocking_support: KernelBlockingSupport::NotifyOnly,
@@ -1486,6 +1686,7 @@ mod application_page_status_tests {
             panic!("the healthy fixture reads its config");
         };
         let not_excluded = summary_for(
+            message_catalog,
             ApplicationPage::OnAccessScanning,
             &with_on_access(OnAccessEvidence {
                 on_access_config: OnAccessConfig::ConfigRead {
@@ -1503,20 +1704,26 @@ mod application_page_status_tests {
     }
 
     fn removable_drives_summary_with(
+        message_catalog: &MessageCatalog,
         auto_scan_settings: DeviceAutoScanSettings,
         device_scan_status: DeviceScanStatus,
     ) -> AreaSummary {
-        removable_drives_summary(&RemovableDrivesStatus {
-            auto_scan_settings,
-            device_scan_status,
-        })
+        removable_drives_summary(
+            message_catalog,
+            &RemovableDrivesStatus {
+                auto_scan_settings,
+                device_scan_status,
+            },
+        )
     }
 
     #[test]
     fn removable_drives_show_the_auto_scan_choice_and_the_running_drive() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let enabled_settings = idle_drive_settings();
         assert_eq!(
             removable_drives_summary_with(
+                message_catalog,
                 DeviceAutoScanSettings {
                     auto_scan_enabled: false,
                     ..enabled_settings
@@ -1530,6 +1737,7 @@ mod application_page_status_tests {
         );
         assert_eq!(
             removable_drives_summary_with(
+                message_catalog,
                 DeviceAutoScanSettings {
                     maximum_gigabytes: 0,
                     ..enabled_settings
@@ -1544,6 +1752,7 @@ mod application_page_status_tests {
         );
         assert_eq!(
             removable_drives_summary_with(
+                message_catalog,
                 enabled_settings,
                 DeviceScanStatus::DeviceScanRunning {
                     drive_name: "USB STICK".to_owned()
@@ -1558,8 +1767,10 @@ mod application_page_status_tests {
 
     #[test]
     fn a_device_scan_that_found_threats_needs_review() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
             removable_drives_summary_with(
+                message_catalog,
                 idle_drive_settings(),
                 DeviceScanStatus::DeviceScanEnded {
                     drive_name: "CAMERA".to_owned(),

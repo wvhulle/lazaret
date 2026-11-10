@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -5,28 +7,38 @@ use relm4::{
     prelude::{DynamicIndex, FactoryComponent},
 };
 
-use crate::application_window::{
-    application_pages::ApplicationPage,
-    page_links::{SHOW_PAGE_ACTION, page_target},
-    sidebar_navigation::sidebar_entry_presentation::{
-        EntrySummary, SidebarRowPresentation, sidebar_row_presentation,
+use crate::{
+    application_window::{
+        application_pages::ApplicationPage,
+        page_links::{SHOW_PAGE_ACTION, page_target},
+        sidebar_navigation::sidebar_entry_presentation::{
+            EntrySummary, SidebarRowPresentation, sidebar_row_presentation,
+        },
     },
+    translated_messages::MessageCatalog,
 };
 
 pub struct SidebarEntryRow {
+    pub message_catalog: Rc<MessageCatalog>,
     pub application_page: ApplicationPage,
     pub entry_summary: EntrySummary,
 }
 
 impl SidebarEntryRow {
     fn row_presentation(&self) -> SidebarRowPresentation {
-        sidebar_row_presentation(self.application_page, &self.entry_summary)
+        let message_catalog = Rc::clone(&self.message_catalog);
+        sidebar_row_presentation(&message_catalog, self.application_page, &self.entry_summary)
     }
+}
+
+pub struct SidebarEntryRowInit {
+    pub application_page: ApplicationPage,
+    pub message_catalog: Rc<MessageCatalog>,
 }
 
 #[relm4::factory(pub)]
 impl FactoryComponent for SidebarEntryRow {
-    type Init = ApplicationPage;
+    type Init = SidebarEntryRowInit;
     type Input = ();
     type Output = ();
     type CommandOutput = ();
@@ -58,17 +70,21 @@ impl FactoryComponent for SidebarEntryRow {
                 #[watch]
                 set_css_classes: self.row_presentation().status_image.css_classes(),
                 #[watch]
-                set_tooltip_text: Some(&self.row_presentation().status_image.tooltip_text()),
+                set_tooltip_text: Some(&self.row_presentation().status_image.tooltip_text(&self.message_catalog)),
             },
         }
     }
 
     fn init_model(
-        application_page: Self::Init,
+        SidebarEntryRowInit {
+            application_page,
+            message_catalog,
+        }: Self::Init,
         _row_index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             application_page,
             entry_summary: EntrySummary::SummaryPending,
         }

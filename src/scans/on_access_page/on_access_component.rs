@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use futures::StreamExt;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
@@ -43,10 +45,12 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct OnAccessPage {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<OnAccessAction>>,
     distribution_family: DistributionFamily,
@@ -105,7 +109,8 @@ impl OnAccessPage {
     }
 
     fn show_status_steps(&mut self) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let GatheredEvidence::Gathered {
             protection_evidence,
             ..
@@ -114,9 +119,11 @@ impl OnAccessPage {
             return;
         };
         show_timeline_steps(
+            &message_catalog,
             &mut self.status_rows,
             on_access_page_steps(
-                moment_formatters,
+                &message_catalog,
+                &moment_formatters,
                 protection_evidence,
                 self.distribution_family,
             ),
@@ -125,8 +132,9 @@ impl OnAccessPage {
 }
 
 pub struct OnAccessPageInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub sandbox_kind: SandboxKind,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::component(pub)]
@@ -144,13 +152,13 @@ impl Component for OnAccessPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&translated_messages::scans::check_again_access_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::check_again_access_tooltip(&model.message_catalog)),
                             connect_clicked => OnAccessPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&translated_messages::scans::checking_access_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::checking_access_tooltip(&model.message_catalog)),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -176,6 +184,7 @@ impl Component for OnAccessPage {
 
     fn init(
         OnAccessPageInit {
+            message_catalog,
             sandbox_kind,
             moment_formatters,
         }: Self::Init,
@@ -183,12 +192,15 @@ impl Component for OnAccessPage {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
-            moment_formatters,
+            message_catalog: Rc::clone(&message_catalog),
+            moment_formatters: Rc::clone(&moment_formatters),
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(translated_messages::scans::status_access_title())
+                        .title(translated_messages::scans::status_access_title(
+                            &message_catalog,
+                        ))
                         .build(),
                 )
                 .forward(sender.input_sender(), OnAccessPageInput::StepRequested),
@@ -197,7 +209,8 @@ impl Component for OnAccessPage {
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             on_access_settings_sections: EngineSettingsSections::builder()
                 .launch(EngineSettingsSectionsInit {
-                    moment_formatters,
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
                     settings_layout: EngineSettingsLayout::SingleSection(
                         EngineSettingsSection::OnAccessScanning,
                     ),
@@ -206,26 +219,35 @@ impl Component for OnAccessPage {
                 .forward(sender.input_sender(), page_input_for_settings_output),
             system_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
-                    moment_formatters,
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
                     audit_topic: AuditTopic::OnAccessChanges,
                     group_description:
-                        translated_messages::scans::access_settings_changed_description(),
-                    empty_title: translated_messages::scans::no_access_settings_title(),
+                        translated_messages::scans::access_settings_changed_description(
+                            &message_catalog,
+                        ),
+                    empty_title: translated_messages::scans::no_access_settings_title(
+                        &message_catalog,
+                    ),
                 })
                 .detach(),
             clamonacc_log_group: ServiceLogGroup::builder()
                 .launch(ServiceLogGroupInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     moment_formatters,
-                    group_title: translated_messages::scans::clamonacc_log_title(),
-                    missing_log_title: translated_messages::scans::clamonacc_not_written_title(),
+                    group_title: translated_messages::scans::clamonacc_log_title(&message_catalog),
+                    missing_log_title: translated_messages::scans::clamonacc_not_written_title(
+                        &message_catalog,
+                    ),
                     export_file_name: "clamonacc-logs.txt",
                     log_updates: unit_journal_log_updates(&ON_ACCESS_SERVICE_UNITS).boxed(),
                 })
                 .forward(sender.input_sender(), page_input_for_log_output),
         };
         let status_group = &model.status_rows.widget().clone();
-        let status_loading_page =
-            &loading_status_page(&translated_messages::scans::checking_access_scanning());
+        let status_loading_page = &loading_status_page(
+            &translated_messages::scans::checking_access_scanning(&message_catalog),
+        );
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -236,6 +258,7 @@ impl Component for OnAccessPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_input {
             OnAccessPageInput::RefreshRequested => {
                 Self::report_output(&sender, OnAccessPageOutput::EvidenceRefreshRequested);
@@ -248,8 +271,10 @@ impl Component for OnAccessPage {
                 self.show_status_steps();
             }
             OnAccessPageInput::SettingsNoticeReceived(settings_notice) => {
-                self.toaster
-                    .add_toast(engine_settings_notice_toast(&settings_notice));
+                self.toaster.add_toast(engine_settings_notice_toast(
+                    &message_catalog,
+                    &settings_notice,
+                ));
                 match settings_change_follow_up(&settings_notice) {
                     SettingsChangeFollowUp::ReloadChangesAndEvidence => {
                         self.system_changes_group
@@ -267,7 +292,7 @@ impl Component for OnAccessPage {
             )) => {
                 root.clipboard().set_text(&copied_command);
                 self.toaster.add_toast(adw::Toast::new(
-                    &translated_messages::scans::command_copied_clipboard_access(),
+                    &translated_messages::scans::command_copied_clipboard_access(&message_catalog),
                 ));
             }
             OnAccessPageInput::LogToastRequested(toast_text) => {

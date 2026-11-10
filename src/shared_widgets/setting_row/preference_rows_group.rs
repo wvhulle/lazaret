@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, gtk::gio,
@@ -22,6 +22,7 @@ use crate::{
         setting_row_widget::{SettingRow, SettingRowInit, SettingRowInput, SettingRowOutput},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -38,13 +39,15 @@ pub enum PreferenceApplyMode {
 }
 
 pub struct PreferenceRowsInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub row_specs: Vec<PreferenceRowSpec>,
     pub apply_mode: PreferenceApplyMode,
 }
 
 pub struct PreferenceRowsGroup {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     stored_settings: gio::Settings,
     row_specs: Vec<PreferenceRowSpec>,
     apply_mode: PreferenceApplyMode,
@@ -104,19 +107,23 @@ fn show_toast_near(anchor_widget: &impl IsA<gtk::Widget>, toast_title: &str) {
 
 impl PreferenceRowsGroup {
     fn current_values(&self) -> HashMap<PreferenceKey, TypedSettingValue> {
+        let message_catalog = Rc::clone(&self.message_catalog);
         self.row_specs
             .iter()
             .filter_map(|row_spec| {
                 row_spec
                     .preference_key
-                    .read_value(&self.stored_settings)
+                    .read_value(&message_catalog, &self.stored_settings)
                     .map(|current_value| (row_spec.preference_key, current_value))
             })
             .collect()
     }
 
     fn row_state_for(&self, row_spec: &PreferenceRowSpec) -> Option<SettingRowState> {
-        let current_value = row_spec.preference_key.read_value(&self.stored_settings)?;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let current_value = row_spec
+            .preference_key
+            .read_value(&message_catalog, &self.stored_settings)?;
         Some(SettingRowState {
             setting_label: SettingLabel::DescribedSetting {
                 title: row_spec.setting_title.clone(),
@@ -125,6 +132,7 @@ impl PreferenceRowsGroup {
             setting_subject: SettingSubject::Preference {
                 preference_key: row_spec.preference_key,
                 preference_source: preference_source(
+                    &message_catalog,
                     &self.stored_settings,
                     row_spec.preference_key,
                 ),
@@ -147,7 +155,8 @@ impl PreferenceRowsGroup {
     }
 
     fn refresh_rows(&mut self) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let row_states = self.row_states();
         if row_states.len() == self.setting_rows.len() {
             row_states
@@ -164,8 +173,9 @@ impl PreferenceRowsGroup {
             row_guard.clear();
             row_states.into_iter().for_each(|row_state| {
                 row_guard.push_back(SettingRowInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     row_state,
-                    moment_formatters,
+                    moment_formatters: Rc::clone(&moment_formatters),
                 });
             });
         }
@@ -178,6 +188,7 @@ impl PreferenceRowsGroup {
         sender: &ComponentSender<Self>,
         root: &adw::PreferencesGroup,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match preference_key.store_value(&self.stored_settings, &stored_value) {
             Ok(()) => {
                 let _page_closed = sender.output(PreferenceRowsOutput::PreferenceStored {
@@ -189,7 +200,10 @@ impl PreferenceRowsGroup {
                 log_failure_to_journal("storing a preference failed", &write_failure);
                 show_toast_near(
                     root,
-                    &translated_messages::widgets::preference_not_stored(write_failure),
+                    &translated_messages::widgets::preference_not_stored(
+                        &message_catalog,
+                        write_failure,
+                    ),
                 );
             }
         }
@@ -212,6 +226,7 @@ impl Component for PreferenceRowsGroup {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = rows_init.message_catalog;
         let moment_formatters = rows_init.moment_formatters;
         let stored_settings = application_settings();
         let watched_keys = rows_init
@@ -230,6 +245,7 @@ impl Component for PreferenceRowsGroup {
             PreferenceRowsInput::SettingRowReported,
         );
         let mut model = Self {
+            message_catalog,
             moment_formatters,
             stored_settings,
             row_specs: rows_init.row_specs,

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -11,11 +13,27 @@ use crate::{
         AuditCheck, AuditStatus, CheckGuidance,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
-pub enum AuditCheckRow {
+pub enum AuditCheckKind {
     CheckingPlaceholder,
     CheckShown(AuditCheck),
+}
+
+pub struct AuditCheckRow {
+    check_kind: AuditCheckKind,
+    message_catalog: Rc<MessageCatalog>,
+}
+
+pub fn audit_check_row(
+    message_catalog: &Rc<MessageCatalog>,
+    check_kind: AuditCheckKind,
+) -> AuditCheckRow {
+    AuditCheckRow {
+        check_kind,
+        message_catalog: Rc::clone(message_catalog),
+    }
 }
 
 #[derive(Debug)]
@@ -24,8 +42,11 @@ pub enum AuditCheckRowOutput {
     DocumentationRequested(&'static str),
 }
 
-fn status_indicator_image(check_status: AuditStatus) -> gtk::Image {
-    let status_label = check_status.status_label();
+fn status_indicator_image(
+    message_catalog: &MessageCatalog,
+    check_status: AuditStatus,
+) -> gtk::Image {
+    let status_label = check_status.status_label(message_catalog);
     let indicator_image = gtk::Image::builder()
         .icon_name(check_status.status_icon_name())
         .tooltip_text(&status_label)
@@ -45,6 +66,7 @@ fn recommendation_row(recommendation_text: &str) -> adw::ActionRow {
 }
 
 fn suggested_command_row(
+    message_catalog: &MessageCatalog,
     suggested_command: &'static str,
     sender: &FactorySender<AuditCheckRow>,
 ) -> adw::ActionRow {
@@ -60,7 +82,9 @@ fn suggested_command_row(
         .build();
     let copy_button = gtk::Button::builder()
         .icon_name("edit-copy-symbolic")
-        .tooltip_text(translated_messages::signatures::copy_tooltip())
+        .tooltip_text(translated_messages::signatures::copy_tooltip(
+            message_catalog,
+        ))
         .valign(gtk::Align::Center)
         .css_classes(["flat"])
         .build();
@@ -77,13 +101,18 @@ fn suggested_command_row(
 }
 
 fn documentation_row(
+    message_catalog: &MessageCatalog,
     documentation_url: &'static str,
     sender: &FactorySender<AuditCheckRow>,
 ) -> adw::ActionRow {
     let documentation_row = adw::ActionRow::builder()
         .use_markup(false)
-        .title(translated_messages::signatures::learn_more_title())
-        .tooltip_text(translated_messages::signatures::open_browser_tooltip())
+        .title(translated_messages::signatures::learn_more_title(
+            message_catalog,
+        ))
+        .tooltip_text(translated_messages::signatures::open_browser_tooltip(
+            message_catalog,
+        ))
         .activatable(true)
         .build();
     documentation_row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
@@ -97,6 +126,7 @@ fn documentation_row(
 }
 
 fn guidance_row(
+    message_catalog: &MessageCatalog,
     check_guidance: &CheckGuidance,
     sender: &FactorySender<AuditCheckRow>,
 ) -> adw::ActionRow {
@@ -105,26 +135,31 @@ fn guidance_row(
             recommendation_row(recommendation_text)
         }
         CheckGuidance::SuggestedCommand(suggested_command) => {
-            suggested_command_row(suggested_command, sender)
+            suggested_command_row(message_catalog, suggested_command, sender)
         }
         CheckGuidance::DocumentationLink(documentation_url) => {
-            documentation_row(documentation_url, sender)
+            documentation_row(message_catalog, documentation_url, sender)
         }
     }
 }
 
-fn checking_placeholder_row() -> adw::PreferencesRow {
+fn checking_placeholder_row(message_catalog: &MessageCatalog) -> adw::PreferencesRow {
     let checking_row = adw::ActionRow::builder()
         .use_markup(false)
-        .title(translated_messages::signatures::checking_title())
+        .title(translated_messages::signatures::checking_title(
+            message_catalog,
+        ))
         .css_classes(["dim-label"])
         .build();
     checking_row.add_prefix(&inline_row_spinner());
     checking_row.upcast()
 }
 
-fn shown_check_row(audit_check: &AuditCheck) -> adw::PreferencesRow {
-    let status_image = status_indicator_image(audit_check.check_status);
+fn shown_check_row(
+    message_catalog: &MessageCatalog,
+    audit_check: &AuditCheck,
+) -> adw::PreferencesRow {
+    let status_image = status_indicator_image(message_catalog, audit_check.check_status);
     if audit_check.check_guidance.is_empty() {
         let plain_row = adw::ActionRow::builder()
             .use_markup(false)
@@ -165,9 +200,12 @@ impl FactoryComponent for AuditCheckRow {
     }
 
     fn init_root(&self) -> Self::Root {
-        match self {
-            Self::CheckingPlaceholder => checking_placeholder_row(),
-            Self::CheckShown(audit_check) => shown_check_row(audit_check),
+        let message_catalog = Rc::clone(&self.message_catalog);
+        match &self.check_kind {
+            AuditCheckKind::CheckingPlaceholder => checking_placeholder_row(&self.message_catalog),
+            AuditCheckKind::CheckShown(audit_check) => {
+                shown_check_row(&message_catalog, audit_check)
+            }
         }
     }
 
@@ -178,14 +216,18 @@ impl FactoryComponent for AuditCheckRow {
         _returned_widget: &gtk::Widget,
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
-        if let (Self::CheckShown(audit_check), Some(expander_row)) =
-            (&*self, root.downcast_ref::<adw::ExpanderRow>())
+        if let (AuditCheckKind::CheckShown(audit_check), Some(expander_row)) =
+            (&self.check_kind, root.downcast_ref::<adw::ExpanderRow>())
         {
             audit_check
                 .check_guidance
                 .iter()
                 .for_each(|check_guidance| {
-                    expander_row.add_row(&guidance_row(check_guidance, &sender));
+                    expander_row.add_row(&guidance_row(
+                        &self.message_catalog,
+                        check_guidance,
+                        &sender,
+                    ));
                 });
         }
     }

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, abstractions::Toaster, adw, adw::prelude::*, gtk,
     gtk::gio, prelude::FactoryVecDeque,
@@ -9,25 +11,27 @@ use crate::{
         protection_evidence_refresh::{EvidenceRefresh, GatheredEvidence},
     },
     host_services::{
-        clamav_programs::distribution_install_guides::{
-            DistributionFamily, detect_distribution_family,
+        clamav_programs::{
+            database_directory_status::DatabaseFolderReadFailure,
+            distribution_install_guides::{DistributionFamily, detect_distribution_family},
         },
         clamav_scanner::scanner_output_parser::sanitize_scanner_line,
         desktop::flatpak_sandbox::SandboxKind,
     },
     shared_widgets::loading_indicators::{BUSY_PAGE_NAME, IDLE_PAGE_NAME, busy_page_name},
     signatures::signature_sources_page::{
-        signature_source_checks::gather_signature_source_checks,
+        signature_source_checks::{audit_checks_of, read_signature_file_names},
         signature_sources_presentation::{
             SourceChecks, abuse_ch_key_needs_attention, abuse_ch_key_subtitle,
         },
-        source_check_results::AuditCheck,
-        source_check_row::{AuditCheckRow, AuditCheckRowOutput},
+        source_check_row::{AuditCheckKind, AuditCheckRow, AuditCheckRowOutput, audit_check_row},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct SignatureSourcesPage {
+    pub message_catalog: Rc<MessageCatalog>,
     sandbox_kind: SandboxKind,
     toaster: Toaster,
     check_rows: FactoryVecDeque<AuditCheckRow>,
@@ -48,7 +52,7 @@ pub enum SignatureSourcesPageInput {
 
 #[derive(Debug)]
 pub enum SignatureSourcesPageCommand {
-    SourceChecksFinished(Vec<AuditCheck>),
+    SignatureFilesRead(Result<Vec<String>, DatabaseFolderReadFailure>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -60,19 +64,19 @@ impl SignatureSourcesPage {
     fn start_source_checks(&mut self, sender: &ComponentSender<Self>) {
         let sandbox_kind = self.sandbox_kind;
         self.source_checks = SourceChecks::ChecksRunning;
-        let distribution_family = self.distribution_family;
         sender.oneshot_command(async move {
-            SignatureSourcesPageCommand::SourceChecksFinished(
-                gather_signature_source_checks(sandbox_kind, distribution_family).await,
+            SignatureSourcesPageCommand::SignatureFilesRead(
+                read_signature_file_names(sandbox_kind).await,
             )
         });
     }
 
-    fn show_check_rows(&mut self, shown_rows: Vec<AuditCheckRow>) {
+    fn show_check_rows(&mut self, shown_kinds: Vec<AuditCheckKind>) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let mut row_guard = self.check_rows.guard();
         row_guard.clear();
-        shown_rows.into_iter().for_each(|check_row| {
-            row_guard.push_back(check_row);
+        shown_kinds.into_iter().for_each(|check_kind| {
+            row_guard.push_back(audit_check_row(&message_catalog, check_kind));
         });
     }
 
@@ -101,9 +105,14 @@ impl SignatureSourcesPage {
     }
 }
 
+pub struct SignatureSourcesPageInit {
+    pub sandbox_kind: SandboxKind,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::component(pub)]
 impl Component for SignatureSourcesPage {
-    type Init = SandboxKind;
+    type Init = SignatureSourcesPageInit;
     type Input = SignatureSourcesPageInput;
     type Output = SignatureSourcesPageOutput;
     type CommandOutput = SignatureSourcesPageCommand;
@@ -116,13 +125,13 @@ impl Component for SignatureSourcesPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&translated_messages::signatures::check_again_signature_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::signatures::check_again_signature_tooltip(&model.message_catalog)),
                             connect_clicked => SignatureSourcesPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&translated_messages::signatures::checking_signature_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::signatures::checking_signature_tooltip(&model.message_catalog)),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.page_busy()),
@@ -132,33 +141,33 @@ impl Component for SignatureSourcesPage {
                 #[wrap(Some)]
                 set_content = &adw::PreferencesPage {
                     add = &adw::PreferencesGroup {
-                        set_description: Some(&translated_messages::signatures::clamav_malware_signatures_description()),
+                        set_description: Some(&translated_messages::signatures::clamav_malware_signatures_description(&model.message_catalog)),
                     },
 
                     #[local_ref]
                     add = source_group -> adw::PreferencesGroup {
-                        set_title: &translated_messages::signatures::sources_title(),
+                        set_title: &translated_messages::signatures::sources_title(&model.message_catalog),
                         #[wrap(Some)]
                         set_header_suffix = &gtk::Image {
                             set_valign: gtk::Align::Center,
                             #[watch]
                             set_icon_name: Some(model.source_checks.overall_status().status_icon_name()),
                             #[watch]
-                            set_tooltip_text: Some(&model.source_checks.overall_status().status_label()),
+                            set_tooltip_text: Some(&model.source_checks.overall_status().status_label(&model.message_catalog)),
                             #[watch]
                             set_css_classes: &[model.source_checks.overall_status().status_style_class()],
                         },
                     },
 
                     add = &adw::PreferencesGroup {
-                        set_title: &translated_messages::signatures::abuse_ch_key_title(),
-                        set_description: Some(&translated_messages::signatures::abuse_ch_key_uses()),
+                        set_title: &translated_messages::signatures::abuse_ch_key_title(&model.message_catalog),
+                        set_description: Some(&translated_messages::signatures::abuse_ch_key_uses(&model.message_catalog)),
 
                         adw::ActionRow {
-                            set_title: &translated_messages::signatures::abuse_ch_auth_title(),
+                            set_title: &translated_messages::signatures::abuse_ch_auth_title(&model.message_catalog),
                             set_use_markup: false,
                             #[watch]
-                            set_subtitle: &abuse_ch_key_subtitle(&model.gathered_evidence),
+                            set_subtitle: &abuse_ch_key_subtitle(&model.message_catalog, &model.gathered_evidence),
                             set_activatable: true,
                             set_action_name: Some(ONLINE_SERVICES_ACTION),
                             add_suffix = &gtk::Image {
@@ -177,11 +186,15 @@ impl Component for SignatureSourcesPage {
     }
 
     fn init(
-        sandbox_kind: Self::Init,
+        SignatureSourcesPageInit {
+            sandbox_kind,
+            message_catalog,
+        }: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let mut model = Self {
+            message_catalog,
             sandbox_kind,
             toaster: Toaster::new(&root),
             check_rows: FactoryVecDeque::builder()
@@ -195,7 +208,7 @@ impl Component for SignatureSourcesPage {
             evidence_refresh: EvidenceRefresh::NothingRunning,
             gathered_evidence: GatheredEvidence::NotGatheredYet,
         };
-        model.show_check_rows(vec![AuditCheckRow::CheckingPlaceholder]);
+        model.show_check_rows(vec![AuditCheckKind::CheckingPlaceholder]);
         model.start_source_checks(&sender);
         let source_group = &model.check_rows.widget().clone();
         let widgets = view_output!();
@@ -208,6 +221,7 @@ impl Component for SignatureSourcesPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_input {
             SignatureSourcesPageInput::RefreshRequested => {
                 self.start_source_checks(&sender);
@@ -225,7 +239,9 @@ impl Component for SignatureSourcesPage {
             ) => {
                 root.clipboard().set_text(&copied_command);
                 self.toaster.add_toast(adw::Toast::new(
-                    &translated_messages::signatures::command_copied_clipboard_signature(),
+                    &translated_messages::signatures::command_copied_clipboard_signature(
+                        &message_catalog,
+                    ),
                 ));
             }
             SignatureSourcesPageInput::GuidanceRequested(
@@ -236,6 +252,7 @@ impl Component for SignatureSourcesPage {
                     adw::Toast::builder()
                         .title(
                             translated_messages::signatures::not_open_documentation_title(
+                                &message_catalog,
                                 sanitize_scanner_line(launch_failure.message()),
                             ),
                         )
@@ -253,12 +270,17 @@ impl Component for SignatureSourcesPage {
         _root: &Self::Root,
     ) {
         match page_command {
-            SignatureSourcesPageCommand::SourceChecksFinished(finished_checks) => {
+            SignatureSourcesPageCommand::SignatureFilesRead(file_names_read) => {
+                let finished_checks = audit_checks_of(
+                    &self.message_catalog,
+                    file_names_read,
+                    self.distribution_family,
+                );
                 self.show_check_rows(
                     finished_checks
                         .iter()
                         .cloned()
-                        .map(AuditCheckRow::CheckShown)
+                        .map(AuditCheckKind::CheckShown)
                         .collect(),
                 );
                 self.source_checks = SourceChecks::ChecksFinished(finished_checks);

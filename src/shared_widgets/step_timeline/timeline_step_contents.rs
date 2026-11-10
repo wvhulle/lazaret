@@ -2,7 +2,10 @@ use std::fmt::Debug;
 
 use jiff::Timestamp;
 
-use crate::{host_services::desktop::locale_formatting::MomentFormatters, translated_messages};
+use crate::{
+    host_services::desktop::locale_formatting::MomentFormatters, translated_messages,
+    translated_messages::MessageCatalog,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StepNodeState {
@@ -68,7 +71,7 @@ pub enum ActionConsequence {
 }
 
 pub trait StepActionButton: Clone + Debug + Send + 'static {
-    fn button_label(&self) -> String;
+    fn button_label(&self, message_catalog: &MessageCatalog) -> String;
     fn action_consequence(&self) -> ActionConsequence;
 }
 
@@ -230,6 +233,7 @@ impl<StepAction> From<StepEvidenceRow> for ActionableEvidenceRow<StepAction> {
 }
 
 pub fn moment_value_text(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     evidence_moment: EvidenceMoment,
     moment_details: String,
@@ -250,7 +254,11 @@ pub fn moment_value_text(
     if moment_details.is_empty() {
         relative_text
     } else {
-        translated_messages::widgets::moment_details(&relative_text, &moment_details)
+        translated_messages::widgets::moment_details(
+            message_catalog,
+            &relative_text,
+            &moment_details,
+        )
     }
 }
 
@@ -426,9 +434,11 @@ mod timeline_step_contents_tests {
 
     #[test]
     fn timed_rows_lead_with_the_moment_and_keep_their_details() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = english_formatters();
         assert_eq!(
             moment_value_text(
+                message_catalog,
                 &moment_formatters,
                 EvidenceMoment::PastEvent {
                     happened_at: NOW - jiff::SignedDuration::from_hours(2)
@@ -440,6 +450,7 @@ mod timeline_step_contents_tests {
         );
         assert_eq!(
             moment_value_text(
+                message_catalog,
                 &moment_formatters,
                 EvidenceMoment::PastEvent {
                     happened_at: NOW + jiff::SignedDuration::from_secs(90)
@@ -451,6 +462,7 @@ mod timeline_step_contents_tests {
         );
         assert_eq!(
             moment_value_text(
+                message_catalog,
                 &moment_formatters,
                 EvidenceMoment::NeverHappened,
                 "Not run yet".to_owned(),
@@ -468,7 +480,7 @@ mod timeline_step_contents_tests {
     }
 
     impl StepActionButton for SampleStepAction {
-        fn button_label(&self) -> String {
+        fn button_label(&self, _message_catalog: &MessageCatalog) -> String {
             format!("{self:?}")
         }
 

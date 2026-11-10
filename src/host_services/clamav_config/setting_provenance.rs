@@ -8,6 +8,7 @@ use crate::{
         ClamavSource, CopyOnlyReason, FileEntry, RootOwnedConfigFile, RuntimeRoute,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const NIX_STORE_PREFIX: &str = "/nix/store/";
@@ -186,12 +187,18 @@ pub fn change_snippet(
     }
 }
 
-pub fn managed_config_description(config_file_owner: ConfigFileOwner, config_path: &str) -> String {
+pub fn managed_config_description(
+    message_catalog: &MessageCatalog,
+    config_file_owner: ConfigFileOwner,
+    config_path: &str,
+) -> String {
     match config_file_owner {
         ConfigFileOwner::NixOsConfiguration => {
-            translated_messages::host::nixos_configuration(config_path)
+            translated_messages::host::nixos_configuration(message_catalog, config_path)
         }
-        ConfigFileOwner::SystemPackage => translated_messages::host::system_package(config_path),
+        ConfigFileOwner::SystemPackage => {
+            translated_messages::host::system_package(message_catalog, config_path)
+        }
     }
 }
 

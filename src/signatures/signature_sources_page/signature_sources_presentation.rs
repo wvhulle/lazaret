@@ -5,6 +5,7 @@ use crate::{
         AuditCheck, AuditStatus, overall_check_status,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,13 +44,18 @@ fn gathered_abuse_ch_access(gathered_evidence: &GatheredEvidence) -> Option<&Ser
     }
 }
 
-pub fn abuse_ch_key_subtitle(gathered_evidence: &GatheredEvidence) -> String {
+pub fn abuse_ch_key_subtitle(
+    message_catalog: &MessageCatalog,
+    gathered_evidence: &GatheredEvidence,
+) -> String {
     match gathered_abuse_ch_access(gathered_evidence) {
-        None => translated_messages::signatures::checking_api_key(),
+        None => translated_messages::signatures::checking_api_key(message_catalog),
         Some(ServiceAccess::KeyReady(api_key)) => api_key.masked_text(),
-        Some(ServiceAccess::KeyMissing) => translated_messages::signatures::abuse_ch_no_key(),
+        Some(ServiceAccess::KeyMissing) => {
+            translated_messages::signatures::abuse_ch_no_key(message_catalog)
+        }
         Some(ServiceAccess::KeyBroken(_key_problem)) => {
-            translated_messages::signatures::abuse_ch_key_unreadable()
+            translated_messages::signatures::abuse_ch_key_unreadable(message_catalog)
         }
     }
 }
@@ -82,19 +88,23 @@ mod signature_sources_presentation_tests {
 
     #[test]
     fn the_abuse_ch_key_row_shows_a_short_status_and_flags_unusable_keys() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let ready = gathered_with_abuse_ch_access(ServiceAccess::KeyReady(ApiKey::new(format!(
             "{}cafe",
             "a".repeat(16)
         ))));
-        assert_eq!(abuse_ch_key_subtitle(&ready), "••••cafe");
+        assert_eq!(abuse_ch_key_subtitle(message_catalog, &ready), "••••cafe");
         assert!(!abuse_ch_key_needs_attention(&ready));
         let missing = gathered_with_abuse_ch_access(ServiceAccess::KeyMissing);
-        assert_eq!(abuse_ch_key_subtitle(&missing), "No key");
+        assert_eq!(abuse_ch_key_subtitle(message_catalog, &missing), "No key");
         assert!(abuse_ch_key_needs_attention(&missing));
         let broken = gathered_with_abuse_ch_access(ServiceAccess::KeyBroken(
             KeyProblem::KeyFileNotPermitted,
         ));
-        assert_eq!(abuse_ch_key_subtitle(&broken), "Key unreadable");
+        assert_eq!(
+            abuse_ch_key_subtitle(message_catalog, &broken),
+            "Key unreadable"
+        );
         assert!(abuse_ch_key_needs_attention(&broken));
         assert!(!abuse_ch_key_needs_attention(
             &GatheredEvidence::NotGatheredYet

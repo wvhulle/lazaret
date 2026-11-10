@@ -3,6 +3,7 @@ use crate::{
         SubmissionKind, SubmissionService, SubmissionTarget,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -63,9 +64,14 @@ impl UploadsInFlight {
     }
 }
 
-pub fn upload_refusal_text(upload_refusal: &UploadRefusal) -> String {
+pub fn upload_refusal_text(
+    message_catalog: &MessageCatalog,
+    upload_refusal: &UploadRefusal,
+) -> String {
     match upload_refusal {
-        UploadRefusal::SameUploadRunning(_) => translated_messages::findings::same_upload_running(),
+        UploadRefusal::SameUploadRunning(_) => {
+            translated_messages::findings::same_upload_running(message_catalog)
+        }
     }
 }
 

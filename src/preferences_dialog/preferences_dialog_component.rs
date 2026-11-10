@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, adw,
     adw::prelude::*,
@@ -17,18 +19,20 @@ use crate::{
     },
     preferences_dialog::{
         file_manager_row::{FileManagerRow, FileManagerRowInit},
-        service_key_section::{ServiceKeySection, ServiceKeySectionOutput},
+        service_key_section::{ServiceKeySection, ServiceKeySectionInit, ServiceKeySectionOutput},
     },
     shared_widgets::setting_row::preference_rows_group::{
         PreferenceApplyMode, PreferenceRowSpec, PreferenceRowsGroup, PreferenceRowsInit,
         PreferenceRowsOutput,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub const ONLINE_SERVICES_PAGE_NAME: &str = "online-services";
 
 pub struct PreferencesDialog {
+    pub message_catalog: Rc<MessageCatalog>,
     sandbox_kind: SandboxKind,
     window_behavior_rows: Controller<PreferenceRowsGroup>,
     file_manager_rows: FactoryVecDeque<FileManagerRow>,
@@ -79,31 +83,40 @@ fn dialog_input_for_preference_output(
     }
 }
 
-fn window_behavior_row_specs() -> Vec<PreferenceRowSpec> {
+fn window_behavior_row_specs(message_catalog: &MessageCatalog) -> Vec<PreferenceRowSpec> {
     vec![
         PreferenceRowSpec {
             preference_key: PreferenceKey::CloseAction,
-            setting_title: translated_messages::preferences::closing_window_title(),
+            setting_title: translated_messages::preferences::closing_window_title(message_catalog),
             setting_description: String::new(),
         },
         PreferenceRowSpec {
             preference_key: PreferenceKey::StartInBackground,
-            setting_title: translated_messages::preferences::start_background_title(),
+            setting_title: translated_messages::preferences::start_background_title(
+                message_catalog,
+            ),
             setting_description:
-                translated_messages::preferences::launch_background_without_subtitle(),
+                translated_messages::preferences::launch_background_without_subtitle(
+                    message_catalog,
+                ),
         },
         PreferenceRowSpec {
             preference_key: PreferenceKey::NotificationsEnabled,
-            setting_title: translated_messages::preferences::desktop_notifications_title(),
+            setting_title: translated_messages::preferences::desktop_notifications_title(
+                message_catalog,
+            ),
             setting_description:
-                translated_messages::preferences::notify_detections_finished_subtitle(),
+                translated_messages::preferences::notify_detections_finished_subtitle(
+                    message_catalog,
+                ),
         },
     ]
 }
 
 pub struct PreferencesDialogInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub sandbox_kind: SandboxKind,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::component(pub)]
@@ -115,36 +128,36 @@ impl Component for PreferencesDialog {
 
     view! {
         adw::PreferencesDialog {
-            set_title: &translated_messages::preferences::dialog_title(),
+            set_title: &translated_messages::preferences::dialog_title(&model.message_catalog),
             set_search_enabled: true,
 
             add = &adw::PreferencesPage {
-                set_title: &translated_messages::preferences::general_title(),
+                set_title: &translated_messages::preferences::general_title(&model.message_catalog),
                 set_icon_name: Some("preferences-system-symbolic"),
 
                 #[local_ref]
                 window_behavior_group -> adw::PreferencesGroup {
-                    set_title: &translated_messages::preferences::window_behavior_title(),
-                    set_description: Some(&translated_messages::preferences::detection_alerts_work_description()),
+                    set_title: &translated_messages::preferences::window_behavior_title(&model.message_catalog),
+                    set_description: Some(&translated_messages::preferences::detection_alerts_work_description(&model.message_catalog)),
                 },
 
                 #[local_ref]
                 file_manager_group -> adw::PreferencesGroup {
-                    set_title: &translated_messages::preferences::file_manager_integration_title(),
-                    set_description: Some(&translated_messages::preferences::add_context_menu_description()),
+                    set_title: &translated_messages::preferences::file_manager_integration_title(&model.message_catalog),
+                    set_description: Some(&translated_messages::preferences::add_context_menu_description(&model.message_catalog)),
                     set_visible: sandbox_kind == SandboxKind::HostSystem,
                 },
             },
 
             add = &adw::PreferencesPage {
                 set_name: Some(ONLINE_SERVICES_PAGE_NAME),
-                set_title: &translated_messages::preferences::online_services_title(),
+                set_title: &translated_messages::preferences::online_services_title(&model.message_catalog),
                 set_icon_name: Some("network-server-symbolic"),
-                set_description: &translated_messages::preferences::online_services_summary(),
+                set_description: &translated_messages::preferences::online_services_summary(&model.message_catalog),
 
                 adw::PreferencesGroup {
                     set_title: "CIRCL hashlookup",
-                    set_description: Some(&translated_messages::preferences::circl_receives_summary()),
+                    set_description: Some(&translated_messages::preferences::circl_receives_summary(&model.message_catalog)),
                 },
 
                 #[local_ref]
@@ -155,7 +168,7 @@ impl Component for PreferencesDialog {
 
                 adw::PreferencesGroup {
                     set_title: "ClamAV (Cisco Talos)",
-                    set_description: Some(&translated_messages::preferences::talos_receives_summary()),
+                    set_description: Some(&translated_messages::preferences::talos_receives_summary(&model.message_catalog)),
                 },
             },
 
@@ -164,6 +177,7 @@ impl Component for PreferencesDialog {
 
     fn init(
         PreferencesDialogInit {
+            message_catalog,
             sandbox_kind,
             moment_formatters,
         }: Self::Init,
@@ -179,26 +193,35 @@ impl Component for PreferencesDialog {
                 .into_iter()
                 .for_each(|file_manager| {
                     row_guard.push_back(FileManagerRowInit {
+                        message_catalog: Rc::clone(&message_catalog),
                         file_manager,
                         sandbox_kind,
                     });
                 });
         }
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             sandbox_kind,
             window_behavior_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     moment_formatters,
-                    row_specs: window_behavior_row_specs(),
+                    row_specs: window_behavior_row_specs(&message_catalog),
                     apply_mode: PreferenceApplyMode::AppliesImmediately,
                 })
                 .forward(sender.input_sender(), dialog_input_for_preference_output),
             file_manager_rows,
             abuse_ch_section: ServiceKeySection::builder()
-                .launch(ThreatIntelService::AbuseChService)
+                .launch(ServiceKeySectionInit {
+                    threat_intel_service: ThreatIntelService::AbuseChService,
+                    message_catalog: Rc::clone(&message_catalog),
+                })
                 .forward(sender.input_sender(), dialog_input_for_key_output),
             virustotal_section: ServiceKeySection::builder()
-                .launch(ThreatIntelService::VirusTotalService)
+                .launch(ServiceKeySectionInit {
+                    threat_intel_service: ThreatIntelService::VirusTotalService,
+                    message_catalog,
+                })
                 .forward(sender.input_sender(), dialog_input_for_key_output),
         };
         let window_behavior_group = model.window_behavior_rows.widget();

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, rc::Rc};
 
 use relm4::{
     FactorySender, adw,
@@ -9,10 +9,11 @@ use relm4::{
 
 use crate::{
     host_services::clamav_scanner::scanner_output_parser::sanitize_scanner_line,
-    translated_messages,
+    translated_messages, translated_messages::MessageCatalog,
 };
 
 pub struct ScanTargetRow {
+    pub message_catalog: Rc<MessageCatalog>,
     pub target_path: PathBuf,
 }
 
@@ -21,9 +22,14 @@ pub enum ScanTargetRowOutput {
     RemoveRequested(DynamicIndex),
 }
 
+pub struct ScanTargetRowInit {
+    pub target_path: PathBuf,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::factory(pub)]
 impl FactoryComponent for ScanTargetRow {
-    type Init = PathBuf;
+    type Init = ScanTargetRowInit;
     type Input = ();
     type Output = ScanTargetRowOutput;
     type CommandOutput = ();
@@ -45,7 +51,7 @@ impl FactoryComponent for ScanTargetRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "edit-delete-symbolic",
-                set_tooltip_text: Some(&translated_messages::scans::remove_target_tooltip()),
+                set_tooltip_text: Some(&translated_messages::scans::remove_target_tooltip(&self.message_catalog)),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 connect_clicked[sender, index] => move |_clicked_button| {
@@ -56,10 +62,16 @@ impl FactoryComponent for ScanTargetRow {
     }
 
     fn init_model(
-        target_path: PathBuf,
+        ScanTargetRowInit {
+            target_path,
+            message_catalog,
+        }: Self::Init,
         _row_index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { target_path }
+        Self {
+            target_path,
+            message_catalog,
+        }
     }
 }

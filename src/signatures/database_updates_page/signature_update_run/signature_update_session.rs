@@ -38,6 +38,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const TRANSCRIPT_LIMIT: usize = 4 * 1024 * 1024;
@@ -109,9 +110,11 @@ impl UpdateRunOutput {
         }
     }
 
-    fn latest_line_text(&self) -> String {
+    fn latest_line_text(&self, message_catalog: &MessageCatalog) -> String {
         match &self.latest_updater_line {
-            LatestUpdaterLine::NothingPrinted => translated_messages::signatures::starting_update(),
+            LatestUpdaterLine::NothingPrinted => {
+                translated_messages::signatures::starting_update(message_catalog)
+            }
             LatestUpdaterLine::LinePrinted(output_line) => output_line.clone(),
         }
     }
@@ -192,7 +195,11 @@ impl ActiveUpdateRun {
         }
     }
 
-    fn absorb_update_event(mut self, update_event: DatabaseUpdateEvent) -> Self {
+    fn absorb_update_event(
+        mut self,
+        message_catalog: &MessageCatalog,
+        update_event: DatabaseUpdateEvent,
+    ) -> Self {
         match update_event {
             DatabaseUpdateEvent::UpdateOutputLine(output_line) => {
                 self.run_output_mut().append_output_line(&output_line);
@@ -200,7 +207,7 @@ impl ActiveUpdateRun {
             }
             DatabaseUpdateEvent::UpdateOutputUnreadable(read_failure) => {
                 self.run_output_mut()
-                    .append_output_line(&unit_journal_failure_text(read_failure));
+                    .append_output_line(&unit_journal_failure_text(message_catalog, read_failure));
                 self
             }
             DatabaseUpdateEvent::UpdaterFinished(updater_finish) => {
@@ -244,10 +251,10 @@ impl ActiveUpdateRun {
         }
     }
 
-    fn into_finished_report(self) -> FinishedUpdateReport {
+    fn into_finished_report(self, message_catalog: &MessageCatalog) -> FinishedUpdateReport {
         let ended_run = self.into_ended_run();
         FinishedUpdateReport {
-            summary_text: describe_update_outcome(&ended_run.update_outcome),
+            summary_text: describe_update_outcome(message_catalog, &ended_run.update_outcome),
             definitions_changed: definitions_changed(&ended_run.update_outcome),
             activity_entry: NewActivityEntry {
                 started_at: ended_run.update_timing.started_at,
@@ -267,14 +274,14 @@ impl ActiveUpdateRun {
         }
     }
 
-    fn update_progress(&self) -> SignatureUpdateProgress {
+    fn update_progress(&self, message_catalog: &MessageCatalog) -> SignatureUpdateProgress {
         match self {
             Self::UpdateRunning {
                 update_plan: DatabaseUpdatePlan::RunFreshclamDirectly,
                 run_output,
                 ..
             } => SignatureUpdateProgress::CancellableUpdateRunning {
-                latest_output_line: run_output.latest_line_text(),
+                latest_output_line: run_output.latest_line_text(message_catalog),
             },
             Self::UpdateRunning {
                 update_plan:
@@ -285,7 +292,7 @@ impl ActiveUpdateRun {
             }
             | Self::UpdaterFinished { run_output, .. } => {
                 SignatureUpdateProgress::UncancellableUpdateRunning {
-                    latest_output_line: run_output.latest_line_text(),
+                    latest_output_line: run_output.latest_line_text(message_catalog),
                 }
             }
             Self::CancellingUpdate { .. } => SignatureUpdateProgress::UpdateCancelling,
@@ -348,39 +355,49 @@ pub enum UpdateStreamEnding {
     NoUpdateWasRunning,
 }
 
-fn service_description(service_state: FreshclamServiceState) -> String {
+fn service_description(
+    message_catalog: &MessageCatalog,
+    service_state: FreshclamServiceState,
+) -> String {
     match service_state {
         FreshclamServiceState::DaemonRunning { .. } => {
-            translated_messages::signatures::daemon_running()
+            translated_messages::signatures::daemon_running(message_catalog)
         }
         FreshclamServiceState::TimerScheduled { .. } => {
-            translated_messages::signatures::timer_scheduled()
+            translated_messages::signatures::timer_scheduled(message_catalog)
         }
         FreshclamServiceState::ServiceStopped { .. } => {
-            translated_messages::signatures::service_stopped()
+            translated_messages::signatures::service_stopped(message_catalog)
         }
         FreshclamServiceState::ServiceNotFound => {
-            translated_messages::signatures::service_not_found()
+            translated_messages::signatures::service_not_found(message_catalog)
         }
         FreshclamServiceState::SystemdUnreachable => {
-            translated_messages::signatures::systemd_unreachable_service()
+            translated_messages::signatures::systemd_unreachable_service(message_catalog)
         }
     }
 }
 
-fn directory_description(directory_status: &DatabaseDirectoryStatus) -> String {
+fn directory_description(
+    message_catalog: &MessageCatalog,
+    directory_status: &DatabaseDirectoryStatus,
+) -> String {
     match directory_status {
         DatabaseDirectoryStatus::DefinitionsAvailable {
             newest_definition_age_days,
             ..
-        } => translated_messages::signatures::count_day_old(*newest_definition_age_days),
+        } => translated_messages::signatures::count_day_old(
+            message_catalog,
+            *newest_definition_age_days,
+        ),
         DatabaseDirectoryStatus::DefinitionsMissing { .. } => {
-            translated_messages::signatures::definitions_missing()
+            translated_messages::signatures::definitions_missing(message_catalog)
         }
         DatabaseDirectoryStatus::DirectoryUnreadable { read_failure, .. } => {
-            translated_messages::signatures::directory_unreadable(database_folder_failure_text(
-                *read_failure,
-            ))
+            translated_messages::signatures::directory_unreadable(
+                message_catalog,
+                database_folder_failure_text(message_catalog, *read_failure),
+            )
         }
     }
 }
@@ -397,75 +414,95 @@ fn directory_path_text(directory_status: &DatabaseDirectoryStatus) -> String {
     }
 }
 
-fn describe_abnormal_freshclam_exit(abnormal_exit: AbnormalScannerExit) -> String {
+fn describe_abnormal_freshclam_exit(
+    message_catalog: &MessageCatalog,
+    abnormal_exit: AbnormalScannerExit,
+) -> String {
     match abnormal_exit {
         AbnormalScannerExit::ScannerError { exit_code } => {
-            translated_messages::signatures::scanner_error(exit_code)
+            translated_messages::signatures::scanner_error(message_catalog, exit_code)
         }
         AbnormalScannerExit::KilledBySignal { signal_number } => {
-            translated_messages::signatures::killed_signal(signal_number)
+            translated_messages::signatures::killed_signal(message_catalog, signal_number)
         }
         AbnormalScannerExit::UnrecognizedWaitStatus { .. } => {
-            translated_messages::signatures::unrecognized_wait_status()
+            translated_messages::signatures::unrecognized_wait_status(message_catalog)
         }
-        AbnormalScannerExit::WaitFailed { .. } => translated_messages::signatures::wait_failed(),
+        AbnormalScannerExit::WaitFailed { .. } => {
+            translated_messages::signatures::wait_failed(message_catalog)
+        }
     }
 }
 
-fn describe_failure_reason(failure_reason: &UpdateFailureReason) -> String {
+fn describe_failure_reason(
+    message_catalog: &MessageCatalog,
+    failure_reason: &UpdateFailureReason,
+) -> String {
     match failure_reason {
         UpdateFailureReason::AuthorizationRefused => {
-            translated_messages::signatures::authorization_refused()
+            translated_messages::signatures::authorization_refused(message_catalog)
         }
         UpdateFailureReason::SystemdUnreachable(_bus_failure) => {
-            translated_messages::signatures::systemd_not_reached()
+            translated_messages::signatures::systemd_not_reached(message_catalog)
         }
         UpdateFailureReason::ServiceJobEnded { job_result } => {
-            translated_messages::signatures::service_job_ended(sanitize_scanner_line(job_result))
+            translated_messages::signatures::service_job_ended(
+                message_catalog,
+                sanitize_scanner_line(job_result),
+            )
         }
         UpdateFailureReason::FreshclamEndedAbnormally(abnormal_exit) => {
-            describe_abnormal_freshclam_exit(*abnormal_exit)
+            describe_abnormal_freshclam_exit(message_catalog, *abnormal_exit)
         }
         UpdateFailureReason::RateLimitedDatabases | UpdateFailureReason::RateLimitedByMirror => {
-            translated_messages::signatures::update_rate_limited_mirror()
+            translated_messages::signatures::update_rate_limited_mirror(message_catalog)
         }
-        UpdateFailureReason::BlockedByCdn => translated_messages::signatures::update_blocked_cdn(),
+        UpdateFailureReason::BlockedByCdn => {
+            translated_messages::signatures::update_blocked_cdn(message_catalog)
+        }
         UpdateFailureReason::MirrorUnavailable => {
-            translated_messages::signatures::mirror_unavailable()
+            translated_messages::signatures::mirror_unavailable(message_catalog)
         }
         UpdateFailureReason::CertificateRejected => {
-            translated_messages::signatures::certificate_rejected()
+            translated_messages::signatures::certificate_rejected(message_catalog)
         }
         UpdateFailureReason::ConnectionTimedOut => {
-            translated_messages::signatures::connection_timed_out()
+            translated_messages::signatures::connection_timed_out(message_catalog)
         }
-        UpdateFailureReason::DatabaseLocked => translated_messages::signatures::database_locked(),
+        UpdateFailureReason::DatabaseLocked => {
+            translated_messages::signatures::database_locked(message_catalog)
+        }
         UpdateFailureReason::PermissionDenied => {
-            translated_messages::signatures::permission_denied()
+            translated_messages::signatures::permission_denied(message_catalog)
         }
         UpdateFailureReason::ConnectionFailed => {
-            translated_messages::signatures::connection_failed()
+            translated_messages::signatures::connection_failed(message_catalog)
         }
         UpdateFailureReason::NameResolutionFailed => {
-            translated_messages::signatures::name_resolution_failed()
+            translated_messages::signatures::name_resolution_failed(message_catalog)
         }
         UpdateFailureReason::ReportedByUpdater { diagnostic_text } => {
             sanitize_scanner_text(diagnostic_text)
         }
         UpdateFailureReason::UpdaterResultMissing => {
-            translated_messages::signatures::update_failed_unknown_error()
+            translated_messages::signatures::update_failed_unknown_error(message_catalog)
         }
     }
 }
 
-fn describe_report_summary(report_summary: &FreshclamReportSummary) -> Vec<String> {
+fn describe_report_summary(
+    message_catalog: &MessageCatalog,
+    report_summary: &FreshclamReportSummary,
+) -> Vec<String> {
     let updated_line = (!report_summary.updated_databases.is_empty()).then(|| {
         translated_messages::signatures::updated_databases(
+            message_catalog,
             report_summary.updated_databases.join(", "),
         )
     });
     let current_line = (!report_summary.current_databases.is_empty()).then(|| {
         translated_messages::signatures::already_current_databases(
+            message_catalog,
             report_summary.current_databases.join(", "),
         )
     });
@@ -477,11 +514,13 @@ fn describe_report_summary(report_summary: &FreshclamReportSummary) -> Vec<Strin
                 |rate_limited_database| match &rate_limited_database.rate_limit_cooldown {
                     RateLimitCooldown::CooldownUnknown => {
                         translated_messages::signatures::cooldown_unknown(
+                            message_catalog,
                             &rate_limited_database.database_name,
                         )
                     }
                     RateLimitCooldown::CooldownUntil { cooldown_text } => {
                         translated_messages::signatures::cooldown_until(
+                            message_catalog,
                             &rate_limited_database.database_name,
                             sanitize_scanner_line(cooldown_text),
                         )
@@ -496,37 +535,43 @@ fn describe_report_summary(report_summary: &FreshclamReportSummary) -> Vec<Strin
         .collect()
 }
 
-fn describe_update_outcome(update_outcome: &DatabaseUpdateOutcome) -> String {
+fn describe_update_outcome(
+    message_catalog: &MessageCatalog,
+    update_outcome: &DatabaseUpdateOutcome,
+) -> String {
     let (headline, report_summary) = match update_outcome {
         DatabaseUpdateOutcome::DefinitionsUpdated(report_summary) => (
-            translated_messages::signatures::definitions_updated(),
+            translated_messages::signatures::definitions_updated(message_catalog),
             report_summary,
         ),
         DatabaseUpdateOutcome::AlreadyCurrent(report_summary) => (
-            translated_messages::signatures::already_current(),
+            translated_messages::signatures::already_current(message_catalog),
             report_summary,
         ),
         DatabaseUpdateOutcome::ServiceRanWithoutVerdict(report_summary) => (
-            translated_messages::signatures::service_ran_without_verdict(),
+            translated_messages::signatures::service_ran_without_verdict(message_catalog),
             report_summary,
         ),
         DatabaseUpdateOutcome::UpdateFailed {
             failure_reason,
             report_summary,
-        } => (describe_failure_reason(failure_reason), report_summary),
+        } => (
+            describe_failure_reason(message_catalog, failure_reason),
+            report_summary,
+        ),
         DatabaseUpdateOutcome::UpdateRequestedFromDaemon => {
-            return translated_messages::signatures::update_requested_daemon();
+            return translated_messages::signatures::update_requested_daemon(message_catalog);
         }
         DatabaseUpdateOutcome::UpdateCancelled => {
-            return translated_messages::signatures::update_cancelled();
+            return translated_messages::signatures::update_cancelled(message_catalog);
         }
         DatabaseUpdateOutcome::UpdaterNeverStarted(start_failure) => {
-            return describe_start_failure(start_failure);
+            return describe_start_failure(message_catalog, start_failure);
         }
     };
     [headline]
         .into_iter()
-        .chain(describe_report_summary(report_summary))
+        .chain(describe_report_summary(message_catalog, report_summary))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -557,10 +602,13 @@ const fn definitions_changed(update_outcome: &DatabaseUpdateOutcome) -> bool {
     }
 }
 
-fn describe_start_failure(start_failure: &ScanStartFailure) -> String {
+fn describe_start_failure(
+    message_catalog: &MessageCatalog,
+    start_failure: &ScanStartFailure,
+) -> String {
     match start_failure {
         ScanStartFailure::ScannerProgramMissing => {
-            translated_messages::signatures::scanner_program_missing()
+            translated_messages::signatures::scanner_program_missing(message_catalog)
         }
         ScanStartFailure::ScannerProgramReplaceable { .. }
         | ScanStartFailure::ScannerSpawnFailed(_)
@@ -569,7 +617,7 @@ fn describe_start_failure(start_failure: &ScanStartFailure) -> String {
         | ScanStartFailure::DetectionSettingsUnreadable(_)
         | ScanStartFailure::ProgramLookupFailed(_)
         | ScanStartFailure::ScanInputUnavailable { .. } => {
-            describe_scan_start_failure(start_failure)
+            describe_scan_start_failure(message_catalog, start_failure)
         }
     }
 }
@@ -695,19 +743,25 @@ impl SignatureUpdateSession {
         self.advance_active_run(ActiveUpdateRun::cancel_requested);
     }
 
-    pub fn absorb_update_batch(&mut self, update_batch: Vec<DatabaseUpdateEvent>) {
+    pub fn absorb_update_batch(
+        &mut self,
+        message_catalog: &MessageCatalog,
+        update_batch: Vec<DatabaseUpdateEvent>,
+    ) {
         self.advance_active_run(|active_run| {
             update_batch
                 .into_iter()
-                .fold(active_run, ActiveUpdateRun::absorb_update_event)
+                .fold(active_run, |active_run, update_event| {
+                    active_run.absorb_update_event(message_catalog, update_event)
+                })
         });
     }
 
-    pub fn update_stream_ended(&mut self) -> UpdateStreamEnding {
+    pub fn update_stream_ended(&mut self, message_catalog: &MessageCatalog) -> UpdateStreamEnding {
         match std::mem::replace(&mut self.update_state, DatabaseUpdateState::NoActiveUpdate) {
             DatabaseUpdateState::NoActiveUpdate => UpdateStreamEnding::NoUpdateWasRunning,
             DatabaseUpdateState::ActiveUpdate(active_run) => {
-                let finished_report = active_run.into_finished_report();
+                let finished_report = active_run.into_finished_report(message_catalog);
                 self.last_manual_update = LastManualUpdate::FinishedAt {
                     summary_line: finished_report
                         .summary_text
@@ -722,9 +776,11 @@ impl SignatureUpdateSession {
         }
     }
 
-    fn update_progress(&self) -> SignatureUpdateProgress {
+    fn update_progress(&self, message_catalog: &MessageCatalog) -> SignatureUpdateProgress {
         match &self.update_state {
-            DatabaseUpdateState::ActiveUpdate(active_run) => active_run.update_progress(),
+            DatabaseUpdateState::ActiveUpdate(active_run) => {
+                active_run.update_progress(message_catalog)
+            }
             DatabaseUpdateState::NoActiveUpdate if self.can_request_update() => {
                 SignatureUpdateProgress::ReadyToUpdate
             }
@@ -732,18 +788,18 @@ impl SignatureUpdateSession {
         }
     }
 
-    pub fn update_view(&self) -> SignatureUpdateView {
+    pub fn update_view(&self, message_catalog: &MessageCatalog) -> SignatureUpdateView {
         let Some(host_status) = self.loaded_status() else {
             return SignatureUpdateView::HostStatusLoading;
         };
         SignatureUpdateView::HostStatusKnown(KnownUpdateHost {
-            update_progress: self.update_progress(),
+            update_progress: self.update_progress(message_catalog),
             last_manual_update: self.last_manual_update.clone(),
-            update_service_text: service_description(host_status.service_state),
+            update_service_text: service_description(message_catalog, host_status.service_state),
             database_folder_text: format!(
                 "{}\n{}",
                 directory_path_text(&host_status.directory_status),
-                directory_description(&host_status.directory_status)
+                directory_description(message_catalog, &host_status.directory_status)
             ),
         })
     }
@@ -769,8 +825,11 @@ mod signature_update_session_tests {
         update_session
     }
 
-    fn ended_report(update_session: &mut SignatureUpdateSession) -> FinishedUpdateReport {
-        match update_session.update_stream_ended() {
+    fn ended_report(
+        message_catalog: &MessageCatalog,
+        update_session: &mut SignatureUpdateSession,
+    ) -> FinishedUpdateReport {
+        match update_session.update_stream_ended(message_catalog) {
             UpdateStreamEnding::UpdateEnded(finished_report) => finished_report,
             UpdateStreamEnding::NoUpdateWasRunning => panic!("expected an update to end"),
         }
@@ -778,9 +837,10 @@ mod signature_update_session_tests {
 
     #[test]
     fn a_stream_end_without_an_active_update_produces_no_report() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = SignatureUpdateSession::new();
         assert!(matches!(
-            update_session.update_stream_ended(),
+            update_session.update_stream_ended(message_catalog),
             UpdateStreamEnding::NoUpdateWasRunning
         ));
         assert_eq!(
@@ -791,23 +851,28 @@ mod signature_update_session_tests {
 
     #[test]
     fn a_stream_end_is_reported_once_per_run() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = session_running(DatabaseUpdatePlan::RunFreshclamDirectly);
-        let _first_report = ended_report(&mut update_session);
+        let _first_report = ended_report(message_catalog, &mut update_session);
         assert!(matches!(
-            update_session.update_stream_ended(),
+            update_session.update_stream_ended(message_catalog),
             UpdateStreamEnding::NoUpdateWasRunning
         ));
     }
 
     #[test]
     fn a_signalled_daemon_does_not_count_as_updated_definitions() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = session_running(DatabaseUpdatePlan::SignalRunningDaemon {
             service_unit: FRESHCLAM_UNIT,
         });
-        update_session.absorb_update_batch(vec![DatabaseUpdateEvent::UpdaterFinished(
-            UpdaterFinish::RunningDaemonSignalled(UnitStartOutcome::UnitFinished),
-        )]);
-        let finished_report = ended_report(&mut update_session);
+        update_session.absorb_update_batch(
+            message_catalog,
+            vec![DatabaseUpdateEvent::UpdaterFinished(
+                UpdaterFinish::RunningDaemonSignalled(UnitStartOutcome::UnitFinished),
+            )],
+        );
+        let finished_report = ended_report(message_catalog, &mut update_session);
         assert!(!finished_report.definitions_changed);
         assert_eq!(
             finished_report.activity_entry.activity_record,
@@ -819,18 +884,22 @@ mod signature_update_session_tests {
 
     #[test]
     fn an_unreadable_service_journal_is_written_into_the_update_output() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = session_running(DatabaseUpdatePlan::StartServiceUnit {
             service_unit: FRESHCLAM_UNIT,
         });
-        update_session.absorb_update_batch(vec![
-            DatabaseUpdateEvent::UpdateOutputUnreadable(
-                UnitJournalReadFailure::ReadingTaskInterrupted,
-            ),
-            DatabaseUpdateEvent::UpdaterFinished(UpdaterFinish::ServiceUnitRan(
-                UnitStartOutcome::UnitFinished,
-            )),
-        ]);
-        let finished_report = ended_report(&mut update_session);
+        update_session.absorb_update_batch(
+            message_catalog,
+            vec![
+                DatabaseUpdateEvent::UpdateOutputUnreadable(
+                    UnitJournalReadFailure::ReadingTaskInterrupted,
+                ),
+                DatabaseUpdateEvent::UpdaterFinished(UpdaterFinish::ServiceUnitRan(
+                    UnitStartOutcome::UnitFinished,
+                )),
+            ],
+        );
+        let finished_report = ended_report(message_catalog, &mut update_session);
         assert!(
             finished_report
                 .activity_entry
@@ -847,12 +916,13 @@ mod signature_update_session_tests {
 
     #[test]
     fn an_unreadable_database_folder_is_not_reported_as_missing() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let unreadable_status = DatabaseDirectoryStatus::DirectoryUnreadable {
             database_directory: std::path::PathBuf::from("/var/lib/clamav"),
             read_failure: DatabaseFolderReadFailure::ReadingTaskInterrupted,
         };
         assert_eq!(
-            directory_description(&unreadable_status),
+            directory_description(message_catalog, &unreadable_status),
             "Unknown. Reading the signature folder stopped before it finished"
         );
         assert_eq!(directory_path_text(&unreadable_status), "/var/lib/clamav");
@@ -860,16 +930,20 @@ mod signature_update_session_tests {
 
     #[test]
     fn a_unit_run_without_a_version_line_has_an_unknown_result() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = session_running(DatabaseUpdatePlan::StartServiceUnit {
             service_unit: FRESHCLAM_UNIT,
         });
-        update_session.absorb_update_batch(vec![
-            DatabaseUpdateEvent::UpdateOutputLine("Starting clamav-freshclam".to_owned()),
-            DatabaseUpdateEvent::UpdaterFinished(UpdaterFinish::ServiceUnitRan(
-                UnitStartOutcome::UnitFinished,
-            )),
-        ]);
-        let finished_report = ended_report(&mut update_session);
+        update_session.absorb_update_batch(
+            message_catalog,
+            vec![
+                DatabaseUpdateEvent::UpdateOutputLine("Starting clamav-freshclam".to_owned()),
+                DatabaseUpdateEvent::UpdaterFinished(UpdaterFinish::ServiceUnitRan(
+                    UnitStartOutcome::UnitFinished,
+                )),
+            ],
+        );
+        let finished_report = ended_report(message_catalog, &mut update_session);
         assert!(!finished_report.definitions_changed);
         assert_eq!(
             finished_report.activity_entry.activity_record,
@@ -881,13 +955,17 @@ mod signature_update_session_tests {
 
     #[test]
     fn a_refused_authorization_fails_without_writing_to_the_transcript() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = session_running(DatabaseUpdatePlan::StartServiceUnit {
             service_unit: FRESHCLAM_UNIT,
         });
-        update_session.absorb_update_batch(vec![DatabaseUpdateEvent::UpdaterFinished(
-            UpdaterFinish::ServiceUnitRan(UnitStartOutcome::AuthorizationRefused),
-        )]);
-        let finished_report = ended_report(&mut update_session);
+        update_session.absorb_update_batch(
+            message_catalog,
+            vec![DatabaseUpdateEvent::UpdaterFinished(
+                UpdaterFinish::ServiceUnitRan(UnitStartOutcome::AuthorizationRefused),
+            )],
+        );
+        let finished_report = ended_report(message_catalog, &mut update_session);
         assert_eq!(
             finished_report.activity_entry.activity_record,
             ActivityRecord::UpdateActivity {
@@ -903,21 +981,25 @@ mod signature_update_session_tests {
 
     #[test]
     fn an_exit_from_a_previous_run_does_not_survive_into_the_next_run() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = session_running(DatabaseUpdatePlan::RunFreshclamDirectly);
-        update_session.absorb_update_batch(vec![
-            DatabaseUpdateEvent::UpdateOutputLine(
-                "daily.cld updated (version: 1, sigs: 2)".to_owned(),
-            ),
-            DatabaseUpdateEvent::UpdaterFinished(UpdaterFinish::FreshclamExited(
-                FreshclamExit::UpdateSucceeded,
-            )),
-        ]);
-        assert!(ended_report(&mut update_session).definitions_changed);
+        update_session.absorb_update_batch(
+            message_catalog,
+            vec![
+                DatabaseUpdateEvent::UpdateOutputLine(
+                    "daily.cld updated (version: 1, sigs: 2)".to_owned(),
+                ),
+                DatabaseUpdateEvent::UpdaterFinished(UpdaterFinish::FreshclamExited(
+                    FreshclamExit::UpdateSucceeded,
+                )),
+            ],
+        );
+        assert!(ended_report(message_catalog, &mut update_session).definitions_changed);
         update_session.update_started(
             DatabaseUpdatePlan::RunFreshclamDirectly,
             RunningStream::already_stopped(),
         );
-        let next_report = ended_report(&mut update_session);
+        let next_report = ended_report(message_catalog, &mut update_session);
         assert!(!next_report.definitions_changed);
         assert_eq!(
             next_report.activity_entry.activity_record,
@@ -930,12 +1012,16 @@ mod signature_update_session_tests {
 
     #[test]
     fn a_cancelled_run_ignores_a_late_exit() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = session_running(DatabaseUpdatePlan::RunFreshclamDirectly);
         update_session.cancel_requested();
-        update_session.absorb_update_batch(vec![DatabaseUpdateEvent::UpdaterFinished(
-            UpdaterFinish::FreshclamExited(FreshclamExit::UpdateSucceeded),
-        )]);
-        let finished_report = ended_report(&mut update_session);
+        update_session.absorb_update_batch(
+            message_catalog,
+            vec![DatabaseUpdateEvent::UpdaterFinished(
+                UpdaterFinish::FreshclamExited(FreshclamExit::UpdateSucceeded),
+            )],
+        );
+        let finished_report = ended_report(message_catalog, &mut update_session);
         assert!(!finished_report.definitions_changed);
         assert_eq!(
             finished_report.activity_entry.activity_record,
@@ -947,12 +1033,13 @@ mod signature_update_session_tests {
 
     #[test]
     fn only_a_direct_freshclam_run_can_be_cancelled() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_session = session_running(DatabaseUpdatePlan::StartServiceUnit {
             service_unit: FRESHCLAM_UNIT,
         });
         update_session.cancel_requested();
         assert_eq!(
-            update_session.update_progress(),
+            update_session.update_progress(message_catalog),
             SignatureUpdateProgress::UncancellableUpdateRunning {
                 latest_output_line: "Starting the update…".to_owned()
             }

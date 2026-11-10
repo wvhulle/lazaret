@@ -12,6 +12,7 @@ use crate::{
             DatabaseHostStatus, SignatureUpdateSession, SignatureUpdateView, UpdateStreamEnding,
         },
     },
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -68,8 +69,8 @@ impl SignatureUpdateControl {
         }
     }
 
-    pub fn update_view(&self) -> SignatureUpdateView {
-        self.signature_update_session.update_view()
+    pub fn update_view(&self, message_catalog: &MessageCatalog) -> SignatureUpdateView {
+        self.signature_update_session.update_view(message_catalog)
     }
 
     fn requested_start(&self) -> UpdateStartDecision {
@@ -112,13 +113,20 @@ impl SignatureUpdateControl {
         self.signature_update_session.cancel_requested();
     }
 
-    pub fn absorb_update_batch(&mut self, update_batch: Vec<DatabaseUpdateEvent>) {
+    pub fn absorb_update_batch(
+        &mut self,
+        message_catalog: &MessageCatalog,
+        update_batch: Vec<DatabaseUpdateEvent>,
+    ) {
         self.signature_update_session
-            .absorb_update_batch(update_batch);
+            .absorb_update_batch(message_catalog, update_batch);
     }
 
-    pub fn update_stream_ended(&mut self) -> UpdateFinishEffects {
-        match self.signature_update_session.update_stream_ended() {
+    pub fn update_stream_ended(&mut self, message_catalog: &MessageCatalog) -> UpdateFinishEffects {
+        match self
+            .signature_update_session
+            .update_stream_ended(message_catalog)
+        {
             UpdateStreamEnding::NoUpdateWasRunning => UpdateFinishEffects::StaleStreamEnding,
             UpdateStreamEnding::UpdateEnded(finished_report) => {
                 UpdateFinishEffects::UpdateFinished(FinishedUpdateEffects {
@@ -314,22 +322,24 @@ mod database_updates_state_tests {
 
     #[test]
     fn a_stale_stream_end_has_no_effects() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_control = SignatureUpdateControl::new();
         assert!(matches!(
-            update_control.update_stream_ended(),
+            update_control.update_stream_ended(message_catalog),
             UpdateFinishEffects::StaleStreamEnding
         ));
     }
 
     #[test]
     fn a_finished_update_requests_an_evidence_refresh_and_is_recorded() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let mut update_control = SignatureUpdateControl::new();
         update_control.update_started(
             DatabaseUpdatePlan::RunFreshclamDirectly,
             RunningStream::already_stopped(),
         );
         let UpdateFinishEffects::UpdateFinished(finished_effects) =
-            update_control.update_stream_ended()
+            update_control.update_stream_ended(message_catalog)
         else {
             panic!("expected the running update to finish");
         };
@@ -343,7 +353,7 @@ mod database_updates_state_tests {
         ));
         assert!(!finished_effects.summary_line.is_empty());
         assert!(matches!(
-            update_control.update_stream_ended(),
+            update_control.update_stream_ended(message_catalog),
             UpdateFinishEffects::StaleStreamEnding
         ));
     }

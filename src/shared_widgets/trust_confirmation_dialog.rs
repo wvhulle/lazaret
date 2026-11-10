@@ -11,6 +11,7 @@ use crate::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,24 +56,32 @@ struct ConfirmationText {
     every_user_offer: EveryUserOffer,
 }
 
-fn fingerprint_text(file_fingerprint: &FileFingerprint) -> String {
+fn fingerprint_text(
+    message_catalog: &MessageCatalog,
+    file_fingerprint: &FileFingerprint,
+) -> String {
     translated_messages::widgets::sha_256_hash_size(
+        message_catalog,
         &file_fingerprint.sha256_hex,
-        exact_byte_size_text(file_fingerprint.file_size),
+        exact_byte_size_text(message_catalog, file_fingerprint.file_size),
     )
 }
 
-fn confirmation_text(sandbox_kind: SandboxKind, trust_choice: &TrustChoice) -> ConfirmationText {
+fn confirmation_text(
+    message_catalog: &MessageCatalog,
+    sandbox_kind: SandboxKind,
+    trust_choice: &TrustChoice,
+) -> ConfirmationText {
     match trust_choice {
         TrustChoice::TrustFile {
             file_fingerprint,
             shown_path,
             trust_scope: TrustScope::OnlyThisUser,
         } => ConfirmationText {
-            heading: translated_messages::widgets::trust_file_heading(),
-            body: translated_messages::widgets::stop_showing_file_body(shown_path),
-            shown_value: fingerprint_text(file_fingerprint),
-            confirm_label: translated_messages::widgets::trust_for_me_button(),
+            heading: translated_messages::widgets::trust_file_heading(message_catalog),
+            body: translated_messages::widgets::stop_showing_file_body(message_catalog, shown_path),
+            shown_value: fingerprint_text(message_catalog, file_fingerprint),
+            confirm_label: translated_messages::widgets::trust_for_me_button(message_catalog),
             protection_effect: ProtectionEffect::LowersProtection,
             every_user_offer: match system_wide_trust(sandbox_kind) {
                 SystemWideTrust::OfferedOutsideSandbox => EveryUserOffer::OffersEveryUser,
@@ -84,18 +93,23 @@ fn confirmation_text(sandbox_kind: SandboxKind, trust_choice: &TrustChoice) -> C
             shown_path,
             trust_scope: TrustScope::EveryUser,
         } => ConfirmationText {
-            heading: translated_messages::widgets::trust_file_heading(),
-            body: translated_messages::widgets::clamav_never_report_body(shown_path),
-            shown_value: fingerprint_text(file_fingerprint),
-            confirm_label: translated_messages::widgets::trust_for_all_users_button(),
+            heading: translated_messages::widgets::trust_file_heading(message_catalog),
+            body: translated_messages::widgets::clamav_never_report_body(
+                message_catalog,
+                shown_path,
+            ),
+            shown_value: fingerprint_text(message_catalog, file_fingerprint),
+            confirm_label: translated_messages::widgets::trust_for_all_users_button(
+                message_catalog,
+            ),
             protection_effect: ProtectionEffect::LowersProtection,
             every_user_offer: EveryUserOffer::ThisChoiceOnly,
         },
         TrustChoice::IgnoreSignatureForThisUser { signature_name } => ConfirmationText {
-            heading: translated_messages::widgets::ignore_detection_heading(),
-            body: translated_messages::widgets::stop_showing_detection_body(),
+            heading: translated_messages::widgets::ignore_detection_heading(message_catalog),
+            body: translated_messages::widgets::stop_showing_detection_body(message_catalog),
             shown_value: signature_name.clone(),
-            confirm_label: translated_messages::widgets::ignore_button(),
+            confirm_label: translated_messages::widgets::ignore_button(message_catalog),
             protection_effect: ProtectionEffect::LowersProtection,
             every_user_offer: EveryUserOffer::ThisChoiceOnly,
         },
@@ -103,13 +117,17 @@ fn confirmation_text(sandbox_kind: SandboxKind, trust_choice: &TrustChoice) -> C
             sha256_hex,
             trust_scope,
         } => ConfirmationText {
-            heading: translated_messages::widgets::stop_trusting_file_heading(),
+            heading: translated_messages::widgets::stop_trusting_file_heading(message_catalog),
             body: match trust_scope {
-                TrustScope::OnlyThisUser => translated_messages::widgets::show_file_again_body(),
-                TrustScope::EveryUser => translated_messages::widgets::clamav_report_file_body(),
+                TrustScope::OnlyThisUser => {
+                    translated_messages::widgets::show_file_again_body(message_catalog)
+                }
+                TrustScope::EveryUser => {
+                    translated_messages::widgets::clamav_report_file_body(message_catalog)
+                }
             },
             shown_value: format!("SHA-256 {sha256_hex}"),
-            confirm_label: translated_messages::widgets::stop_trusting_button(),
+            confirm_label: translated_messages::widgets::stop_trusting_button(message_catalog),
             protection_effect: ProtectionEffect::RestoresProtection,
             every_user_offer: EveryUserOffer::ThisChoiceOnly,
         },
@@ -117,15 +135,17 @@ fn confirmation_text(sandbox_kind: SandboxKind, trust_choice: &TrustChoice) -> C
             signature_name,
             trust_scope,
         } => ConfirmationText {
-            heading: translated_messages::widgets::report_detection_again_heading(),
+            heading: translated_messages::widgets::report_detection_again_heading(message_catalog),
             body: match trust_scope {
                 TrustScope::OnlyThisUser => {
-                    translated_messages::widgets::show_detection_again_body()
+                    translated_messages::widgets::show_detection_again_body(message_catalog)
                 }
-                TrustScope::EveryUser => translated_messages::widgets::clamav_report_files_body(),
+                TrustScope::EveryUser => {
+                    translated_messages::widgets::clamav_report_files_body(message_catalog)
+                }
             },
             shown_value: signature_name.clone(),
-            confirm_label: translated_messages::widgets::report_again_button(),
+            confirm_label: translated_messages::widgets::report_again_button(message_catalog),
             protection_effect: ProtectionEffect::RestoresProtection,
             every_user_offer: EveryUserOffer::ThisChoiceOnly,
         },
@@ -145,6 +165,7 @@ fn shown_value_label(shown_value: &str) -> gtk::Label {
 }
 
 pub fn present_trust_confirmation<Message: 'static>(
+    message_catalog: &MessageCatalog,
     sandbox_kind: SandboxKind,
     parent_widget: &impl IsA<gtk::Widget>,
     trust_choice: TrustChoice,
@@ -158,18 +179,18 @@ pub fn present_trust_confirmation<Message: 'static>(
         confirm_label,
         protection_effect,
         every_user_offer,
-    } = confirmation_text(sandbox_kind, &trust_choice);
+    } = confirmation_text(message_catalog, sandbox_kind, &trust_choice);
     let confirmation_dialog = adw::AlertDialog::new(Some(&heading), Some(&body));
     confirmation_dialog.set_extra_child(Some(&shown_value_label(&shown_value)));
     add_dismissing_choice::<TrustDialogChoice>(
         &confirmation_dialog,
-        &translated_messages::widgets::cancel_trust(),
+        &translated_messages::widgets::cancel_trust(message_catalog),
     );
     match every_user_offer {
         EveryUserOffer::OffersEveryUser => add_alert_choice(
             &confirmation_dialog,
             TrustDialogChoice::TrustForEveryUserConfirmed,
-            &translated_messages::widgets::trust_for_all_users_button(),
+            &translated_messages::widgets::trust_for_all_users_button(message_catalog),
         ),
         EveryUserOffer::ThisChoiceOnly => {}
     }
@@ -218,9 +239,11 @@ mod trust_confirmation_dialog_tests {
 
     #[test]
     fn trusting_lowers_protection_and_forgetting_does_not() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let sandbox_kind = SandboxKind::HostSystem;
         assert_eq!(
             confirmation_text(
+                message_catalog,
                 sandbox_kind,
                 &TrustChoice::IgnoreSignatureForThisUser {
                     signature_name: "Win.Test.EICAR_HDB-1".to_owned()
@@ -231,6 +254,7 @@ mod trust_confirmation_dialog_tests {
         );
         assert_eq!(
             confirmation_text(
+                message_catalog,
                 sandbox_kind,
                 &TrustChoice::ForgetTrustedFile {
                     sha256_hex: "00".to_owned(),
@@ -244,14 +268,20 @@ mod trust_confirmation_dialog_tests {
 
     #[test]
     fn only_trusting_a_file_for_this_user_offers_every_user() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let sandbox_kind = SandboxKind::HostSystem;
         assert_eq!(
-            confirmation_text(sandbox_kind, &trust_file_choice(TrustScope::EveryUser))
-                .every_user_offer,
+            confirmation_text(
+                message_catalog,
+                sandbox_kind,
+                &trust_file_choice(TrustScope::EveryUser)
+            )
+            .every_user_offer,
             EveryUserOffer::ThisChoiceOnly
         );
         assert_eq!(
             confirmation_text(
+                message_catalog,
                 sandbox_kind,
                 &TrustChoice::IgnoreSignatureForThisUser {
                     signature_name: "Win.Test.EICAR_HDB-1".to_owned()

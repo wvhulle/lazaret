@@ -1,6 +1,7 @@
 use std::{
     io,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use relm4::{FactorySender, adw, adw::prelude::*, prelude::FactoryComponent};
@@ -15,6 +16,7 @@ use crate::{
     },
     scans::scheduled_scans_page::scan_schedule_units::current_launcher_words,
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,11 +60,13 @@ pub enum IntegrationChangeOutcome {
 }
 
 pub struct FileManagerRowInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub file_manager: FileManagerKind,
     pub sandbox_kind: SandboxKind,
 }
 
 pub struct FileManagerRow {
+    pub message_catalog: Rc<MessageCatalog>,
     sandbox_kind: SandboxKind,
     file_manager: FileManagerKind,
     data_directory: PathBuf,
@@ -134,20 +138,29 @@ const fn accepts_integration_toggles(integration_state: &IntegrationState) -> bo
     )
 }
 
-fn describe_integration_failure(integration_state: &IntegrationState) -> String {
+fn describe_integration_failure(
+    message_catalog: &MessageCatalog,
+    integration_state: &IntegrationState,
+) -> String {
     match integration_state {
         IntegrationState::IntegrationInstalled
         | IntegrationState::IntegrationAbsent
         | IntegrationState::ChangingIntegration { .. } => String::new(),
         IntegrationState::ChangeFailed { change_failure, .. } => match change_failure {
             IntegrationChangeFailure::LauncherNotFound(launcher_failure) => {
-                translated_messages::preferences::launcher_not_found(launcher_failure)
+                translated_messages::preferences::launcher_not_found(
+                    message_catalog,
+                    launcher_failure,
+                )
             }
             IntegrationChangeFailure::ActionUnwritable(write_failure) => {
-                translated_messages::preferences::action_unwritable(write_failure)
+                translated_messages::preferences::action_unwritable(message_catalog, write_failure)
             }
             IntegrationChangeFailure::ActionUnremovable(remove_failure) => {
-                translated_messages::preferences::action_unremovable(remove_failure)
+                translated_messages::preferences::action_unremovable(
+                    message_catalog,
+                    remove_failure,
+                )
             }
         },
     }
@@ -236,7 +249,7 @@ impl FactoryComponent for FileManagerRow {
             #[block_signal(integration_toggled_handler)]
             set_active: switch_shows_installed(&self.integration_state),
             #[watch]
-            set_subtitle: &describe_integration_failure(&self.integration_state),
+            set_subtitle: &describe_integration_failure(&self.message_catalog, &self.integration_state),
             connect_active_notify[sender] => move |changed_row| {
                 sender.input(if changed_row.is_active() {
                     FileManagerRowInput::InstallRequested
@@ -249,6 +262,7 @@ impl FactoryComponent for FileManagerRow {
 
     fn init_model(
         FileManagerRowInit {
+            message_catalog,
             file_manager,
             sandbox_kind,
         }: Self::Init,
@@ -257,6 +271,7 @@ impl FactoryComponent for FileManagerRow {
     ) -> Self {
         let data_directory = host_user_data_directory(sandbox_kind);
         Self {
+            message_catalog,
             sandbox_kind,
             integration_state: settled_integration(read_integration_presence(
                 file_manager,

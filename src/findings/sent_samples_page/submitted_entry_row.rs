@@ -1,9 +1,11 @@
+use std::rc::Rc;
+
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
     findings::sent_samples_page::sent_samples_presentation::SubmittedRowView,
     host_services::activity_history::submission_history_store::RemoteEntryLink,
-    translated_messages,
+    translated_messages, translated_messages::MessageCatalog,
 };
 
 #[derive(Debug)]
@@ -12,6 +14,7 @@ pub enum SubmittedEntryRowOutput {
 }
 
 pub struct SubmittedEntryRow {
+    pub message_catalog: Rc<MessageCatalog>,
     row_view: SubmittedRowView,
 }
 
@@ -24,9 +27,14 @@ impl SubmittedEntryRow {
     }
 }
 
+pub struct SubmittedEntryRowInit {
+    pub row_view: SubmittedRowView,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::factory(pub)]
 impl FactoryComponent for SubmittedEntryRow {
-    type Init = SubmittedRowView;
+    type Init = SubmittedEntryRowInit;
     type Input = ();
     type Output = SubmittedEntryRowOutput;
     type CommandOutput = ();
@@ -47,7 +55,7 @@ impl FactoryComponent for SubmittedEntryRow {
 
             add_suffix = &gtk::Button {
                 set_icon_name: "adw-external-link-symbolic",
-                set_tooltip_text: Some(&translated_messages::findings::open_remote_entry_tooltip()),
+                set_tooltip_text: Some(&translated_messages::findings::open_remote_entry_tooltip(&self.message_catalog)),
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
                 set_visible: self.has_remote_entry(),
@@ -61,10 +69,16 @@ impl FactoryComponent for SubmittedEntryRow {
     }
 
     fn init_model(
-        row_view: Self::Init,
+        SubmittedEntryRowInit {
+            row_view,
+            message_catalog,
+        }: Self::Init,
         _row_index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { row_view }
+        Self {
+            row_view,
+            message_catalog,
+        }
     }
 }

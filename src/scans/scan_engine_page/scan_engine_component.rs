@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use futures::StreamExt;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
@@ -43,13 +45,15 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub const SCAN_ENGINE_SETTINGS_LAYOUT: EngineSettingsLayout =
     EngineSettingsLayout::EngineWithDetection;
 
 pub struct ScanEnginePage {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     sandbox_kind: SandboxKind,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<ScanEngineAction>>,
@@ -123,7 +127,8 @@ impl ScanEnginePage {
     }
 
     fn show_status_steps(&mut self) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let GatheredEvidence::Gathered {
             protection_evidence,
             ..
@@ -132,9 +137,11 @@ impl ScanEnginePage {
             return;
         };
         show_timeline_steps(
+            &message_catalog,
             &mut self.status_rows,
             scan_engine_steps(
-                moment_formatters,
+                &message_catalog,
+                &moment_formatters,
                 protection_evidence,
                 &self.clamd_socket_view,
                 self.distribution_family,
@@ -144,8 +151,9 @@ impl ScanEnginePage {
 }
 
 pub struct ScanEnginePageInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub sandbox_kind: SandboxKind,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::component(pub)]
@@ -163,13 +171,13 @@ impl Component for ScanEnginePage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&translated_messages::scans::check_again_scan_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::check_again_scan_tooltip(&model.message_catalog)),
                             connect_clicked => ScanEnginePageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&translated_messages::scans::checking_scan_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::scans::checking_scan_tooltip(&model.message_catalog)),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -195,6 +203,7 @@ impl Component for ScanEnginePage {
 
     fn init(
         ScanEnginePageInit {
+            message_catalog,
             sandbox_kind,
             moment_formatters,
         }: Self::Init,
@@ -202,13 +211,16 @@ impl Component for ScanEnginePage {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
-            moment_formatters,
+            message_catalog: Rc::clone(&message_catalog),
+            moment_formatters: Rc::clone(&moment_formatters),
             sandbox_kind,
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(translated_messages::scans::status_scan_title())
+                        .title(translated_messages::scans::status_scan_title(
+                            &message_catalog,
+                        ))
                         .build(),
                 )
                 .forward(sender.input_sender(), ScanEnginePageInput::StepRequested),
@@ -218,33 +230,43 @@ impl Component for ScanEnginePage {
             clamd_socket_view: ClamdSocketView::SocketInspecting,
             engine_settings_sections: EngineSettingsSections::builder()
                 .launch(EngineSettingsSectionsInit {
-                    moment_formatters,
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
                     settings_layout: SCAN_ENGINE_SETTINGS_LAYOUT,
                     sandbox_kind,
                 })
                 .forward(sender.input_sender(), page_input_for_settings_output),
             system_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
-                    moment_formatters,
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
                     audit_topic: AuditTopic::EngineChanges,
                     group_description:
-                        translated_messages::scans::engine_detection_settings_description(),
-                    empty_title: translated_messages::scans::no_engine_detection_title(),
+                        translated_messages::scans::engine_detection_settings_description(
+                            &message_catalog,
+                        ),
+                    empty_title: translated_messages::scans::no_engine_detection_title(
+                        &message_catalog,
+                    ),
                 })
                 .detach(),
             daemon_log_group: ServiceLogGroup::builder()
                 .launch(ServiceLogGroupInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     moment_formatters,
-                    group_title: translated_messages::scans::clamd_log_title(),
-                    missing_log_title: translated_messages::scans::no_clamd_log_title(),
+                    group_title: translated_messages::scans::clamd_log_title(&message_catalog),
+                    missing_log_title: translated_messages::scans::no_clamd_log_title(
+                        &message_catalog,
+                    ),
                     export_file_name: "clamd-logs.txt",
                     log_updates: daemon_log_updates(sandbox_kind).boxed(),
                 })
                 .forward(sender.input_sender(), page_input_for_log_output),
         };
         let status_group = &model.status_rows.widget().clone();
-        let status_loading_page =
-            &loading_status_page(&translated_messages::scans::checking_scan_engine());
+        let status_loading_page = &loading_status_page(
+            &translated_messages::scans::checking_scan_engine(&message_catalog),
+        );
         let widgets = view_output!();
         Self::inspect_socket(sandbox_kind, &sender);
         ComponentParts { model, widgets }
@@ -256,6 +278,7 @@ impl Component for ScanEnginePage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let sandbox_kind = self.sandbox_kind;
         match page_input {
             ScanEnginePageInput::RefreshRequested => {
@@ -270,8 +293,10 @@ impl Component for ScanEnginePage {
                 Self::inspect_socket(sandbox_kind, &sender);
             }
             ScanEnginePageInput::SettingsNoticeReceived(settings_notice) => {
-                self.toaster
-                    .add_toast(engine_settings_notice_toast(&settings_notice));
+                self.toaster.add_toast(engine_settings_notice_toast(
+                    &message_catalog,
+                    &settings_notice,
+                ));
                 match settings_change_follow_up(&settings_notice) {
                     SettingsChangeFollowUp::ReloadChangesAndEvidence => {
                         self.system_changes_group
@@ -292,7 +317,7 @@ impl Component for ScanEnginePage {
             )) => {
                 root.clipboard().set_text(&copied_command);
                 self.toaster.add_toast(adw::Toast::new(
-                    &translated_messages::scans::command_copied_clipboard_scan(),
+                    &translated_messages::scans::command_copied_clipboard_scan(&message_catalog),
                 ));
             }
             ScanEnginePageInput::LogToastRequested(toast_text) => {

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     abstractions::Toaster, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
@@ -31,9 +33,11 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct TrustedDetectionsPage {
+    pub message_catalog: Rc<MessageCatalog>,
     toaster: Toaster,
     status_rows: FactoryVecDeque<TimelineStepRow<TrustedDetectionsStepAction>>,
     evidence_refresh: EvidenceRefresh,
@@ -90,6 +94,7 @@ impl TrustedDetectionsPage {
     }
 
     fn show_status_steps(&mut self) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let GatheredEvidence::Gathered {
             protection_evidence,
             ..
@@ -98,15 +103,17 @@ impl TrustedDetectionsPage {
             return;
         };
         show_timeline_steps(
+            &message_catalog,
             &mut self.status_rows,
-            trusted_detections_status_steps(&protection_evidence.trust_list),
+            trusted_detections_status_steps(&message_catalog, &protection_evidence.trust_list),
         );
     }
 }
 
 pub struct TrustedDetectionsPageInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub sandbox_kind: SandboxKind,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::component(pub)]
@@ -124,13 +131,13 @@ impl Component for TrustedDetectionsPage {
                     pack_end = &gtk::Stack {
                         add_named[Some(IDLE_PAGE_NAME)] = &gtk::Button {
                             set_icon_name: "view-refresh-symbolic",
-                            set_tooltip_text: Some(&translated_messages::findings::check_again_trusted_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::findings::check_again_trusted_tooltip(&model.message_catalog)),
                             connect_clicked => TrustedDetectionsPageInput::RefreshRequested,
                         },
                         add_named[Some(BUSY_PAGE_NAME)] = &adw::Spinner {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
-                            set_tooltip_text: Some(&translated_messages::findings::checking_trusted_tooltip()),
+                            set_tooltip_text: Some(&translated_messages::findings::checking_trusted_tooltip(&model.message_catalog)),
                         },
                         #[watch]
                         set_visible_child_name: busy_page_name(model.evidence_refresh.is_running()),
@@ -155,6 +162,7 @@ impl Component for TrustedDetectionsPage {
 
     fn init(
         TrustedDetectionsPageInit {
+            message_catalog,
             sandbox_kind,
             moment_formatters,
         }: Self::Init,
@@ -162,11 +170,14 @@ impl Component for TrustedDetectionsPage {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             toaster: Toaster::new(&root),
             status_rows: FactoryVecDeque::builder()
                 .launch(
                     adw::PreferencesGroup::builder()
-                        .title(translated_messages::findings::status_title())
+                        .title(translated_messages::findings::status_title(
+                            &message_catalog,
+                        ))
                         .build(),
                 )
                 .forward(
@@ -177,23 +188,30 @@ impl Component for TrustedDetectionsPage {
             gathered_evidence: GatheredEvidence::NotGatheredYet,
             trusted_detections_section: TrustedDetectionsSection::builder()
                 .launch(TrustedDetectionsSectionInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     sandbox_kind,
-                    moment_formatters,
+                    moment_formatters: Rc::clone(&moment_formatters),
                 })
                 .forward(sender.input_sender(), page_input_for_trusted_output),
             trust_changes_group: SystemChangesGroup::builder()
                 .launch(SystemChangesGroupInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     moment_formatters,
                     audit_topic: AuditTopic::TrustChanges,
                     group_description:
-                        translated_messages::findings::files_trusted_detections_description(),
-                    empty_title: translated_messages::findings::no_trusted_detections_title(),
+                        translated_messages::findings::files_trusted_detections_description(
+                            &message_catalog,
+                        ),
+                    empty_title: translated_messages::findings::no_trusted_detections_title(
+                        &message_catalog,
+                    ),
                 })
                 .detach(),
         };
         let status_group = &model.status_rows.widget().clone();
-        let status_loading_page =
-            &loading_status_page(&translated_messages::findings::checking_trusted_detections());
+        let status_loading_page = &loading_status_page(
+            &translated_messages::findings::checking_trusted_detections(&message_catalog),
+        );
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -204,6 +222,7 @@ impl Component for TrustedDetectionsPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match page_input {
             TrustedDetectionsPageInput::RefreshRequested => {
                 Self::report_output(
@@ -226,7 +245,7 @@ impl Component for TrustedDetectionsPage {
             )) => {
                 root.clipboard().set_text(&copied_command);
                 self.toaster.add_toast(adw::Toast::new(
-                    &translated_messages::findings::command_copied_clipboard(),
+                    &translated_messages::findings::command_copied_clipboard(&message_catalog),
                 ));
             }
             TrustedDetectionsPageInput::ToastRequested(toast_text) => {

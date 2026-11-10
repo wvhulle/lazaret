@@ -14,6 +14,7 @@ use crate::{
         lazaret_database::locked_database_connection::lazaret_database_path,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const ENGINE_HEURISTIC_PREFIXES: [&str; 2] = ["Heuristics.", "Heuristic."];
@@ -303,18 +304,28 @@ pub fn system_wide_trust(sandbox_kind: SandboxKind) -> SystemWideTrust {
     }
 }
 
-pub fn trust_outcome_text(trust_outcome: &TrustOutcome) -> String {
+pub fn trust_outcome_text(
+    message_catalog: &MessageCatalog,
+    trust_outcome: &TrustOutcome,
+) -> String {
     match trust_outcome {
-        TrustOutcome::RecordedForThisUser => translated_messages::host::trust_recorded_for_you(),
-        TrustOutcome::TrustApplied => translated_messages::host::trust_applied(),
-        TrustOutcome::AppliedReloadPending => translated_messages::host::applied_reload_pending(),
+        TrustOutcome::RecordedForThisUser => {
+            translated_messages::host::trust_recorded_for_you(message_catalog)
+        }
+        TrustOutcome::TrustApplied => translated_messages::host::trust_applied(message_catalog),
+        TrustOutcome::AppliedReloadPending => {
+            translated_messages::host::applied_reload_pending(message_catalog)
+        }
         TrustOutcome::AuthorizationRefused => {
-            translated_messages::host::authorization_refused_outcome()
+            translated_messages::host::authorization_refused_outcome(message_catalog)
         }
-        TrustOutcome::AdminServiceMissing => translated_messages::host::admin_service_missing(),
-        TrustOutcome::TrustFailed(change_failure) => {
-            translated_messages::host::trust_failed(trust_change_failure_text(change_failure))
+        TrustOutcome::AdminServiceMissing => {
+            translated_messages::host::admin_service_missing(message_catalog)
         }
+        TrustOutcome::TrustFailed(change_failure) => translated_messages::host::trust_failed(
+            message_catalog,
+            trust_change_failure_text(change_failure),
+        ),
     }
 }
 

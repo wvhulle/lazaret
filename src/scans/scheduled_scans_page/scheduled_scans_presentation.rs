@@ -25,13 +25,14 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScheduledScanAction {}
 
 impl StepActionButton for ScheduledScanAction {
-    fn button_label(&self) -> String {
+    fn button_label(&self, _message_catalog: &MessageCatalog) -> String {
         match *self {}
     }
 
@@ -65,26 +66,32 @@ impl From<UnitTimestamp> for EvidenceMoment {
     }
 }
 
-fn next_run_text(moment_formatters: &MomentFormatters, next_run: UnitTimestamp) -> String {
+fn next_run_text(
+    message_catalog: &MessageCatalog,
+    moment_formatters: &MomentFormatters,
+    next_run: UnitTimestamp,
+) -> String {
     match next_run {
         UnitTimestamp::RecordedAt { recorded_at } => {
             moment_formatters.exact_moment_text(recorded_at)
         }
-        UnitTimestamp::NeverRecorded => translated_messages::scans::not_scheduled(),
+        UnitTimestamp::NeverRecorded => translated_messages::scans::not_scheduled(message_catalog),
     }
 }
 
 fn next_run_row(
+    message_catalog: &MessageCatalog,
     next_run: UnitTimestamp,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
 ) -> StepEvidenceRow {
     let evidence_value = match next_run {
         UnitTimestamp::RecordedAt { .. } => String::new(),
-        UnitTimestamp::NeverRecorded => translated_messages::scans::not_scheduled(),
+        UnitTimestamp::NeverRecorded => translated_messages::scans::not_scheduled(message_catalog),
     };
     timed_evidence_row(
-        translated_messages::scans::next_scan(),
+        message_catalog,
+        translated_messages::scans::next_scan(message_catalog),
         EvidenceMoment::from(next_run),
         evidence_value,
         moment_formatters,
@@ -93,6 +100,7 @@ fn next_run_row(
 }
 
 fn last_run_row(
+    message_catalog: &MessageCatalog,
     last_completed_run: ScanRunHistory,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -101,16 +109,21 @@ fn last_run_row(
         ScanRunHistory::CompletedScan {
             scan_findings: ScanRunFindings::ThreatsFound,
             ..
-        } => translated_messages::scans::threats_found_scheduled(),
+        } => translated_messages::scans::threats_found_scheduled(message_catalog),
         ScanRunHistory::CompletedScan {
             scan_findings: ScanRunFindings::NothingFound,
             ..
-        } => translated_messages::scans::nothing_found(),
-        ScanRunHistory::NoCompletedScan => translated_messages::scans::no_completed_scan(),
-        ScanRunHistory::JournalUnreadable(read_failure) => unknown_run_text(read_failure),
+        } => translated_messages::scans::nothing_found(message_catalog),
+        ScanRunHistory::NoCompletedScan => {
+            translated_messages::scans::no_completed_scan(message_catalog)
+        }
+        ScanRunHistory::JournalUnreadable(read_failure) => {
+            unknown_run_text(message_catalog, read_failure)
+        }
     };
     timed_evidence_row(
-        translated_messages::scans::last_scan(),
+        message_catalog,
+        translated_messages::scans::last_scan(message_catalog),
         EvidenceMoment::from(last_completed_run),
         evidence_value,
         moment_formatters,
@@ -125,11 +138,14 @@ pub const fn scan_result_failed(last_result: &ScanUnitResult) -> bool {
     }
 }
 
-pub fn scanned_folders_text(scan_service: &ScanServiceEvidence) -> String {
+pub fn scanned_folders_text(
+    message_catalog: &MessageCatalog,
+    scan_service: &ScanServiceEvidence,
+) -> String {
     match scan_service {
         ScanServiceEvidence::ServiceConfigured { scan_targets, .. } => scan_targets.join("\n"),
         ScanServiceEvidence::ServiceMissing | ScanServiceEvidence::ServiceUnreadable => {
-            translated_messages::scans::unknown_label()
+            translated_messages::scans::unknown_label(message_catalog)
         }
     }
 }
@@ -167,16 +183,19 @@ pub const fn scheduled_scan_condition(
 }
 
 fn scheduled_status_text(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     scheduled_scan_evidence: &ScheduledScanEvidence,
     daemon_answering: bool,
 ) -> String {
     match scheduled_scan_evidence {
-        ScheduledScanEvidence::SystemTimer { .. } if !daemon_answering => daemon_awaited_text(),
+        ScheduledScanEvidence::SystemTimer { .. } if !daemon_answering => {
+            daemon_awaited_text(message_catalog)
+        }
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerInactive,
             ..
-        } => translated_messages::scans::system_timer(),
+        } => translated_messages::scans::system_timer(message_catalog),
         ScheduledScanEvidence::SystemTimer {
             timer_state: TimerState::TimerActive { next_run },
             scan_service,
@@ -185,27 +204,32 @@ fn scheduled_status_text(
             ScanServiceEvidence::ServiceConfigured { last_result, .. }
                 if scan_result_failed(last_result) =>
             {
-                translated_messages::scans::last_scan_ended_error()
+                translated_messages::scans::last_scan_ended_error(message_catalog)
             }
             ScanServiceEvidence::ServiceConfigured { .. } => {
-                translated_messages::scans::next_scan_time(next_run_text(
-                    moment_formatters,
-                    *next_run,
-                ))
+                translated_messages::scans::next_scan_time(
+                    message_catalog,
+                    next_run_text(message_catalog, moment_formatters, *next_run),
+                )
             }
             ScanServiceEvidence::ServiceMissing => {
-                translated_messages::scans::timer_starts_scan_service()
+                translated_messages::scans::timer_starts_scan_service(message_catalog)
             }
             ScanServiceEvidence::ServiceUnreadable => {
-                translated_messages::scans::service_not_read_systemd()
+                translated_messages::scans::service_not_read_systemd(message_catalog)
             }
         },
-        ScheduledScanEvidence::LazaretSchedule => translated_messages::scans::lazaret_schedule(),
-        ScheduledScanEvidence::NoSchedule => translated_messages::scans::no_schedule(),
+        ScheduledScanEvidence::LazaretSchedule => {
+            translated_messages::scans::lazaret_schedule(message_catalog)
+        }
+        ScheduledScanEvidence::NoSchedule => {
+            translated_messages::scans::no_schedule(message_catalog)
+        }
     }
 }
 
 fn system_timer_rows(
+    message_catalog: &MessageCatalog,
     timer_state: &TimerState,
     scan_service: &ScanServiceEvidence,
     last_completed_run: ScanRunHistory,
@@ -213,22 +237,30 @@ fn system_timer_rows(
     reference_moment: Timestamp,
 ) -> Vec<StepEvidenceRow> {
     let next_scan_row = match timer_state {
-        TimerState::TimerActive { next_run } => {
-            next_run_row(*next_run, moment_formatters, reference_moment)
-        }
+        TimerState::TimerActive { next_run } => next_run_row(
+            message_catalog,
+            *next_run,
+            moment_formatters,
+            reference_moment,
+        ),
         TimerState::TimerInactive => evidence_row(
-            translated_messages::scans::next_scan(),
-            translated_messages::scans::not_scheduled_timer_active(),
+            translated_messages::scans::next_scan(message_catalog),
+            translated_messages::scans::not_scheduled_timer_active(message_catalog),
         ),
     };
     vec![
         next_scan_row,
-        last_run_row(last_completed_run, moment_formatters, reference_moment),
+        last_run_row(
+            message_catalog,
+            last_completed_run,
+            moment_formatters,
+            reference_moment,
+        ),
         StepEvidenceRow {
             evidence_moment: EvidenceMoment::SettingValue,
             ..evidence_row(
-                translated_messages::scans::folders_scanned(),
-                scanned_folders_text(scan_service),
+                translated_messages::scans::folders_scanned(message_catalog),
+                scanned_folders_text(message_catalog, scan_service),
             )
         },
     ]
@@ -248,6 +280,7 @@ const fn scan_unit_is_running(scheduled_scan_evidence: &ScheduledScanEvidence) -
 }
 
 pub fn scheduled_scan_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     scheduled_scan_evidence: &ScheduledScanEvidence,
     daemon_answering: bool,
     moment_formatters: &MomentFormatters,
@@ -262,6 +295,7 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
             last_completed_run,
             ..
         } => system_timer_rows(
+            message_catalog,
             timer_state,
             scan_service,
             *last_completed_run,
@@ -280,9 +314,9 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
     };
     if scan_unit_is_running(scheduled_scan_evidence) {
         return TimelineStep::running(
-            translated_messages::scans::scheduled_scan(),
-            translated_messages::scans::scheduled_scan_catches_files(),
-            translated_messages::scans::scanning_title(),
+            translated_messages::scans::scheduled_scan(message_catalog),
+            translated_messages::scans::scheduled_scan_catches_files(message_catalog),
+            translated_messages::scans::scanning_title(message_catalog),
             RunningStep {
                 evidence_rows,
                 cancel_slot: CancelSlot::NotCancellable,
@@ -290,9 +324,14 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
         );
     }
     TimelineStep::settled(
-        translated_messages::scans::scheduled_scan(),
-        translated_messages::scans::scheduled_scan_catches_files(),
-        scheduled_status_text(moment_formatters, scheduled_scan_evidence, daemon_answering),
+        translated_messages::scans::scheduled_scan(message_catalog),
+        translated_messages::scans::scheduled_scan_catches_files(message_catalog),
+        scheduled_status_text(
+            message_catalog,
+            moment_formatters,
+            scheduled_scan_evidence,
+            daemon_answering,
+        ),
         SettledStep {
             evidence_rows: plain_rows(evidence_rows),
             header_action,
@@ -305,12 +344,14 @@ pub fn scheduled_scan_step<StepAction: StepActionButton>(
 }
 
 pub fn scheduled_scans_page_steps(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
     distribution_family: DistributionFamily,
 ) -> Vec<ScheduledScanStep> {
     vec![scheduled_scan_step(
+        message_catalog,
         &protection_evidence.scheduled_scan_evidence,
         daemon_is_answering(&protection_evidence.daemon_evidence),
         moment_formatters,
@@ -339,8 +380,12 @@ mod scheduled_scans_presentation_tests {
         shared_widgets::step_timeline::timeline_step_contents::StepNodeState,
     };
 
-    fn page_step_with(protection_evidence: &ProtectionEvidence) -> ScheduledScanStep {
+    fn page_step_with(
+        message_catalog: &MessageCatalog,
+        protection_evidence: &ProtectionEvidence,
+    ) -> ScheduledScanStep {
         scheduled_scans_page_steps(
+            message_catalog,
             protection_evidence,
             &english_formatters(),
             REFERENCE_MOMENT,
@@ -349,11 +394,17 @@ mod scheduled_scans_presentation_tests {
         .remove(0)
     }
 
-    fn step_of(scheduled_scan_evidence: ScheduledScanEvidence) -> ScheduledScanStep {
-        page_step_with(&ProtectionEvidence {
-            scheduled_scan_evidence,
-            ..healthy_evidence()
-        })
+    fn step_of(
+        message_catalog: &MessageCatalog,
+        scheduled_scan_evidence: ScheduledScanEvidence,
+    ) -> ScheduledScanStep {
+        page_step_with(
+            message_catalog,
+            &ProtectionEvidence {
+                scheduled_scan_evidence,
+                ..healthy_evidence()
+            },
+        )
     }
 
     fn row_value<'step>(
@@ -383,25 +434,29 @@ mod scheduled_scans_presentation_tests {
 
     #[test]
     fn each_row_says_whether_it_is_past_upcoming_or_a_setting() {
-        let scheduled_step = step_of(ScheduledScanEvidence::SystemTimer {
-            service_unit: "clamdscan.service",
-            timer_state: TimerState::TimerActive {
-                next_run: UnitTimestamp::RecordedAt {
-                    recorded_at: REFERENCE_MOMENT
-                        + SignedDuration::from_hours(72)
-                        + SignedDuration::from_mins(1),
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let scheduled_step = step_of(
+            message_catalog,
+            ScheduledScanEvidence::SystemTimer {
+                service_unit: "clamdscan.service",
+                timer_state: TimerState::TimerActive {
+                    next_run: UnitTimestamp::RecordedAt {
+                        recorded_at: REFERENCE_MOMENT
+                            + SignedDuration::from_hours(72)
+                            + SignedDuration::from_mins(1),
+                    },
+                },
+                scan_service: ScanServiceEvidence::ServiceConfigured {
+                    scan_targets: vec!["/tmp".to_owned()],
+                    last_result: ScanUnitResult::NothingFound,
+                    scan_run_state: ServiceRunState::ServiceIdle,
+                },
+                last_completed_run: ScanRunHistory::CompletedScan {
+                    finished_at: REFERENCE_MOMENT - SignedDuration::from_hours(2),
+                    scan_findings: ScanRunFindings::NothingFound,
                 },
             },
-            scan_service: ScanServiceEvidence::ServiceConfigured {
-                scan_targets: vec!["/tmp".to_owned()],
-                last_result: ScanUnitResult::NothingFound,
-                scan_run_state: ServiceRunState::ServiceIdle,
-            },
-            last_completed_run: ScanRunHistory::CompletedScan {
-                finished_at: REFERENCE_MOMENT - SignedDuration::from_hours(2),
-                scan_findings: ScanRunFindings::NothingFound,
-            },
-        });
+        );
         assert_eq!(row_value(&scheduled_step, "Next scan"), "in 3 days");
         assert_eq!(
             row_value(&scheduled_step, "Last scan"),
@@ -412,13 +467,17 @@ mod scheduled_scans_presentation_tests {
 
     #[test]
     fn a_running_scan_unit_shows_the_step_in_progress_with_its_rows() {
-        let scheduled_step = step_of(system_timer_with(ScanServiceEvidence::ServiceConfigured {
-            scan_targets: vec!["/tmp".to_owned()],
-            last_result: ScanUnitResult::NothingFound,
-            scan_run_state: ServiceRunState::ServiceRunning {
-                started_at: UnitTimestamp::NeverRecorded,
-            },
-        }));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let scheduled_step = step_of(
+            message_catalog,
+            system_timer_with(ScanServiceEvidence::ServiceConfigured {
+                scan_targets: vec!["/tmp".to_owned()],
+                last_result: ScanUnitResult::NothingFound,
+                scan_run_state: ServiceRunState::ServiceRunning {
+                    started_at: UnitTimestamp::NeverRecorded,
+                },
+            }),
+        );
         assert_eq!(scheduled_step.node_state(), StepNodeState::InProgress);
         assert_eq!(scheduled_step.status_text, "Scanning");
         assert_eq!(row_value(&scheduled_step, "Folders scanned"), "/tmp");
@@ -426,14 +485,19 @@ mod scheduled_scans_presentation_tests {
 
     #[test]
     fn the_schedule_page_offers_no_run_now() {
-        let scheduled_step = page_step_with(&healthy_evidence());
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let scheduled_step = page_step_with(message_catalog, &healthy_evidence());
         assert_eq!(scheduled_step.node_state(), StepNodeState::Completed);
         assert!(scheduled_step.offered_actions().is_empty());
     }
 
     #[test]
     fn an_unreadable_scan_service_after_a_readable_timer_needs_review() {
-        let scheduled_step = step_of(system_timer_with(ScanServiceEvidence::ServiceUnreadable));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let scheduled_step = step_of(
+            message_catalog,
+            system_timer_with(ScanServiceEvidence::ServiceUnreadable),
+        );
         assert_eq!(scheduled_step.node_state(), StepNodeState::NeedsReview);
         assert_eq!(
             scheduled_step.status_text,
@@ -443,21 +507,27 @@ mod scheduled_scans_presentation_tests {
 
     #[test]
     fn a_missing_scan_service_is_not_reported_as_completed() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
-            step_of(system_timer_with(ScanServiceEvidence::ServiceMissing)).node_state(),
+            step_of(
+                message_catalog,
+                system_timer_with(ScanServiceEvidence::ServiceMissing)
+            )
+            .node_state(),
             StepNodeState::NeedsReview
         );
     }
 
     #[test]
     fn a_failed_last_run_is_reported_and_marked_for_a_rerun() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let failed_evidence = system_timer_with(ScanServiceEvidence::ServiceConfigured {
             scan_targets: vec!["/tmp".to_owned()],
             last_result: ScanUnitResult::ScannerError { exit_status: 2 },
             scan_run_state: ServiceRunState::ServiceIdle,
         });
         assert_eq!(
-            step_of(failed_evidence.clone()).status_text,
+            step_of(message_catalog, failed_evidence.clone()).status_text,
             "The last scan ended with an error"
         );
     }
@@ -475,6 +545,7 @@ mod scheduled_scans_presentation_tests {
 
     #[test]
     fn an_unreadable_scan_journal_is_unknown_rather_than_not_run_yet() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let ScheduledScanEvidence::SystemTimer {
             service_unit,
             timer_state,
@@ -484,14 +555,17 @@ mod scheduled_scans_presentation_tests {
         else {
             panic!("the healthy evidence has a system timer");
         };
-        let scheduled_step = step_of(ScheduledScanEvidence::SystemTimer {
-            service_unit,
-            timer_state,
-            scan_service,
-            last_completed_run: ScanRunHistory::JournalUnreadable(
-                UnitJournalReadFailure::ReadingTaskInterrupted,
-            ),
-        });
+        let scheduled_step = step_of(
+            message_catalog,
+            ScheduledScanEvidence::SystemTimer {
+                service_unit,
+                timer_state,
+                scan_service,
+                last_completed_run: ScanRunHistory::JournalUnreadable(
+                    UnitJournalReadFailure::ReadingTaskInterrupted,
+                ),
+            },
+        );
         assert_eq!(
             row_value(&scheduled_step, "Last scan"),
             "Unknown. Reading the system journal stopped before it finished"
@@ -500,16 +574,20 @@ mod scheduled_scans_presentation_tests {
 
     #[test]
     fn an_inactive_timer_fails() {
-        let scheduled_step = step_of(ScheduledScanEvidence::SystemTimer {
-            service_unit: "clamdscan.service",
-            timer_state: TimerState::TimerInactive,
-            scan_service: ScanServiceEvidence::ServiceConfigured {
-                scan_targets: vec!["/tmp".to_owned()],
-                last_result: ScanUnitResult::NothingFound,
-                scan_run_state: ServiceRunState::ServiceIdle,
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let scheduled_step = step_of(
+            message_catalog,
+            ScheduledScanEvidence::SystemTimer {
+                service_unit: "clamdscan.service",
+                timer_state: TimerState::TimerInactive,
+                scan_service: ScanServiceEvidence::ServiceConfigured {
+                    scan_targets: vec!["/tmp".to_owned()],
+                    last_result: ScanUnitResult::NothingFound,
+                    scan_run_state: ServiceRunState::ServiceIdle,
+                },
+                last_completed_run: ScanRunHistory::NoCompletedScan,
             },
-            last_completed_run: ScanRunHistory::NoCompletedScan,
-        });
+        );
         assert_eq!(scheduled_step.node_state(), StepNodeState::HasFailed);
         assert_eq!(
             row_value(&scheduled_step, "Next scan"),
@@ -519,12 +597,16 @@ mod scheduled_scans_presentation_tests {
 
     #[test]
     fn a_stopped_daemon_leaves_the_schedule_waiting() {
-        let scheduled_step = page_step_with(&ProtectionEvidence {
-            daemon_evidence: DaemonEvidence::UnitStopped {
-                service_unit: "clamav-daemon.service",
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let scheduled_step = page_step_with(
+            message_catalog,
+            &ProtectionEvidence {
+                daemon_evidence: DaemonEvidence::UnitStopped {
+                    service_unit: "clamav-daemon.service",
+                },
+                ..healthy_evidence()
             },
-            ..healthy_evidence()
-        });
+        );
         assert_eq!(
             scheduled_step.node_state(),
             StepNodeState::AwaitingPrerequisite
@@ -537,7 +619,8 @@ mod scheduled_scans_presentation_tests {
 
     #[test]
     fn no_schedule_suggests_setting_one_up() {
-        let scheduled_step = step_of(ScheduledScanEvidence::NoSchedule);
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let scheduled_step = step_of(message_catalog, ScheduledScanEvidence::NoSchedule);
         assert_eq!(scheduled_step.node_state(), StepNodeState::NeedsReview);
         assert!(!scheduled_step.guidance_commands.is_empty());
     }

@@ -17,6 +17,7 @@ use crate::{
         loading_indicators::{LOADED_PAGE_NAME, LOADING_PAGE_NAME},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub const MISSING_LOG_PAGE_NAME: &str = "missing-log";
@@ -47,27 +48,33 @@ impl ShownRowLevel {
         }
     }
 
-    pub fn level_label_text(&self) -> String {
+    pub fn level_label_text(&self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::ThreatDetected => translated_messages::widgets::threat_detected(),
+            Self::ThreatDetected => translated_messages::widgets::threat_detected(message_catalog),
             Self::Severity(LogSeverityLevel::Emergency) => {
-                translated_messages::widgets::emergency_label()
+                translated_messages::widgets::emergency_label(message_catalog)
             }
-            Self::Severity(LogSeverityLevel::Alert) => translated_messages::widgets::alert_label(),
+            Self::Severity(LogSeverityLevel::Alert) => {
+                translated_messages::widgets::alert_label(message_catalog)
+            }
             Self::Severity(LogSeverityLevel::Critical) => {
-                translated_messages::widgets::critical_level()
+                translated_messages::widgets::critical_level(message_catalog)
             }
-            Self::Severity(LogSeverityLevel::Error) => translated_messages::widgets::error_level(),
+            Self::Severity(LogSeverityLevel::Error) => {
+                translated_messages::widgets::error_level(message_catalog)
+            }
             Self::Severity(LogSeverityLevel::Warning) => {
-                translated_messages::widgets::warning_label()
+                translated_messages::widgets::warning_label(message_catalog)
             }
             Self::Severity(LogSeverityLevel::Notice) => {
-                translated_messages::widgets::notice_label()
+                translated_messages::widgets::notice_label(message_catalog)
             }
             Self::Severity(LogSeverityLevel::Informational) => {
-                translated_messages::widgets::info_label()
+                translated_messages::widgets::info_label(message_catalog)
             }
-            Self::Severity(LogSeverityLevel::Debug) => translated_messages::widgets::debug_label(),
+            Self::Severity(LogSeverityLevel::Debug) => {
+                translated_messages::widgets::debug_label(message_catalog)
+            }
             Self::Severity(LogSeverityLevel::SeverityMissing) => String::new(),
             Self::Severity(LogSeverityLevel::UnrecognizedSeverity { priority_field }) => {
                 sanitize_scanner_line(priority_field)
@@ -276,22 +283,23 @@ impl ServiceLogView {
         }
     }
 
-    pub fn source_text(&self) -> String {
+    pub fn source_text(&self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::LogReading => translated_messages::widgets::log_reading(),
+            Self::LogReading => translated_messages::widgets::log_reading(message_catalog),
             Self::LogRead(ServiceLogContents::FromLogFile { log_path, .. }) => {
                 sanitize_scanner_line(&log_path.to_string_lossy())
             }
             Self::LogRead(ServiceLogContents::FromSystemJournal { .. }) => {
-                translated_messages::widgets::system_journal()
+                translated_messages::widgets::system_journal(message_catalog)
             }
             Self::LogRead(ServiceLogContents::NoReadableLog) => {
-                translated_messages::widgets::neither_log_file_nor()
+                translated_messages::widgets::neither_log_file_nor(message_catalog)
             }
             Self::LogRead(ServiceLogContents::JournalUnreadable(read_failure)) => {
-                translated_messages::widgets::no_log_file_found(unit_journal_failure_text(
-                    *read_failure,
-                ))
+                translated_messages::widgets::no_log_file_found(
+                    message_catalog,
+                    unit_journal_failure_text(message_catalog, *read_failure),
+                )
             }
         }
     }
@@ -476,14 +484,15 @@ mod service_log_state_tests {
 
     #[test]
     fn an_unreadable_journal_names_its_reason_rather_than_no_log() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let source_text = ServiceLogView::LogRead(ServiceLogContents::JournalUnreadable(
             UnitJournalReadFailure::ReadingTaskInterrupted,
         ))
-        .source_text();
+        .source_text(message_catalog);
         assert!(source_text.starts_with("No log file was found. "));
         assert_ne!(
             source_text,
-            ServiceLogView::LogRead(ServiceLogContents::NoReadableLog).source_text()
+            ServiceLogView::LogRead(ServiceLogContents::NoReadableLog).source_text(message_catalog)
         );
     }
 }

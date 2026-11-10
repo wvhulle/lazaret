@@ -4,6 +4,7 @@ use crate::{
         sidebar_area_status::{AreaStatus, AreaSummary, SidebarAreaSummary},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -14,19 +15,19 @@ pub enum SidebarGroup {
 }
 
 impl SidebarGroup {
-    pub fn group_title(self) -> String {
+    pub fn group_title(self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::SignaturesGroup => translated_messages::window::signatures_label(),
-            Self::ScansGroup => translated_messages::window::scans_label(),
-            Self::FindingsGroup => translated_messages::window::findings_label(),
+            Self::SignaturesGroup => translated_messages::window::signatures_label(message_catalog),
+            Self::ScansGroup => translated_messages::window::scans_label(message_catalog),
+            Self::FindingsGroup => translated_messages::window::findings_label(message_catalog),
         }
     }
 
-    pub fn group_description(self) -> String {
+    pub fn group_description(self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::SignaturesGroup => translated_messages::window::detections_come(),
-            Self::ScansGroup => translated_messages::window::files_get_checked(),
-            Self::FindingsGroup => translated_messages::window::found_label(),
+            Self::SignaturesGroup => translated_messages::window::detections_come(message_catalog),
+            Self::ScansGroup => translated_messages::window::files_get_checked(message_catalog),
+            Self::FindingsGroup => translated_messages::window::found_label(message_catalog),
         }
     }
 
@@ -102,12 +103,14 @@ impl SidebarStatusImage {
         }
     }
 
-    pub fn tooltip_text(self) -> String {
+    pub fn tooltip_text(self, message_catalog: &MessageCatalog) -> String {
         match self {
             Self::NoStatusImage => String::new(),
-            Self::WarningImage => translated_messages::window::needs_review(),
-            Self::ErrorImage => translated_messages::window::not_working(),
-            Self::WaitingImage => translated_messages::window::waiting_another_part(),
+            Self::WarningImage => translated_messages::window::needs_review(message_catalog),
+            Self::ErrorImage => translated_messages::window::not_working(message_catalog),
+            Self::WaitingImage => {
+                translated_messages::window::waiting_another_part(message_catalog)
+            }
         }
     }
 }
@@ -141,18 +144,19 @@ pub struct SidebarRowPresentation {
 }
 
 pub fn sidebar_row_presentation(
+    message_catalog: &MessageCatalog,
     application_page: ApplicationPage,
     entry_summary: &EntrySummary,
 ) -> SidebarRowPresentation {
     match entry_summary {
         EntrySummary::SummaryPending => SidebarRowPresentation {
-            row_title: application_page.page_title(),
-            row_subtitle: translated_messages::window::summary_pending(),
+            row_title: application_page.page_title(message_catalog),
+            row_subtitle: translated_messages::window::summary_pending(message_catalog),
             prefix_icon: application_page.page_icon(),
             status_image: SidebarStatusImage::NoStatusImage,
         },
         EntrySummary::SummaryKnown(area_summary) => SidebarRowPresentation {
-            row_title: application_page.page_title(),
+            row_title: application_page.page_title(message_catalog),
             row_subtitle: area_summary.live_state_text.clone(),
             prefix_icon: application_page.page_icon(),
             status_image: SidebarStatusImage::for_area_status(area_summary.area_status),
@@ -189,10 +193,11 @@ mod sidebar_entry_presentation_tests {
 
     #[test]
     fn each_group_has_its_title_description_and_members() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
             ALL_SIDEBAR_GROUPS.map(|sidebar_group| (
-                sidebar_group.group_title(),
-                sidebar_group.group_description()
+                sidebar_group.group_title(message_catalog),
+                sidebar_group.group_description(message_catalog)
             )),
             [
                 (
@@ -236,8 +241,10 @@ mod sidebar_entry_presentation_tests {
 
     #[test]
     fn each_area_status_has_its_status_image() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let presented_image = |area_status| {
             sidebar_row_presentation(
+                message_catalog,
                 ApplicationPage::ScanEngine,
                 &known_summary(area_status, "clamd answering"),
             )
@@ -267,8 +274,10 @@ mod sidebar_entry_presentation_tests {
 
     #[test]
     fn a_page_row_shows_its_title_icon_and_live_state() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         assert_eq!(
             sidebar_row_presentation(
+                message_catalog,
                 ApplicationPage::Detections,
                 &known_summary(AreaStatus::AreaNeedsReview, "2 need a decision"),
             ),
@@ -279,8 +288,11 @@ mod sidebar_entry_presentation_tests {
                 status_image: SidebarStatusImage::WarningImage,
             }
         );
-        let pending_row =
-            sidebar_row_presentation(ApplicationPage::Quarantine, &EntrySummary::SummaryPending);
+        let pending_row = sidebar_row_presentation(
+            message_catalog,
+            ApplicationPage::Quarantine,
+            &EntrySummary::SummaryPending,
+        );
         assert_eq!(pending_row.row_subtitle, "Checking…");
         assert_eq!(pending_row.status_image, SidebarStatusImage::NoStatusImage);
     }

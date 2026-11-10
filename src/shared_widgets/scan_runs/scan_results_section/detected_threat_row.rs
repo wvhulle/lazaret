@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender,
     actions::{RelmAction, RelmActionGroup},
@@ -25,6 +27,7 @@ use crate::{
         submission_confirm_dialog::ClamavReportProposal,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 relm4::new_action_group!(ThreatRowActions, "threat-row");
@@ -62,31 +65,40 @@ pub fn false_positive_detection(detected_threat: &DetectedThreat) -> Option<Clam
         })
 }
 
-fn threat_actions_menu(detected_threat: &DetectedThreat) -> gio::Menu {
+fn threat_actions_menu(
+    message_catalog: &MessageCatalog,
+    detected_threat: &DetectedThreat,
+) -> gio::Menu {
     let trust_section = gio::Menu::new();
     trust_section.append(
-        Some(&translated_messages::widgets::trust_file()),
+        Some(&translated_messages::widgets::trust_file(message_catalog)),
         Some("threat-row.trust-file"),
     );
     if ignore_signature_choice(&detected_threat.threat_identity).is_some() {
         trust_section.append(
-            Some(&translated_messages::widgets::ignore_detection_for_me()),
+            Some(&translated_messages::widgets::ignore_detection_for_me(
+                message_catalog,
+            )),
             Some("threat-row.ignore-signature"),
         );
     }
     if false_positive_detection(detected_threat).is_some() {
         trust_section.append(
-            Some(&translated_messages::widgets::report_false_positive()),
+            Some(&translated_messages::widgets::report_false_positive(
+                message_catalog,
+            )),
             Some("threat-row.report-false-positive"),
         );
     }
     let scan_section = gio::Menu::new();
     scan_section.append(
-        Some(&translated_messages::widgets::skip_path_lazaret_scans()),
+        Some(&translated_messages::widgets::skip_path_lazaret_scans(
+            message_catalog,
+        )),
         Some("threat-row.exclude"),
     );
     scan_section.append(
-        Some(&translated_messages::widgets::copy_path()),
+        Some(&translated_messages::widgets::copy_path(message_catalog)),
         Some("threat-row.copy-path"),
     );
     let actions_menu = gio::Menu::new();
@@ -130,6 +142,7 @@ pub enum ThreatQuarantineState {
 }
 
 pub struct DetectedThreatRow {
+    pub message_catalog: Rc<MessageCatalog>,
     pub detected_threat: DetectedThreat,
     pub row_index: DynamicIndex,
     quarantine_state: ThreatQuarantineState,
@@ -150,12 +163,17 @@ pub enum DetectedThreatRowOutput {
     FalsePositiveReportRequested(ClamavReportProposal),
 }
 
-fn severity_badge_text(threat_severity: ThreatSeverity) -> String {
+fn severity_badge_text(
+    message_catalog: &MessageCatalog,
+    threat_severity: ThreatSeverity,
+) -> String {
     match threat_severity {
-        ThreatSeverity::Critical => translated_messages::widgets::critical_severity(),
-        ThreatSeverity::High => translated_messages::widgets::high_severity(),
-        ThreatSeverity::Medium => translated_messages::widgets::medium_severity(),
-        ThreatSeverity::Low => translated_messages::widgets::low_severity(),
+        ThreatSeverity::Critical => {
+            translated_messages::widgets::critical_severity(message_catalog)
+        }
+        ThreatSeverity::High => translated_messages::widgets::high_severity(message_catalog),
+        ThreatSeverity::Medium => translated_messages::widgets::medium_severity(message_catalog),
+        ThreatSeverity::Low => translated_messages::widgets::low_severity(message_catalog),
     }
 }
 
@@ -168,6 +186,7 @@ fn severity_badge_class(threat_severity: ThreatSeverity) -> &'static str {
 
 impl DetectedThreatRow {
     fn row_subtitle(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let displayed_path =
             sanitize_scanner_line(&self.detected_threat.file_path.to_string_lossy());
         match &self.quarantine_state {
@@ -175,12 +194,15 @@ impl DetectedThreatRow {
                 displayed_path
             }
             ThreatQuarantineState::MovedToQuarantine => {
-                translated_messages::widgets::moved_quarantine_path_check(&displayed_path)
+                translated_messages::widgets::moved_quarantine_path_check(
+                    &message_catalog,
+                    &displayed_path,
+                )
             }
             ThreatQuarantineState::QuarantineFailed(move_failure) => {
                 format!(
                     "{displayed_path}\n{}",
-                    describe_quarantine_failure(move_failure)
+                    describe_quarantine_failure(&message_catalog, move_failure)
                 )
             }
         }
@@ -198,9 +220,14 @@ impl DetectedThreatRow {
     }
 }
 
+pub struct DetectedThreatRowInit {
+    pub detected_threat: DetectedThreat,
+    pub message_catalog: Rc<MessageCatalog>,
+}
+
 #[relm4::factory(pub)]
 impl FactoryComponent for DetectedThreatRow {
-    type Init = DetectedThreat;
+    type Init = DetectedThreatRowInit;
     type Input = DetectedThreatRowInput;
     type Output = DetectedThreatRowOutput;
     type CommandOutput = ();
@@ -210,20 +237,20 @@ impl FactoryComponent for DetectedThreatRow {
         #[name = "threat_action_row"]
         adw::ActionRow {
             set_use_markup: false,
-            set_title: &displayed_threat_name(&self.detected_threat.threat_identity),
+            set_title: &displayed_threat_name(&self.message_catalog, &self.detected_threat.threat_identity),
             #[watch]
             set_subtitle: &self.row_subtitle(),
             set_subtitle_lines: 0,
 
             add_suffix = &gtk::Label {
-                set_label: &severity_badge_text(self.threat_severity()),
+                set_label: &severity_badge_text(&self.message_catalog, self.threat_severity()),
                 set_tooltip_text: Some(self.detected_threat.threat_identity.threat_category()),
                 add_css_class: "caption-heading",
                 add_css_class: severity_badge_class(self.threat_severity()),
             },
 
             add_suffix = &gtk::Button {
-                set_label: &translated_messages::widgets::quarantine_detected_label(),
+                set_label: &translated_messages::widgets::quarantine_detected_label(&self.message_catalog),
                 set_valign: gtk::Align::Center,
                 #[watch]
                 set_sensitive: self.can_request_quarantine(),
@@ -235,8 +262,8 @@ impl FactoryComponent for DetectedThreatRow {
             #[name = "threat_actions_button"]
             add_suffix = &gtk::MenuButton {
                 set_icon_name: "view-more-symbolic",
-                set_tooltip_text: Some(&translated_messages::widgets::more_actions_tooltip()),
-                update_property: &[gtk::accessible::Property::Label(&translated_messages::widgets::more_actions_tooltip())],
+                set_tooltip_text: Some(&translated_messages::widgets::more_actions_tooltip(&self.message_catalog)),
+                update_property: &[gtk::accessible::Property::Label(&translated_messages::widgets::more_actions_tooltip(&self.message_catalog))],
                 set_valign: gtk::Align::Center,
                 add_css_class: "flat",
             },
@@ -244,11 +271,15 @@ impl FactoryComponent for DetectedThreatRow {
     }
 
     fn init_model(
-        detected_threat: DetectedThreat,
+        DetectedThreatRowInit {
+            detected_threat,
+            message_catalog,
+        }: Self::Init,
         row_index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             detected_threat,
             row_index: row_index.clone(),
             quarantine_state: ThreatQuarantineState::AwaitingDecision,
@@ -294,7 +325,10 @@ impl FactoryComponent for DetectedThreatRow {
         row_actions.register_for_widget(&widgets.threat_action_row);
         widgets
             .threat_actions_button
-            .set_named_menu_model(&threat_actions_menu(&self.detected_threat));
+            .set_named_menu_model(&threat_actions_menu(
+                &self.message_catalog,
+                &self.detected_threat,
+            ));
         widgets
     }
 

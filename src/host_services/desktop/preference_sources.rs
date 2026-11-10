@@ -6,6 +6,7 @@ use crate::{
         desktop::preference_keys::PreferenceKey,
     },
     shared_widgets::setting_row::setting_row_state::PreferenceSource,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,6 +49,7 @@ pub fn preference_source_of(observation: PreferenceObservation) -> PreferenceSou
 }
 
 pub fn observe_preference(
+    message_catalog: &MessageCatalog,
     stored_settings: &gio::Settings,
     preference_key: PreferenceKey,
 ) -> PreferenceObservation {
@@ -60,23 +62,32 @@ pub fn observe_preference(
         },
         user_value: stored_settings
             .user_value(schema_key)
-            .and_then(|user_variant| preference_key.typed_value_of(&user_variant)),
+            .and_then(|user_variant| preference_key.typed_value_of(message_catalog, &user_variant)),
         effective_default: stored_settings
             .default_value(schema_key)
-            .and_then(|default_variant| preference_key.typed_value_of(&default_variant)),
+            .and_then(|default_variant| {
+                preference_key.typed_value_of(message_catalog, &default_variant)
+            }),
         schema_default: stored_settings
             .settings_schema()
             .filter(|settings_schema| settings_schema.has_key(schema_key))
             .map(|settings_schema| settings_schema.key(schema_key).default_value())
-            .and_then(|default_variant| preference_key.typed_value_of(&default_variant)),
+            .and_then(|default_variant| {
+                preference_key.typed_value_of(message_catalog, &default_variant)
+            }),
     }
 }
 
 pub fn preference_source(
+    message_catalog: &MessageCatalog,
     stored_settings: &gio::Settings,
     preference_key: PreferenceKey,
 ) -> PreferenceSource {
-    preference_source_of(observe_preference(stored_settings, preference_key))
+    preference_source_of(observe_preference(
+        message_catalog,
+        stored_settings,
+        preference_key,
+    ))
 }
 
 #[cfg(test)]

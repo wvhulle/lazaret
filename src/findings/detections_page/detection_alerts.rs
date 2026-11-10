@@ -16,6 +16,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub const OPEN_DETECTION_ACTION: &str = "open-detection";
@@ -110,14 +111,20 @@ pub fn plan_detection_alerts(
         .collect()
 }
 
-fn live_detection_title(detection_record: &JournalDetectionRecord) -> String {
+fn live_detection_title(
+    message_catalog: &MessageCatalog,
+    detection_record: &JournalDetectionRecord,
+) -> String {
     let signature_text = sanitize_scanner_line(&detection_record.signature_name);
     match detection_record.detection_source {
         DetectionSource::OnAccessScanner => {
-            translated_messages::findings::malware_blocked_signature(&signature_text)
+            translated_messages::findings::malware_blocked_signature(
+                message_catalog,
+                &signature_text,
+            )
         }
         DetectionSource::ScheduledScan => {
-            translated_messages::findings::malware_found_signature(&signature_text)
+            translated_messages::findings::malware_found_signature(message_catalog, &signature_text)
         }
     }
 }
@@ -132,8 +139,12 @@ pub fn live_detection_priority(
     }
 }
 
-fn live_detection_notification(detection_record: &JournalDetectionRecord) -> gio::Notification {
-    let notification = gio::Notification::new(&live_detection_title(detection_record));
+fn live_detection_notification(
+    message_catalog: &MessageCatalog,
+    detection_record: &JournalDetectionRecord,
+) -> gio::Notification {
+    let notification =
+        gio::Notification::new(&live_detection_title(message_catalog, detection_record));
     notification.set_body(Some(&sanitize_scanner_line(
         &detection_record.file_path.to_string_lossy(),
     )));
@@ -152,20 +163,26 @@ fn live_detection_notification(detection_record: &JournalDetectionRecord) -> gio
     notification
 }
 
-fn missed_detections_notification(missed_count: usize) -> gio::Notification {
+fn missed_detections_notification(
+    message_catalog: &MessageCatalog,
+    missed_count: usize,
+) -> gio::Notification {
     let notification = gio::Notification::new(
-        &translated_messages::findings::count_detection_not_running(missed_count),
+        &translated_messages::findings::count_detection_not_running(message_catalog, missed_count),
     );
     notification.set_priority(gio::NotificationPriority::Urgent);
     notification.set_default_action(&format!("app.{OPEN_DETECTIONS_ACTION}"));
     notification
 }
 
-fn uncountable_missed_detections_notification() -> gio::Notification {
-    let notification =
-        gio::Notification::new(&translated_messages::findings::detections_not_running_detection());
+fn uncountable_missed_detections_notification(
+    message_catalog: &MessageCatalog,
+) -> gio::Notification {
+    let notification = gio::Notification::new(
+        &translated_messages::findings::detections_not_running_detection(message_catalog),
+    );
     notification.set_body(Some(
-        &translated_messages::findings::lazaret_not_read_stopped(),
+        &translated_messages::findings::lazaret_not_read_stopped(message_catalog),
     ));
     notification.set_priority(gio::NotificationPriority::Urgent);
     notification.set_default_action(&format!("app.{OPEN_DETECTIONS_ACTION}"));
@@ -183,7 +200,10 @@ pub fn withdraw_detection_alert(file_path: &Path) {
     relm4::main_application().withdraw_notification(&live_notification_id(file_path));
 }
 
-pub fn send_detection_alerts(detection_alerts: &[DetectionAlert]) {
+pub fn send_detection_alerts(
+    message_catalog: &MessageCatalog,
+    detection_alerts: &[DetectionAlert],
+) {
     if !application_settings().boolean(NOTIFICATIONS_ENABLED_KEY) {
         return;
     }
@@ -194,19 +214,19 @@ pub fn send_detection_alerts(detection_alerts: &[DetectionAlert]) {
             DetectionAlert::LiveDetection { detection_record } => {
                 main_application.send_notification(
                     Some(&live_notification_id(&detection_record.file_path)),
-                    &live_detection_notification(detection_record),
+                    &live_detection_notification(message_catalog, detection_record),
                 );
             }
             DetectionAlert::MissedDetections { missed_count } => {
                 main_application.send_notification(
                     Some(MISSED_DETECTIONS_ID),
-                    &missed_detections_notification(*missed_count),
+                    &missed_detections_notification(message_catalog, *missed_count),
                 );
             }
             DetectionAlert::MissedDetectionsUncountable => {
                 main_application.send_notification(
                     Some(MISSED_DETECTIONS_ID),
-                    &uncountable_missed_detections_notification(),
+                    &uncountable_missed_detections_notification(message_catalog),
                 );
             }
         });
@@ -375,12 +395,13 @@ mod detection_alerts_tests {
 
     #[test]
     fn scheduled_finds_do_not_claim_the_file_was_blocked() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let scheduled_record = JournalDetectionRecord {
             detection_source: DetectionSource::ScheduledScan,
             ..detection_record(STARTED_AT, "Win.Test-1")
         };
         assert_eq!(
-            live_detection_title(&scheduled_record),
+            live_detection_title(message_catalog, &scheduled_record),
             "Malware found: Win.Test-1"
         );
     }

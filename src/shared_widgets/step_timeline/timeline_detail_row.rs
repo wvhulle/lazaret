@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -15,16 +17,23 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
-pub enum TimelineDetailRow<StepAction> {
+pub enum TimelineDetailKind<StepAction> {
     StepChoice(StepChoiceRow<StepAction>),
     ActionableEvidence(ActionableEvidenceRow<StepAction>),
     RunningEvidence(StepEvidenceRow),
     GuidanceCommand(String),
 }
 
+pub struct TimelineDetailRow<StepAction> {
+    detail_kind: TimelineDetailKind<StepAction>,
+    message_catalog: Rc<MessageCatalog>,
+}
+
 pub fn detail_rows_of<StepAction: StepActionButton>(
+    message_catalog: &Rc<MessageCatalog>,
     timeline_step: &TimelineStep<StepAction>,
 ) -> Vec<TimelineDetailRow<StepAction>> {
     let phase_rows = match &timeline_step.step_phase {
@@ -32,20 +41,20 @@ pub fn detail_rows_of<StepAction: StepActionButton>(
             .choice_rows
             .iter()
             .cloned()
-            .map(TimelineDetailRow::StepChoice)
+            .map(TimelineDetailKind::StepChoice)
             .chain(
                 settled_step
                     .evidence_rows
                     .iter()
                     .cloned()
-                    .map(TimelineDetailRow::ActionableEvidence),
+                    .map(TimelineDetailKind::ActionableEvidence),
             )
             .collect::<Vec<_>>(),
         StepPhase::StepRunning(running_step) => running_step
             .evidence_rows
             .iter()
             .cloned()
-            .map(TimelineDetailRow::RunningEvidence)
+            .map(TimelineDetailKind::RunningEvidence)
             .collect(),
     };
     phase_rows
@@ -55,8 +64,12 @@ pub fn detail_rows_of<StepAction: StepActionButton>(
                 .guidance_commands
                 .iter()
                 .cloned()
-                .map(TimelineDetailRow::GuidanceCommand),
+                .map(TimelineDetailKind::GuidanceCommand),
         )
+        .map(|detail_kind| TimelineDetailRow {
+            detail_kind,
+            message_catalog: Rc::clone(message_catalog),
+        })
         .collect()
 }
 
@@ -97,10 +110,11 @@ fn evidence_row(step_evidence: &StepEvidenceRow) -> adw::ActionRow {
 }
 
 pub fn offered_action_button<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     offered_action: &OfferedAction<StepAction>,
 ) -> gtk::Button {
     let action_button = gtk::Button::builder()
-        .label(offered_action.offered_action.button_label())
+        .label(offered_action.offered_action.button_label(message_catalog))
         .valign(gtk::Align::Center)
         .build();
     if let Some(style_class) = offered_action.button_style().css_class() {
@@ -110,10 +124,11 @@ pub fn offered_action_button<StepAction: StepActionButton>(
 }
 
 fn action_choosing_button<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     offered_action: &OfferedAction<StepAction>,
     sender: FactorySender<TimelineDetailRow<StepAction>>,
 ) -> gtk::Button {
-    let action_button = offered_action_button(offered_action);
+    let action_button = offered_action_button(message_catalog, offered_action);
     let chosen_action = offered_action.offered_action.clone();
     action_button.connect_clicked(move |_clicked_button| {
         let _step_closed =
@@ -123,6 +138,7 @@ fn action_choosing_button<StepAction: StepActionButton>(
 }
 
 fn attach_row_control<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     evidence_row: &adw::ActionRow,
     row_control: &EvidenceRowControl<StepAction>,
     sender: FactorySender<TimelineDetailRow<StepAction>>,
@@ -130,7 +146,11 @@ fn attach_row_control<StepAction: StepActionButton>(
     match row_control {
         EvidenceRowControl::NoRowControl => {}
         EvidenceRowControl::RowButton(offered_action) => {
-            evidence_row.add_suffix(&action_choosing_button(offered_action, sender));
+            evidence_row.add_suffix(&action_choosing_button(
+                message_catalog,
+                offered_action,
+                sender,
+            ));
         }
     }
 }
@@ -152,12 +172,15 @@ fn guidance_command_row(guidance_command: &str) -> adw::ActionRow {
 }
 
 fn copy_button<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     copied_command: String,
     sender: FactorySender<TimelineDetailRow<StepAction>>,
 ) -> gtk::Button {
     let copy_button = gtk::Button::builder()
         .icon_name("edit-copy-symbolic")
-        .tooltip_text(translated_messages::widgets::copy_timeline_tooltip())
+        .tooltip_text(translated_messages::widgets::copy_timeline_tooltip(
+            message_catalog,
+        ))
         .valign(gtk::Align::Center)
         .css_classes(["flat"])
         .build();
@@ -195,13 +218,15 @@ impl<StepAction: StepActionButton> FactoryComponent for TimelineDetailRow<StepAc
     }
 
     fn init_root(&self) -> Self::Root {
-        match self {
-            Self::StepChoice(step_choice) => choice_row(step_choice),
-            Self::ActionableEvidence(actionable_row) => {
+        match &self.detail_kind {
+            TimelineDetailKind::StepChoice(step_choice) => choice_row(step_choice),
+            TimelineDetailKind::ActionableEvidence(actionable_row) => {
                 evidence_row(&actionable_row.shown_evidence)
             }
-            Self::RunningEvidence(step_evidence) => evidence_row(step_evidence),
-            Self::GuidanceCommand(guidance_command) => guidance_command_row(guidance_command),
+            TimelineDetailKind::RunningEvidence(step_evidence) => evidence_row(step_evidence),
+            TimelineDetailKind::GuidanceCommand(guidance_command) => {
+                guidance_command_row(guidance_command)
+            }
         }
     }
 
@@ -212,20 +237,26 @@ impl<StepAction: StepActionButton> FactoryComponent for TimelineDetailRow<StepAc
         _returned_widget: &gtk::Widget,
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
-        match self {
-            Self::StepChoice(step_choice) => {
+        let message_catalog = Rc::clone(&self.message_catalog);
+        match &self.detail_kind {
+            TimelineDetailKind::StepChoice(step_choice) => {
                 root.add_suffix(&action_choosing_button(
+                    &message_catalog,
                     &step_choice.offered_choice(),
                     sender,
                 ));
             }
-            Self::GuidanceCommand(guidance_command) => {
-                root.add_suffix(&copy_button(guidance_command.clone(), sender));
+            TimelineDetailKind::GuidanceCommand(guidance_command) => {
+                root.add_suffix(&copy_button(
+                    &self.message_catalog,
+                    guidance_command.clone(),
+                    sender,
+                ));
             }
-            Self::ActionableEvidence(actionable_row) => {
-                attach_row_control(&root, &actionable_row.row_control, sender);
+            TimelineDetailKind::ActionableEvidence(actionable_row) => {
+                attach_row_control(&message_catalog, &root, &actionable_row.row_control, sender);
             }
-            Self::RunningEvidence(_) => {}
+            TimelineDetailKind::RunningEvidence(_) => {}
         }
     }
 }

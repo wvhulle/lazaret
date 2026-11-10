@@ -1,7 +1,7 @@
 use relm4::gtk::{gio, gio::prelude::*, glib};
 
 use crate::{
-    application_window::window_close_behavior::{CLOSE_ACTION_CHOICES, CloseAction},
+    application_window::window_close_behavior::CLOSE_ACTION_CHOICES,
     host_services::{
         clamav_config::typed_setting_values::{
             SettingParseFailure, SwitchPosition, TypedSettingValue, WriteRefusal,
@@ -12,6 +12,7 @@ use crate::{
         scan_schedule_settings::FREQUENCY_CHOICES, scan_schedule_units::parse_schedule_time,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -76,36 +77,38 @@ const SCHEDULE_FREQUENCY_TEXTS: &[&str] = &[
     FREQUENCY_CHOICES[3].stored_text(),
 ];
 
-fn close_action_labels() -> Vec<String> {
-    CLOSE_ACTION_CHOICES.map(CloseAction::choice_label).to_vec()
+fn close_action_labels(message_catalog: &MessageCatalog) -> Vec<String> {
+    CLOSE_ACTION_CHOICES
+        .map(|close_action| close_action.choice_label(message_catalog))
+        .to_vec()
 }
 
-fn scan_backend_labels() -> Vec<String> {
+fn scan_backend_labels(message_catalog: &MessageCatalog) -> Vec<String> {
     vec![
-        translated_messages::scans::prefer_clamd_when_available(),
-        translated_messages::scans::always_clamd(),
-        translated_messages::scans::always_clamscan(),
+        translated_messages::scans::prefer_clamd_when_available(message_catalog),
+        translated_messages::scans::always_clamd(message_catalog),
+        translated_messages::scans::always_clamscan(message_catalog),
     ]
 }
 
-fn schedule_frequency_labels() -> Vec<String> {
+fn schedule_frequency_labels(message_catalog: &MessageCatalog) -> Vec<String> {
     vec![
-        translated_messages::scans::hourly_label(),
-        translated_messages::scans::daily_label(),
-        translated_messages::scans::weekly_label(),
-        translated_messages::scans::monthly_label(),
+        translated_messages::scans::hourly_label(message_catalog),
+        translated_messages::scans::daily_label(message_catalog),
+        translated_messages::scans::weekly_label(message_catalog),
+        translated_messages::scans::monthly_label(message_catalog),
     ]
 }
 
-fn weekday_labels() -> Vec<String> {
+fn weekday_labels(message_catalog: &MessageCatalog) -> Vec<String> {
     vec![
-        translated_messages::scans::monday_label(),
-        translated_messages::scans::tuesday_label(),
-        translated_messages::scans::wednesday_label(),
-        translated_messages::scans::thursday_label(),
-        translated_messages::scans::friday_label(),
-        translated_messages::scans::saturday_label(),
-        translated_messages::scans::sunday_label(),
+        translated_messages::scans::monday_label(message_catalog),
+        translated_messages::scans::tuesday_label(message_catalog),
+        translated_messages::scans::wednesday_label(message_catalog),
+        translated_messages::scans::thursday_label(message_catalog),
+        translated_messages::scans::friday_label(message_catalog),
+        translated_messages::scans::saturday_label(message_catalog),
+        translated_messages::scans::sunday_label(message_catalog),
     ]
 }
 
@@ -162,12 +165,12 @@ impl PreferenceKey {
         }
     }
 
-    fn choice_labels(self) -> Vec<String> {
+    fn choice_labels(self, message_catalog: &MessageCatalog) -> Vec<String> {
         match self {
-            Self::CloseAction => close_action_labels(),
-            Self::ScanBackend => scan_backend_labels(),
-            Self::ScheduleFrequency => schedule_frequency_labels(),
-            Self::ScheduleDayOfWeek => weekday_labels(),
+            Self::CloseAction => close_action_labels(message_catalog),
+            Self::ScanBackend => scan_backend_labels(message_catalog),
+            Self::ScheduleFrequency => schedule_frequency_labels(message_catalog),
+            Self::ScheduleDayOfWeek => weekday_labels(message_catalog),
             Self::StartInBackground
             | Self::NotificationsEnabled
             | Self::ShowLiveProgress
@@ -182,14 +185,22 @@ impl PreferenceKey {
         }
     }
 
-    fn choice_value(self, chosen_position: u32) -> TypedSettingValue {
+    fn choice_value(
+        self,
+        message_catalog: &MessageCatalog,
+        chosen_position: u32,
+    ) -> TypedSettingValue {
         TypedSettingValue::ChoiceValue {
             chosen_position,
-            choice_labels: self.choice_labels(),
+            choice_labels: self.choice_labels(message_catalog),
         }
     }
 
-    pub fn typed_value_of(self, stored_variant: &glib::Variant) -> Option<TypedSettingValue> {
+    pub fn typed_value_of(
+        self,
+        message_catalog: &MessageCatalog,
+        stored_variant: &glib::Variant,
+    ) -> Option<TypedSettingValue> {
         match self.value_kind() {
             PreferenceValueKind::SwitchPreference => {
                 stored_variant.get::<bool>().map(|switched_on| {
@@ -219,11 +230,11 @@ impl PreferenceKey {
                         .position(|choice_text| *choice_text == stored_text)
                 })
                 .and_then(|choice_index| u32::try_from(choice_index).ok())
-                .map(|chosen_position| self.choice_value(chosen_position)),
+                .map(|chosen_position| self.choice_value(message_catalog, chosen_position)),
             PreferenceValueKind::NumberChoicePreference => stored_variant
                 .get::<i32>()
                 .and_then(|stored_number| u32::try_from(stored_number).ok())
-                .map(|chosen_position| self.choice_value(chosen_position)),
+                .map(|chosen_position| self.choice_value(message_catalog, chosen_position)),
             PreferenceValueKind::ClockTimePreference => stored_variant
                 .get::<String>()
                 .map(TypedSettingValue::TextValue),
@@ -298,8 +309,12 @@ impl PreferenceKey {
         }
     }
 
-    pub fn read_value(self, stored_settings: &gio::Settings) -> Option<TypedSettingValue> {
-        self.typed_value_of(&stored_settings.value(self.schema_key()))
+    pub fn read_value(
+        self,
+        message_catalog: &MessageCatalog,
+        stored_settings: &gio::Settings,
+    ) -> Option<TypedSettingValue> {
+        self.typed_value_of(message_catalog, &stored_settings.value(self.schema_key()))
     }
 
     pub fn store_value(
@@ -321,6 +336,7 @@ mod preference_keys_tests {
 
     #[test]
     fn stored_values_round_trip_through_their_typed_value() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         [
             (PreferenceKey::CloseAction, "minimize".to_variant()),
             (PreferenceKey::NotificationsEnabled, false.to_variant()),
@@ -332,7 +348,7 @@ mod preference_keys_tests {
         .into_iter()
         .for_each(|(preference_key, stored_variant)| {
             let typed_value = preference_key
-                .typed_value_of(&stored_variant)
+                .typed_value_of(message_catalog, &stored_variant)
                 .expect("a stored value of the right type");
             assert_eq!(
                 preference_key.variant_of(&typed_value),

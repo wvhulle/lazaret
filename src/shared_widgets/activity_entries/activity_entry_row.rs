@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     FactorySender, adw,
     adw::prelude::*,
@@ -15,6 +17,7 @@ use crate::{
     shared_widgets::activity_entries::activity_export_formats::{
         activity_status_text, activity_summary_text,
     },
+    translated_messages::MessageCatalog,
 };
 
 fn status_icon(activity_record: &ActivityRecord) -> &'static str {
@@ -40,13 +43,14 @@ fn status_icon(activity_record: &ActivityRecord) -> &'static str {
 }
 
 fn entry_subtitle(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     activity_entry: &ActivityEntryRecord,
 ) -> String {
     let first_target = activity_entry.activity_record.scan_targets().first();
     [
         moment_formatters.exact_moment_text(activity_entry.started_at),
-        activity_status_text(&activity_entry.activity_record),
+        activity_status_text(message_catalog, &activity_entry.activity_record),
     ]
     .into_iter()
     .chain(first_target.map(|scan_target| scan_target.display().to_string()))
@@ -55,13 +59,15 @@ fn entry_subtitle(
 }
 
 pub struct ActivityEntryRow {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub activity_entry: ActivityEntryRecord,
 }
 
 pub struct ActivityEntryRowInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub activity_entry: ActivityEntryRecord,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::factory(pub)]
@@ -76,18 +82,19 @@ impl FactoryComponent for ActivityEntryRow {
         adw::ActionRow {
             set_use_markup: false,
             set_activatable: true,
-            set_title: &activity_summary_text(&self.activity_entry),
-            set_subtitle: &entry_subtitle(self.moment_formatters, &self.activity_entry),
+            set_title: &activity_summary_text(&self.message_catalog, &self.activity_entry),
+            set_subtitle: &entry_subtitle(&self.message_catalog, &self.moment_formatters, &self.activity_entry),
 
             add_suffix = &gtk::Image {
                 set_icon_name: Some(status_icon(&self.activity_entry.activity_record)),
-                set_tooltip_text: Some(&activity_status_text(&self.activity_entry.activity_record)),
+                set_tooltip_text: Some(&activity_status_text(&self.message_catalog, &self.activity_entry.activity_record)),
             },
         }
     }
 
     fn init_model(
         ActivityEntryRowInit {
+            message_catalog,
             activity_entry,
             moment_formatters,
         }: Self::Init,
@@ -95,6 +102,7 @@ impl FactoryComponent for ActivityEntryRow {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             activity_entry,
             moment_formatters,
         }

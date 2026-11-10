@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, rc::Rc};
 
 use relm4::{
     AsyncComponentSender, Component, ComponentController, Controller,
@@ -26,6 +26,7 @@ use crate::{
             RunningTrayHandle, TrayConnection, TrayStartFailure, show_unresolved_detections,
             start_system_tray,
         },
+        system_tray_menu::TrayMenuLabels,
         window_close_behavior::{CloseAction, CloseAnswer, present_close_confirmation},
     },
     host_services::{
@@ -52,6 +53,7 @@ use crate::{
     },
     shared_widgets::quarantine_failure_text::describe_quarantine_failure,
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 enum WindowContent {
@@ -93,32 +95,39 @@ async fn open_locked_vault(
     })
 }
 
-fn vault_failure_title(startup_failure: &VaultStartupFailure) -> String {
+fn vault_failure_title(
+    message_catalog: &MessageCatalog,
+    startup_failure: &VaultStartupFailure,
+) -> String {
     match startup_failure {
         VaultStartupFailure::VaultLockFailed(_) | VaultStartupFailure::LockTaskInterrupted(_) => {
-            translated_messages::window::quarantine_database_not_locked()
+            translated_messages::window::quarantine_database_not_locked(message_catalog)
         }
         VaultStartupFailure::VaultOpenFailed(_) => {
-            translated_messages::window::quarantine_database_not_opened()
+            translated_messages::window::quarantine_database_not_opened(message_catalog)
         }
     }
 }
 
-fn vault_failure_description(startup_failure: &VaultStartupFailure) -> String {
+fn vault_failure_description(
+    message_catalog: &MessageCatalog,
+    startup_failure: &VaultStartupFailure,
+) -> String {
     match startup_failure {
         VaultStartupFailure::VaultLockFailed(lock_failure) => {
-            translated_messages::window::file_operation_failed_error(lock_failure)
+            translated_messages::window::file_operation_failed_error(message_catalog, lock_failure)
         }
         VaultStartupFailure::LockTaskInterrupted(interrupted_task) => {
-            translated_messages::window::lock_task_interrupted(interrupted_task)
+            translated_messages::window::lock_task_interrupted(message_catalog, interrupted_task)
         }
         VaultStartupFailure::VaultOpenFailed(vault_failure) => {
-            describe_quarantine_failure(vault_failure)
+            describe_quarantine_failure(message_catalog, vault_failure)
         }
     }
 }
 
 pub struct ApplicationWindowShell {
+    pub message_catalog: Rc<MessageCatalog>,
     window_content: WindowContent,
     tray_connection: TrayConnection,
     close_action: CloseAction,
@@ -149,7 +158,7 @@ pub enum ApplicationWindowShellCommand {
     TrayUpdated,
 }
 
-fn present_about_dialog(parent_window: &adw::ApplicationWindow) {
+fn present_about_dialog(message_catalog: &MessageCatalog, parent_window: &adw::ApplicationWindow) {
     adw::AboutDialog::builder()
         .application_name("Lazaret")
         .application_icon(APPLICATION_ICON_NAME)
@@ -162,7 +171,9 @@ fn present_about_dialog(parent_window: &adw::ApplicationWindow) {
                 .filter(|author_line| !author_line.starts_with('#'))
                 .collect::<Vec<_>>(),
         )
-        .translator_credits(translated_messages::window::translator_credits())
+        .translator_credits(translated_messages::window::translator_credits(
+            message_catalog,
+        ))
         .build()
         .present(Some(parent_window));
 }
@@ -210,7 +221,8 @@ fn register_window_actions(sender: &AsyncComponentSender<ApplicationWindowShell>
 }
 
 async fn opened_window_content(
-    moment_formatters: &'static MomentFormatters,
+    message_catalog: &Rc<MessageCatalog>,
+    moment_formatters: &Rc<MomentFormatters>,
     sandbox_kind: SandboxKind,
     window_root: &adw::ApplicationWindow,
     startup_request: StartupRequest,
@@ -224,7 +236,8 @@ async fn opened_window_content(
     WindowContent::PagesShown {
         page_navigation: PageNavigation::builder()
             .launch(PageNavigationInit {
-                moment_formatters,
+                message_catalog: Rc::clone(message_catalog),
+                moment_formatters: Rc::clone(moment_formatters),
                 sandbox_kind,
                 system_bus: SystemBusAccess::connect().await,
                 user_bus: UserBusAccess::connect().await,
@@ -254,7 +267,7 @@ async fn opened_window_content(
 }
 
 impl WindowContent {
-    fn content_widget(&self) -> gtk::Widget {
+    fn content_widget(&self, message_catalog: &MessageCatalog) -> gtk::Widget {
         match self {
             Self::PagesShown {
                 page_navigation, ..
@@ -265,8 +278,9 @@ impl WindowContent {
                 toolbar_view.set_content(Some(
                     &adw::StatusPage::builder()
                         .icon_name("dialog-error-symbolic")
-                        .title(vault_failure_title(startup_failure))
+                        .title(vault_failure_title(message_catalog, startup_failure))
                         .description(glib::markup_escape_text(&vault_failure_description(
+                            message_catalog,
                             startup_failure,
                         )))
                         .build(),
@@ -278,9 +292,10 @@ impl WindowContent {
 }
 
 pub struct ApplicationWindowShellInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub startup_request: StartupRequest,
     pub sandbox_kind: SandboxKind,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::component(async, pub)]
@@ -305,6 +320,7 @@ impl AsyncComponent for ApplicationWindowShell {
 
     async fn init(
         ApplicationWindowShellInit {
+            message_catalog,
             startup_request,
             sandbox_kind,
             moment_formatters,
@@ -323,8 +339,10 @@ impl AsyncComponent for ApplicationWindowShell {
         );
         register_window_actions(&sender);
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             window_content: opened_window_content(
-                moment_formatters,
+                &message_catalog,
+                &moment_formatters,
                 sandbox_kind,
                 &root,
                 startup_request,
@@ -337,6 +355,7 @@ impl AsyncComponent for ApplicationWindowShell {
             start_in_background,
             preferences_dialog: PreferencesDialog::builder()
                 .launch(PreferencesDialogInit {
+                    message_catalog,
                     sandbox_kind,
                     moment_formatters,
                 })
@@ -349,12 +368,13 @@ impl AsyncComponent for ApplicationWindowShell {
                     },
                 ),
         };
-        let content_widget = model.window_content.content_widget();
+        let content_widget = model.window_content.content_widget(&model.message_catalog);
         let widgets = view_output!();
         let tray_shell_sender = sender.input_sender().clone();
+        let tray_menu_labels = TrayMenuLabels::from(&*model.message_catalog);
         sender.oneshot_command(async move {
             ApplicationWindowShellCommand::TrayStartFinished(
-                start_system_tray(tray_shell_sender).await,
+                start_system_tray(tray_menu_labels, tray_shell_sender).await,
             )
         });
         match shown_startup_page {
@@ -375,6 +395,7 @@ impl AsyncComponent for ApplicationWindowShell {
         sender: AsyncComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match shell_input {
             ApplicationWindowShellInput::WindowShowRequested => root.present(),
             ApplicationWindowShellInput::ActivationTokenReceived(activation_token) => {
@@ -383,7 +404,9 @@ impl AsyncComponent for ApplicationWindowShell {
             ApplicationWindowShellInput::TrayActionRequested(action_name) => {
                 relm4::main_application().activate_action(action_name, None);
             }
-            ApplicationWindowShellInput::AboutRequested => present_about_dialog(root),
+            ApplicationWindowShellInput::AboutRequested => {
+                present_about_dialog(&message_catalog, root)
+            }
             ApplicationWindowShellInput::PreferencesRequested => {
                 self.preferences_dialog.widget().present(Some(root));
             }
@@ -418,6 +441,7 @@ impl AsyncComponent for ApplicationWindowShell {
                 CloseAction::QuitCompletely => relm4::main_application().quit(),
                 CloseAction::HideToTray => root.set_visible(false),
                 CloseAction::AskOnNextClose => present_close_confirmation(
+                    &message_catalog,
                     root,
                     sender.input_sender().clone(),
                     ApplicationWindowShellInput::CloseAnswered,
@@ -466,6 +490,7 @@ mod application_window_shell_tests {
 
     #[tokio::test]
     async fn a_vault_lock_failure_keeps_its_io_error() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let data_directory = tempfile::tempdir().expect("data directory");
         std::fs::create_dir(data_directory.path().join("quarantine.lock")).expect("lock folder");
         let Err(startup_failure) = open_locked_vault(data_directory.path()).await else {
@@ -474,6 +499,9 @@ mod application_window_shell_tests {
         let VaultStartupFailure::VaultLockFailed(lock_failure) = &startup_failure else {
             panic!("expected a lock failure, got {startup_failure:?}");
         };
-        assert!(vault_failure_description(&startup_failure).contains(&lock_failure.to_string()));
+        assert!(
+            vault_failure_description(message_catalog, &startup_failure)
+                .contains(&lock_failure.to_string())
+        );
     }
 }

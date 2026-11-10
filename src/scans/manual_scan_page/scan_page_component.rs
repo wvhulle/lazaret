@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Instant};
+use std::{path::PathBuf, rc::Rc, time::Instant};
 
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
@@ -38,19 +38,21 @@ use crate::{
     },
     scans::manual_scan_page::{
         eicar_test_file::{EicarTestFileFailure, written_eicar_test_file},
-        exclusions_page::scan_exclusions_page::ScanExclusionsSection,
+        exclusions_page::scan_exclusions_page::{ScanExclusionsSection, ScanExclusionsSectionInit},
         scan_options_section::{ScanOptionsSection, ScanOptionsSectionInit},
         scan_page_state::{ScanPageState, ScanStartPermission, ScanStartPermit},
         scan_profile_selection::{ProfileChoiceRow, ScanProfileChoice, TargetRowsChange},
         scan_profiles_dialog::{
             profile_display_text::{describe_profile_store_failure, displayed_profile_name},
-            profile_manager_dialog::{ProfileManagerDialog, ProfileManagerDialogOutput},
+            profile_manager_dialog::{
+                ProfileManagerDialog, ProfileManagerDialogInit, ProfileManagerDialogOutput,
+            },
             scan_profile_store::{
                 ProfileStoreFailure, ScanProfile, ScanProfileStore, expanded_profile_targets,
                 run_blocking_profile_task,
             },
         },
-        scan_target_row::{ScanTargetRow, ScanTargetRowOutput},
+        scan_target_row::{ScanTargetRow, ScanTargetRowInit, ScanTargetRowOutput},
         scanner_program_trust::{ScannerProgramTrust, scanner_program_trust},
     },
     shared_widgets::{
@@ -63,7 +65,7 @@ use crate::{
         awaited_dialogs::{chosen_files_to_open, chosen_folders_to_open, deliver_local_outcome},
         database_migration_failure_text::describe_history_failure,
         scan_runs::{
-            found_threat_row::FoundThreatRow,
+            found_threat_row::{FoundThreatRow, FoundThreatRowInit},
             scan_outcome_text::scan_target_name,
             scan_progress_view::ScanProgressBar,
             scan_results_section::scan_results_component::{
@@ -81,6 +83,7 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 enum ProfileManagerView {
@@ -97,7 +100,8 @@ enum ScannerBackendView {
 }
 
 pub struct ScanPageInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub activity_history: ActivityHistory,
@@ -113,17 +117,20 @@ enum ScanPageNotice {
     ScanNotRecorded(ActivityHistoryFailure),
 }
 
-fn describe_page_notice(page_notice: &ScanPageNotice) -> String {
+fn describe_page_notice(message_catalog: &MessageCatalog, page_notice: &ScanPageNotice) -> String {
     match page_notice {
         ScanPageNotice::NoNoticeShown => String::new(),
         ScanPageNotice::ProfilesUnloadable(load_failure) => {
-            describe_profile_store_failure(load_failure)
+            describe_profile_store_failure(message_catalog, load_failure)
         }
-        ScanPageNotice::EicarTestFileUnwritable(eicar_failure) => eicar_failure_text(eicar_failure),
+        ScanPageNotice::EicarTestFileUnwritable(eicar_failure) => {
+            eicar_failure_text(message_catalog, eicar_failure)
+        }
         ScanPageNotice::ScanNotRecorded(recording_failure) => {
-            translated_messages::scans::not_added_history_error(describe_history_failure(
-                recording_failure,
-            ))
+            translated_messages::scans::not_added_history_error(
+                message_catalog,
+                describe_history_failure(message_catalog, recording_failure),
+            )
         }
     }
 }
@@ -133,6 +140,7 @@ const fn shows_page_notice(page_notice: &ScanPageNotice) -> bool {
 }
 
 pub struct ScanPage {
+    pub message_catalog: Rc<MessageCatalog>,
     sandbox_kind: SandboxKind,
     activity_history: ActivityHistory,
     profile_store: ScanProfileStore,
@@ -217,11 +225,13 @@ fn close_enclosing_popover(clicked_button: &gtk::Button) {
     }
 }
 
-fn profile_choice_label(choice_row: &ProfileChoiceRow) -> String {
+fn profile_choice_label(message_catalog: &MessageCatalog, choice_row: &ProfileChoiceRow) -> String {
     match choice_row {
-        ProfileChoiceRow::ManualTargetsRow => translated_messages::scans::no_profile_manual(),
+        ProfileChoiceRow::ManualTargetsRow => {
+            translated_messages::scans::no_profile_manual(message_catalog)
+        }
         ProfileChoiceRow::StoredProfileRow(stored_profile) => {
-            sanitize_scanner_line(&displayed_profile_name(stored_profile))
+            sanitize_scanner_line(&displayed_profile_name(message_catalog, stored_profile))
         }
     }
 }
@@ -244,13 +254,15 @@ enum ManualScanStart {
     StartRefused,
 }
 
-fn device_scan_running_toast() -> adw::Toast {
+fn device_scan_running_toast(message_catalog: &MessageCatalog) -> adw::Toast {
     let refusal_toast = adw::Toast::builder()
-        .title(translated_messages::scans::removable_drive_scanned_title())
+        .title(translated_messages::scans::removable_drive_scanned_title(
+            message_catalog,
+        ))
         .use_markup(false)
         .build();
     refusal_toast.set_button_label(Some(
-        &translated_messages::scans::open_removable_drives_button(),
+        &translated_messages::scans::open_removable_drives_button(message_catalog),
     ));
     refusal_toast.set_action_name(Some("win.show-page"));
     refusal_toast.set_action_target_value(Some(
@@ -261,12 +273,14 @@ fn device_scan_running_toast() -> adw::Toast {
 
 impl ScanPage {
     fn manual_scan_start(&self) -> ManualScanStart {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match (
             self.device_scan_activity,
             self.scan_page_state.new_scan_permission(),
         ) {
             (DeviceScanActivity::DeviceScanHoldsSlot, _) => {
-                self.toaster.add_toast(device_scan_running_toast());
+                self.toaster
+                    .add_toast(device_scan_running_toast(&message_catalog));
                 ManualScanStart::StartRefused
             }
             (
@@ -304,6 +318,7 @@ impl ScanPage {
         incoming_targets: Vec<PathBuf>,
         targets_placement: IncomingTargetsPlacement,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let placed_targets = placed_scan_targets(
             self.chosen_scan_targets(),
             incoming_targets,
@@ -312,21 +327,27 @@ impl ScanPage {
         let mut target_rows_guard = self.scan_target_rows.guard();
         target_rows_guard.clear();
         placed_targets.into_iter().for_each(|placed_target| {
-            target_rows_guard.push_back(placed_target);
+            target_rows_guard.push_back(ScanTargetRowInit {
+                target_path: placed_target,
+                message_catalog: Rc::clone(&message_catalog),
+            });
         });
     }
 
     fn scanner_backend_text(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.scanner_backend_view {
-            ScannerBackendView::DetectingBackend => translated_messages::scans::detecting_backend(),
+            ScannerBackendView::DetectingBackend => {
+                translated_messages::scans::detecting_backend(&message_catalog)
+            }
             ScannerBackendView::BackendUndetermined(lookup_failure) => {
-                translated_messages::scans::backend_undetermined(lookup_failure)
+                translated_messages::scans::backend_undetermined(&message_catalog, lookup_failure)
             }
             ScannerBackendView::BackendDetected(ScannerBackend::ClamdDaemon) => {
-                translated_messages::scans::backend_clamd_daemon()
+                translated_messages::scans::backend_clamd_daemon(&message_catalog)
             }
             ScannerBackendView::BackendDetected(ScannerBackend::StandaloneClamscan) => {
-                translated_messages::scans::backend_clamscan_standalone()
+                translated_messages::scans::backend_clamscan_standalone(&message_catalog)
             }
         }
     }
@@ -343,6 +364,7 @@ impl ScanPage {
     }
 
     fn header_subtitle(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.scan_page_state {
             ScanPageState::WaitingForTargets => self.scanner_backend_text(),
             ScanPageState::ScanRunning(RunningScan {
@@ -353,6 +375,7 @@ impl ScanPage {
                 "{} · {}",
                 self.scan_status_title(),
                 file_progress_text(
+                    &message_catalog,
                     scan_run.scan_outcome.inspected_file_count,
                     scan_run.scan_outcome.planned_file_count
                 )
@@ -365,40 +388,49 @@ impl ScanPage {
     }
 
     fn scan_status_title(&self) -> String {
+        let message_catalog = Rc::clone(&self.message_catalog);
         match &self.scan_page_state {
-            ScanPageState::WaitingForTargets => translated_messages::scans::scan_title(),
-            ScanPageState::WritingEicarFile => translated_messages::scans::preparing_label(),
+            ScanPageState::WaitingForTargets => {
+                translated_messages::scans::scan_title(&message_catalog)
+            }
+            ScanPageState::WritingEicarFile => {
+                translated_messages::scans::preparing_label(&message_catalog)
+            }
             ScanPageState::ScanRunning(RunningScan {
                 cancel_request: CancelRequest::CancelRequested,
                 ..
-            }) => translated_messages::scans::cancelling_label(),
+            }) => translated_messages::scans::cancelling_label(&message_catalog),
             ScanPageState::ScanRunning(RunningScan {
                 scan_run,
                 cancel_request: CancelRequest::CancelNotRequested,
                 ..
             }) => match scan_run.scan_targets.as_slice() {
-                [single_target] => {
-                    translated_messages::scans::scanning_name(scan_target_name(single_target))
-                }
-                several_targets => {
-                    translated_messages::scans::scanning_count_location(several_targets.len())
-                }
+                [single_target] => translated_messages::scans::scanning_name(
+                    &message_catalog,
+                    scan_target_name(single_target),
+                ),
+                several_targets => translated_messages::scans::scanning_count_location(
+                    &message_catalog,
+                    several_targets.len(),
+                ),
             },
             ScanPageState::ScanFinished(FinishedScan {
                 scan_ending: ScanEnding::ScanCancelled,
                 ..
-            }) => translated_messages::scans::cancelled_user(),
+            }) => translated_messages::scans::cancelled_user(&message_catalog),
             ScanPageState::ScanFinished(FinishedScan { scan_run, .. })
                 if scan_run.scan_outcome.threats_were_found() =>
             {
-                translated_messages::scans::threats_found_scan()
+                translated_messages::scans::threats_found_scan(&message_catalog)
             }
             ScanPageState::ScanFinished(FinishedScan { scan_run, .. })
                 if !scan_run.scan_outcome.scan_problems.is_empty() =>
             {
-                translated_messages::scans::not_finish_cleanly()
+                translated_messages::scans::not_finish_cleanly(&message_catalog)
             }
-            ScanPageState::ScanFinished(_) => translated_messages::scans::no_threats_found(),
+            ScanPageState::ScanFinished(_) => {
+                translated_messages::scans::no_threats_found(&message_catalog)
+            }
         }
     }
 
@@ -412,11 +444,12 @@ impl ScanPage {
     }
 
     fn profile_choice_labels(&self) -> gtk::StringList {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let choice_labels = self
             .profile_choice
             .choice_rows()
             .iter()
-            .map(profile_choice_label)
+            .map(|profile_choice| profile_choice_label(&message_catalog, profile_choice))
             .collect::<Vec<_>>();
         gtk::StringList::new(&choice_labels.iter().map(String::as_str).collect::<Vec<_>>())
     }
@@ -435,8 +468,12 @@ impl ScanPage {
     }
 
     fn open_profile_manager(&mut self, root: &adw::ToastOverlay, sender: &ComponentSender<Self>) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let profile_manager = ProfileManagerDialog::builder()
-            .launch(self.profile_store.clone())
+            .launch(ProfileManagerDialogInit {
+                profile_store: self.profile_store.clone(),
+                message_catalog,
+            })
             .forward(
                 sender.input_sender(),
                 |manager_output| match manager_output {
@@ -505,14 +542,17 @@ impl ScanPage {
     }
 }
 
-fn eicar_failure_text(eicar_failure: &EicarTestFileFailure) -> String {
+fn eicar_failure_text(
+    message_catalog: &MessageCatalog,
+    eicar_failure: &EicarTestFileFailure,
+) -> String {
     let failure_detail = match eicar_failure {
         EicarTestFileFailure::WritingInterrupted(interrupted_writing) => {
             interrupted_writing.to_string()
         }
         EicarTestFileFailure::FileUnwritable(write_failure) => write_failure.to_string(),
     };
-    translated_messages::scans::not_create_eicar_test(&failure_detail)
+    translated_messages::scans::not_create_eicar_test(message_catalog, &failure_detail)
 }
 
 #[relm4::component(pub)]
@@ -529,14 +569,14 @@ impl Component for ScanPage {
             add_top_bar = &adw::HeaderBar {
                 #[wrap(Some)]
                 set_title_widget = &adw::WindowTitle {
-                    set_title: &translated_messages::scans::scan_title(),
+                    set_title: &translated_messages::scans::scan_title(&model.message_catalog),
                     #[watch]
                     set_subtitle: &model.header_subtitle(),
                 },
 
                 pack_start = &gtk::Button {
                     set_icon_name: "document-new-symbolic",
-                    set_tooltip_text: Some(&translated_messages::scans::add_files_tooltip()),
+                    set_tooltip_text: Some(&translated_messages::scans::add_files_tooltip(&model.message_catalog)),
                     #[watch]
                     set_visible: model.scan_page_state.shows_scan_settings(),
                     connect_clicked => ScanPageInput::ChooseFilesRequested,
@@ -544,7 +584,7 @@ impl Component for ScanPage {
 
                 pack_start = &gtk::Button {
                     set_icon_name: "folder-new-symbolic",
-                    set_tooltip_text: Some(&translated_messages::scans::add_folder_manual_tooltip()),
+                    set_tooltip_text: Some(&translated_messages::scans::add_folder_manual_tooltip(&model.message_catalog)),
                     #[watch]
                     set_visible: model.scan_page_state.shows_scan_settings(),
                     connect_clicked => ScanPageInput::ChooseFolderRequested,
@@ -552,7 +592,7 @@ impl Component for ScanPage {
 
                 pack_end = &gtk::MenuButton {
                     set_icon_name: "view-more-symbolic",
-                    set_tooltip_text: Some(&translated_messages::scans::more_tooltip()),
+                    set_tooltip_text: Some(&translated_messages::scans::more_tooltip(&model.message_catalog)),
                     #[watch]
                     set_visible: !model.scan_page_state.scan_is_active(),
                     #[wrap(Some)]
@@ -561,7 +601,7 @@ impl Component for ScanPage {
                             set_orientation: gtk::Orientation::Vertical,
 
                             gtk::Button {
-                                set_label: &translated_messages::scans::run_eicar_test_label(),
+                                set_label: &translated_messages::scans::run_eicar_test_label(&model.message_catalog),
                                 add_css_class: "flat",
                                 #[watch]
                                 set_visible: model.scan_page_state.shows_scan_settings(),
@@ -572,7 +612,7 @@ impl Component for ScanPage {
                             },
 
                             gtk::Button {
-                                set_label: &translated_messages::scans::copy_results_label(),
+                                set_label: &translated_messages::scans::copy_results_label(&model.message_catalog),
                                 add_css_class: "flat",
                                 #[watch]
                                 set_visible: model.scan_page_state.shows_results(),
@@ -583,7 +623,7 @@ impl Component for ScanPage {
                             },
 
                             gtk::Button {
-                                set_label: &translated_messages::scans::export_results_label(),
+                                set_label: &translated_messages::scans::export_results_label(&model.message_catalog),
                                 add_css_class: "flat",
                                 #[watch]
                                 set_visible: model.scan_page_state.shows_results(),
@@ -597,7 +637,7 @@ impl Component for ScanPage {
                 },
 
                 pack_end = &gtk::Button {
-                    set_label: &translated_messages::scans::start_scan_label(),
+                    set_label: &translated_messages::scans::start_scan_label(&model.message_catalog),
                     add_css_class: "suggested-action",
                     #[watch]
                     set_visible: model.scan_page_state.shows_scan_settings(),
@@ -607,7 +647,7 @@ impl Component for ScanPage {
                 },
 
                 pack_end = &gtk::Button {
-                    set_label: &translated_messages::scans::cancel_manual_label(),
+                    set_label: &translated_messages::scans::cancel_manual_label(&model.message_catalog),
                     add_css_class: "destructive-action",
                     #[watch]
                     set_visible: model.scan_page_state.scan_is_active(),
@@ -618,8 +658,8 @@ impl Component for ScanPage {
             },
 
             add_top_bar = &adw::Banner {
-                set_title: &translated_messages::scans::lazaret_refuses_clamav_title(),
-                set_button_label: Some(&translated_messages::scans::details_button()),
+                set_title: &translated_messages::scans::lazaret_refuses_clamav_title(&model.message_catalog),
+                set_button_label: Some(&translated_messages::scans::details_button(&model.message_catalog)),
                 set_action_name: Some("win.show-page"),
                 set_action_target_value: Some(&ApplicationPage::ScanEngine.page_name().to_variant()),
                 #[watch]
@@ -648,7 +688,7 @@ impl Component for ScanPage {
                             gtk::ProgressBar {
                                 set_show_text: true,
                                 #[watch]
-                                show_scan_progress: model.scan_page_state.scan_progress_view(),
+                                show_scan_progress: (&model.message_catalog, model.scan_page_state.scan_progress_view()),
                             },
 
                             gtk::Label {
@@ -658,17 +698,17 @@ impl Component for ScanPage {
                                 add_css_class: "dim-label",
                                 add_css_class: "caption",
                                 #[watch]
-                                set_label: &model.scan_page_state.scan_progress_view().detail_text(),
+                                set_label: &model.scan_page_state.scan_progress_view().detail_text(&model.message_catalog),
                             },
                         },
 
                         adw::PreferencesGroup {
-                            set_title: &translated_messages::scans::profile_title(),
+                            set_title: &translated_messages::scans::profile_title(&model.message_catalog),
                             #[watch]
                             set_visible: model.scan_page_state.shows_scan_settings(),
 
                             adw::ComboRow {
-                                set_title: &translated_messages::scans::profile_short_title(),
+                                set_title: &translated_messages::scans::profile_short_title(&model.message_catalog),
                                 #[track(model.profile_list_reloaded)]
                                 #[block_signal(profile_selection_handler)]
                                 set_model: Some(&model.profile_choice_labels()),
@@ -683,7 +723,7 @@ impl Component for ScanPage {
 
                                 add_suffix = &gtk::Button {
                                     set_icon_name: "emblem-system-symbolic",
-                                    set_tooltip_text: Some(&translated_messages::scans::manage_profiles_tooltip()),
+                                    set_tooltip_text: Some(&translated_messages::scans::manage_profiles_tooltip(&model.message_catalog)),
                                     set_valign: gtk::Align::Center,
                                     add_css_class: "flat",
                                     connect_clicked => ScanPageInput::ManageProfilesRequested,
@@ -692,7 +732,7 @@ impl Component for ScanPage {
                         },
 
                         adw::PreferencesGroup {
-                            set_title: &translated_messages::scans::targets_manual_title(),
+                            set_title: &translated_messages::scans::targets_manual_title(&model.message_catalog),
                             #[watch]
                             set_visible: model.scan_page_state.shows_scan_settings(),
 
@@ -715,7 +755,7 @@ impl Component for ScanPage {
                                     },
 
                                     gtk::Label {
-                                        set_label: &translated_messages::scans::drop_files_folders_label(),
+                                        set_label: &translated_messages::scans::drop_files_folders_label(&model.message_catalog),
                                         add_css_class: "title-4",
                                     },
 
@@ -724,13 +764,13 @@ impl Component for ScanPage {
                                         set_halign: gtk::Align::Center,
 
                                         gtk::Button {
-                                            set_label: &translated_messages::scans::add_files_label(),
+                                            set_label: &translated_messages::scans::add_files_label(&model.message_catalog),
                                             add_css_class: "pill",
                                             connect_clicked => ScanPageInput::ChooseFilesRequested,
                                         },
 
                                         gtk::Button {
-                                            set_label: &translated_messages::scans::add_folder_label(),
+                                            set_label: &translated_messages::scans::add_folder_label(&model.message_catalog),
                                             add_css_class: "pill",
                                             connect_clicked => ScanPageInput::ChooseFolderRequested,
                                         },
@@ -740,7 +780,7 @@ impl Component for ScanPage {
                         },
 
                         adw::PreferencesGroup {
-                            set_title: &translated_messages::scans::found_far_scan_title(),
+                            set_title: &translated_messages::scans::found_far_scan_title(&model.message_catalog),
                             set_margin_top: 12,
                             #[watch]
                             set_visible: model.scan_page_state.scan_is_active() && !model.found_threat_rows.is_empty(),
@@ -759,7 +799,7 @@ impl Component for ScanPage {
                             #[watch]
                             set_visible: shows_page_notice(&model.page_notice),
                             #[watch]
-                            set_label: &describe_page_notice(&model.page_notice),
+                            set_label: &describe_page_notice(&model.message_catalog, &model.page_notice),
                         },
 
                         #[local_ref]
@@ -797,6 +837,7 @@ impl Component for ScanPage {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = page_init.message_catalog;
         let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let scan_target_rows = FactoryVecDeque::builder()
@@ -831,6 +872,7 @@ impl Component for ScanPage {
             }
         });
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             sandbox_kind,
             profile_store: page_init.profile_store,
             profile_choice: ScanProfileChoice::without_profiles(),
@@ -845,9 +887,10 @@ impl Component for ScanPage {
                 .detach(),
             scan_results_section: ScanResultsSection::builder()
                 .launch(ScanResultsSectionInit {
+                    message_catalog: Rc::clone(&message_catalog),
                     sandbox_kind,
                     quarantine_vault: page_init.quarantine_vault,
-                    dismiss_label: translated_messages::scans::new_scan_button(),
+                    dismiss_label: translated_messages::scans::new_scan_button(&message_catalog),
                 })
                 .forward(
                     sender.input_sender(),
@@ -870,21 +913,31 @@ impl Component for ScanPage {
             scanner_backend_view: ScannerBackendView::DetectingBackend,
             scanner_program_trust: ScannerProgramTrust::ProgramsTrusted,
             scan_options_section: ScanOptionsSection::builder()
-                .launch(ScanOptionsSectionInit { moment_formatters })
+                .launch(ScanOptionsSectionInit {
+                    moment_formatters: Rc::clone(&moment_formatters),
+                    message_catalog: Rc::clone(&message_catalog),
+                })
                 .detach(),
             device_scan_activity: DeviceScanActivity::DeviceScanIdle,
             reported_scan_activity: PageScanActivity::PageScanIdle,
             recent_scans_group: ActivityHistoryGroup::builder()
                 .launch(ActivityHistoryGroupInit {
-                    moment_formatters,
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
                     activity_history: page_init.activity_history,
                     history_filter: ActivityHistoryFilter::ManualScans,
-                    group_title: translated_messages::scans::recent_scans_title(),
+                    group_title: translated_messages::scans::recent_scans_title(&message_catalog),
                     group_description:
-                        translated_messages::scans::started_lazaret_newest_description(),
+                        translated_messages::scans::started_lazaret_newest_description(
+                            &message_catalog,
+                        ),
                 })
                 .detach(),
-            exclusions_section: ScanExclusionsSection::builder().launch(()).detach(),
+            exclusions_section: ScanExclusionsSection::builder()
+                .launch(ScanExclusionsSectionInit {
+                    message_catalog: Rc::clone(&message_catalog),
+                })
+                .detach(),
             toaster: Toaster::new(&root),
             page_notice: ScanPageNotice::NoNoticeShown,
         };
@@ -905,11 +958,14 @@ impl Component for ScanPage {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         self.profile_list_reloaded = false;
         match page_input {
             ScanPageInput::ChooseFilesRequested => deliver_local_outcome(
                 sender.input_sender().clone(),
-                chosen_files_to_open(translated_messages::scans::choose_files_scan()),
+                chosen_files_to_open(translated_messages::scans::choose_files_scan(
+                    &message_catalog,
+                )),
                 |chosen_paths| {
                     (!chosen_paths.is_empty())
                         .then_some(ScanPageInput::ScanTargetsAdded(chosen_paths))
@@ -917,7 +973,9 @@ impl Component for ScanPage {
             ),
             ScanPageInput::ChooseFolderRequested => deliver_local_outcome(
                 sender.input_sender().clone(),
-                chosen_folders_to_open(translated_messages::scans::choose_folder_scan()),
+                chosen_folders_to_open(translated_messages::scans::choose_folder_scan(
+                    &message_catalog,
+                )),
                 |chosen_paths| {
                     (!chosen_paths.is_empty())
                         .then_some(ScanPageInput::ScanTargetsAdded(chosen_paths))
@@ -1010,6 +1068,7 @@ impl Component for ScanPage {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         self.profile_list_reloaded = false;
         match page_command {
             ScanPageCommand::ProfilesLoaded(Ok(reloaded_profiles)) => {
@@ -1058,7 +1117,10 @@ impl Component for ScanPage {
                 );
                 let mut threat_rows_guard = self.found_threat_rows.guard();
                 newly_found_threats.into_iter().for_each(|detected_threat| {
-                    threat_rows_guard.push_back(detected_threat);
+                    threat_rows_guard.push_back(FoundThreatRowInit {
+                        detected_threat,
+                        message_catalog: Rc::clone(&message_catalog),
+                    });
                 });
             }
             ScanPageCommand::ScanStreamFinished { scan_run_number } => {
@@ -1069,11 +1131,11 @@ impl Component for ScanPage {
                     ScanStreamEnding::ScanRunFinished(finished_scan) => {
                         self.scan_results_section
                             .emit(ScanResultsSectionInput::ResultsShown(
-                                finished_results_view(finished_scan),
+                                finished_results_view(&message_catalog, finished_scan),
                             ));
                         let new_entry =
                             finished_scan_activity(finished_scan, ScanOrigin::ManualScan);
-                        notify_finished_scan(finished_scan);
+                        notify_finished_scan(&message_catalog, finished_scan);
                         let activity_history = self.activity_history.clone();
                         sender.oneshot_command(async move {
                             ScanPageCommand::ActivityRecordingFinished(

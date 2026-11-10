@@ -37,6 +37,7 @@ use crate::{
         quarantine_vault::quarantine_entry_database::QuarantineVault,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const THREATS_FOUND_EXIT_CODE: u8 = 1;
@@ -146,25 +147,31 @@ async fn quarantine_detected_threats(
 }
 
 fn finished_scan_notification_body(
+    message_catalog: &MessageCatalog,
     scan_outcome: &CompletedScanOutcome,
     quarantined_count: usize,
 ) -> String {
     let threat_count = scan_outcome.threat_findings.attributed_threats().len();
-    let found_text = translated_messages::headless::count_threat_found(threat_count);
+    let found_text =
+        translated_messages::headless::count_threat_found(message_catalog, threat_count);
     if quarantined_count == 0 {
         format!(
             "{found_text}. {}",
-            translated_messages::headless::open_lazaret_review()
+            translated_messages::headless::open_lazaret_review(message_catalog)
         )
     } else {
         format!(
             "{found_text}. {}",
-            translated_messages::headless::count_threats_quarantined(quarantined_count)
+            translated_messages::headless::count_threats_quarantined(
+                message_catalog,
+                quarantined_count
+            )
         )
     }
 }
 
 async fn run_scheduled_scan_async(
+    message_catalog: &MessageCatalog,
     sandbox_kind: SandboxKind,
     scan_options: ScheduledScanOptions,
 ) -> ExitCode {
@@ -240,15 +247,15 @@ async fn run_scheduled_scan_async(
     match scan_status {
         ScanActivityStatus::ScanInfected { .. } => {
             send_session_notification(
-                &translated_messages::headless::scan_infected(),
-                &finished_scan_notification_body(&scan_outcome, quarantined_count),
+                &translated_messages::headless::scan_infected(message_catalog),
+                &finished_scan_notification_body(message_catalog, &scan_outcome, quarantined_count),
             );
             ExitCode::from(THREATS_FOUND_EXIT_CODE)
         }
         ScanActivityStatus::ScanFailed => {
             send_session_notification(
-                &translated_messages::headless::scheduled_scan_failed(),
-                &translated_messages::headless::open_lazaret_read_log(),
+                &translated_messages::headless::scheduled_scan_failed(message_catalog),
+                &translated_messages::headless::open_lazaret_read_log(message_catalog),
             );
             ExitCode::from(SCAN_FAILED_EXIT_CODE)
         }
@@ -257,6 +264,7 @@ async fn run_scheduled_scan_async(
 }
 
 pub fn run_scheduled_scan(
+    message_catalog: &MessageCatalog,
     sandbox_kind: SandboxKind,
     scan_options: ScheduledScanOptions,
 ) -> ExitCode {
@@ -264,9 +272,11 @@ pub fn run_scheduled_scan(
         .enable_all()
         .build()
     {
-        Ok(scan_runtime) => {
-            scan_runtime.block_on(run_scheduled_scan_async(sandbox_kind, scan_options))
-        }
+        Ok(scan_runtime) => scan_runtime.block_on(run_scheduled_scan_async(
+            message_catalog,
+            sandbox_kind,
+            scan_options,
+        )),
         Err(runtime_failure) => {
             eprintln!("{runtime_failure}");
             ExitCode::from(SCAN_FAILED_EXIT_CODE)

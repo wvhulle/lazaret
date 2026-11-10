@@ -14,13 +14,14 @@ use crate::{
         },
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TrustedDetectionsStepAction {}
 
 impl StepActionButton for TrustedDetectionsStepAction {
-    fn button_label(&self) -> String {
+    fn button_label(&self, _message_catalog: &MessageCatalog) -> String {
         match *self {}
     }
 
@@ -38,6 +39,7 @@ struct TrustListVerdict {
 }
 
 fn lazaret_list_failure_row<ListEntry>(
+    message_catalog: &MessageCatalog,
     list_label: String,
     list_reading: &LazaretListReading<ListEntry>,
 ) -> Option<StepEvidenceRow> {
@@ -45,35 +47,44 @@ fn lazaret_list_failure_row<ListEntry>(
         LazaretListReading::ListRead(_) => None,
         LazaretListReading::ListUnreadable(read_failure) => Some(evidence_row(
             list_label,
-            trust_list_failure_text(read_failure),
+            trust_list_failure_text(message_catalog, read_failure),
         )),
     }
 }
 
-fn foreign_allowlist_evidence_row(foreign_allowlist: &ForeignAllowlistFile) -> StepEvidenceRow {
+fn foreign_allowlist_evidence_row(
+    message_catalog: &MessageCatalog,
+    foreign_allowlist: &ForeignAllowlistFile,
+) -> StepEvidenceRow {
     match &foreign_allowlist.allowlist_entries {
         AllowlistEntries::EntriesCounted { .. } => evidence_row(
-            translated_messages::findings::other_allowlist(),
+            translated_messages::findings::other_allowlist(message_catalog),
             foreign_allowlist.file_name.clone(),
         ),
         AllowlistEntries::FileUnreadable(read_failure) => evidence_row(
-            translated_messages::findings::other_allowlist(),
+            translated_messages::findings::other_allowlist(message_catalog),
             translated_messages::findings::file_reason(
+                message_catalog,
                 &foreign_allowlist.file_name,
-                trust_list_failure_text(read_failure),
+                trust_list_failure_text(message_catalog, read_failure),
             ),
         ),
     }
 }
 
-fn trust_list_contents_verdict(trust_list: &TrustListContents) -> Option<TrustListVerdict> {
+fn trust_list_contents_verdict(
+    message_catalog: &MessageCatalog,
+    trust_list: &TrustListContents,
+) -> Option<TrustListVerdict> {
     let evidence_rows = [
         lazaret_list_failure_row(
-            translated_messages::findings::trusted_files(),
+            message_catalog,
+            translated_messages::findings::trusted_files(message_catalog),
             &trust_list.trusted_files,
         ),
         lazaret_list_failure_row(
-            translated_messages::findings::ignored_detections(),
+            message_catalog,
+            translated_messages::findings::ignored_detections(message_catalog),
             &trust_list.ignored_signatures,
         ),
     ]
@@ -83,13 +94,15 @@ fn trust_list_contents_verdict(trust_list: &TrustListContents) -> Option<TrustLi
         trust_list
             .foreign_allowlists
             .iter()
-            .map(foreign_allowlist_evidence_row),
+            .map(|foreign_allowlist| {
+                foreign_allowlist_evidence_row(message_catalog, foreign_allowlist)
+            }),
     )
     .collect();
     if !trust_list.foreign_allowlists.is_empty() {
         return Some(TrustListVerdict {
             checked_condition: CheckedCondition::ReviewSuggested,
-            status_text: translated_messages::findings::allowlist_not_write_status(),
+            status_text: translated_messages::findings::allowlist_not_write_status(message_catalog),
             evidence_rows,
         });
     }
@@ -102,6 +115,7 @@ fn trust_list_contents_verdict(trust_list: &TrustListContents) -> Option<TrustLi
             (lazaret_entries > 0).then(|| TrustListVerdict {
                 checked_condition: CheckedCondition::ConditionMet,
                 status_text: translated_messages::findings::count_file_detection_status(
+                    message_catalog,
                     lazaret_entries,
                 ),
                 evidence_rows,
@@ -111,36 +125,47 @@ fn trust_list_contents_verdict(trust_list: &TrustListContents) -> Option<TrustLi
         | (LazaretListReading::ListRead(_), LazaretListReading::ListUnreadable(_)) => {
             Some(TrustListVerdict {
                 checked_condition: CheckedCondition::EvidenceUnknown,
-                status_text: translated_messages::findings::own_allowlist_unreadable_status(),
+                status_text: translated_messages::findings::own_allowlist_unreadable_status(
+                    message_catalog,
+                ),
                 evidence_rows,
             })
         }
     }
 }
 
-fn trust_list_verdict(trust_list_reading: &TrustListReading) -> Option<TrustListVerdict> {
+fn trust_list_verdict(
+    message_catalog: &MessageCatalog,
+    trust_list_reading: &TrustListReading,
+) -> Option<TrustListVerdict> {
     match trust_list_reading {
-        TrustListReading::ListsRead(trust_list) => trust_list_contents_verdict(trust_list),
+        TrustListReading::ListsRead(trust_list) => {
+            trust_list_contents_verdict(message_catalog, trust_list)
+        }
         TrustListReading::FolderMissing => None,
         TrustListReading::FolderUnreadable(read_failure) => Some(TrustListVerdict {
             checked_condition: CheckedCondition::EvidenceUnknown,
-            status_text: translated_messages::findings::folder_unreadable(),
+            status_text: translated_messages::findings::folder_unreadable(message_catalog),
             evidence_rows: vec![evidence_row(
-                translated_messages::findings::signature_folder(),
-                trust_list_failure_text(read_failure),
+                translated_messages::findings::signature_folder(message_catalog),
+                trust_list_failure_text(message_catalog, read_failure),
             )],
         }),
     }
 }
 
-pub fn trust_list_condition(trust_list_reading: &TrustListReading) -> CheckedCondition {
-    trust_list_verdict(trust_list_reading)
+pub fn trust_list_condition(
+    message_catalog: &MessageCatalog,
+    trust_list_reading: &TrustListReading,
+) -> CheckedCondition {
+    trust_list_verdict(message_catalog, trust_list_reading)
         .map_or(CheckedCondition::ConditionMet, |trust_list_verdict| {
             trust_list_verdict.checked_condition
         })
 }
 
 pub fn trust_list_step<StepAction: StepActionButton>(
+    message_catalog: &MessageCatalog,
     trust_list_reading: &TrustListReading,
     header_action: impl FnOnce(CheckedCondition) -> StepActionSlot<StepAction>,
 ) -> Option<TimelineStep<StepAction>> {
@@ -148,10 +173,10 @@ pub fn trust_list_step<StepAction: StepActionButton>(
         checked_condition,
         status_text,
         evidence_rows,
-    } = trust_list_verdict(trust_list_reading)?;
+    } = trust_list_verdict(message_catalog, trust_list_reading)?;
     Some(TimelineStep::settled(
-        translated_messages::findings::trusted_detections(),
-        trust_list_mechanism_text(),
+        translated_messages::findings::trusted_detections(message_catalog),
+        trust_list_mechanism_text(message_catalog),
         status_text,
         SettledStep {
             evidence_rows: plain_rows(evidence_rows),
@@ -161,27 +186,28 @@ pub fn trust_list_step<StepAction: StepActionButton>(
     ))
 }
 
-fn trust_list_mechanism_text() -> String {
-    translated_messages::findings::trust_list_mechanism()
+fn trust_list_mechanism_text(message_catalog: &MessageCatalog) -> String {
+    translated_messages::findings::trust_list_mechanism(message_catalog)
 }
 
-fn nothing_trusted_step() -> TrustedDetectionsStep {
+fn nothing_trusted_step(message_catalog: &MessageCatalog) -> TrustedDetectionsStep {
     TimelineStep::settled(
-        translated_messages::findings::trusted_detections(),
-        trust_list_mechanism_text(),
-        translated_messages::findings::clamav_reports_everything_detects(),
+        translated_messages::findings::trusted_detections(message_catalog),
+        trust_list_mechanism_text(message_catalog),
+        translated_messages::findings::clamav_reports_everything_detects(message_catalog),
         SettledStep::without_offers(SettledNodeState::Completed),
     )
 }
 
 pub fn trusted_detections_status_steps(
+    message_catalog: &MessageCatalog,
     trust_list_reading: &TrustListReading,
 ) -> Vec<TrustedDetectionsStep> {
     vec![
-        trust_list_step(trust_list_reading, |_checked_condition| {
+        trust_list_step(message_catalog, trust_list_reading, |_checked_condition| {
             StepActionSlot::NoAction
         })
-        .unwrap_or_else(nothing_trusted_step),
+        .unwrap_or_else(|| nothing_trusted_step(message_catalog)),
     ]
 }
 
@@ -194,8 +220,11 @@ mod trusted_detections_presentation_tests {
         shared_widgets::step_timeline::timeline_step_contents::StepNodeState,
     };
 
-    fn trust_review_steps(trust_list_reading: &TrustListReading) -> Vec<TrustedDetectionsStep> {
-        trust_list_step(trust_list_reading, |_checked_condition| {
+    fn trust_review_steps(
+        message_catalog: &MessageCatalog,
+        trust_list_reading: &TrustListReading,
+    ) -> Vec<TrustedDetectionsStep> {
+        trust_list_step(message_catalog, trust_list_reading, |_checked_condition| {
             StepActionSlot::NoAction
         })
         .into_iter()
@@ -204,28 +233,36 @@ mod trusted_detections_presentation_tests {
 
     #[test]
     fn a_foreign_allowlist_needs_review() {
-        let review_steps = trust_review_steps(&TrustListReading::ListsRead(TrustListContents {
-            foreign_allowlists: vec![ForeignAllowlistFile {
-                file_name: "local.ign2".to_owned(),
-                allowlist_entries: AllowlistEntries::EntriesCounted { entry_count: 3 },
-            }],
-            ..empty_trust_list()
-        }));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let review_steps = trust_review_steps(
+            message_catalog,
+            &TrustListReading::ListsRead(TrustListContents {
+                foreign_allowlists: vec![ForeignAllowlistFile {
+                    file_name: "local.ign2".to_owned(),
+                    allowlist_entries: AllowlistEntries::EntriesCounted { entry_count: 3 },
+                }],
+                ..empty_trust_list()
+            }),
+        );
         assert_eq!(review_steps.len(), 1);
         assert_eq!(review_steps[0].node_state(), StepNodeState::NeedsReview);
     }
 
     #[test]
     fn an_unreadable_foreign_allowlist_keeps_its_warning() {
-        let review_steps = trust_review_steps(&TrustListReading::ListsRead(TrustListContents {
-            foreign_allowlists: vec![ForeignAllowlistFile {
-                file_name: "local.ign2".to_owned(),
-                allowlist_entries: AllowlistEntries::FileUnreadable(
-                    TrustListReadFailure::AccessDenied,
-                ),
-            }],
-            ..empty_trust_list()
-        }));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let review_steps = trust_review_steps(
+            message_catalog,
+            &TrustListReading::ListsRead(TrustListContents {
+                foreign_allowlists: vec![ForeignAllowlistFile {
+                    file_name: "local.ign2".to_owned(),
+                    allowlist_entries: AllowlistEntries::FileUnreadable(
+                        TrustListReadFailure::AccessDenied,
+                    ),
+                }],
+                ..empty_trust_list()
+            }),
+        );
         assert_eq!(review_steps.len(), 1);
         assert_eq!(review_steps[0].node_state(), StepNodeState::NeedsReview);
         assert_eq!(
@@ -236,36 +273,51 @@ mod trusted_detections_presentation_tests {
 
     #[test]
     fn an_unreadable_signature_folder_is_not_shown_as_nothing_trusted() {
-        let review_steps = trust_review_steps(&TrustListReading::FolderUnreadable(
-            TrustListReadFailure::AccessDenied,
-        ));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let review_steps = trust_review_steps(
+            message_catalog,
+            &TrustListReading::FolderUnreadable(TrustListReadFailure::AccessDenied),
+        );
         assert_eq!(review_steps.len(), 1);
         assert_eq!(review_steps[0].node_state(), StepNodeState::NeedsReview);
         assert_eq!(
-            trust_list_condition(&TrustListReading::FolderUnreadable(
-                TrustListReadFailure::AccessDenied
-            )),
+            trust_list_condition(
+                message_catalog,
+                &TrustListReading::FolderUnreadable(TrustListReadFailure::AccessDenied)
+            ),
             CheckedCondition::EvidenceUnknown
         );
     }
 
     #[test]
     fn an_unreadable_lazaret_list_needs_review() {
-        let review_steps = trust_review_steps(&TrustListReading::ListsRead(TrustListContents {
-            ignored_signatures: LazaretListReading::ListUnreadable(
-                TrustListReadFailure::AccessDenied,
-            ),
-            ..empty_trust_list()
-        }));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let review_steps = trust_review_steps(
+            message_catalog,
+            &TrustListReading::ListsRead(TrustListContents {
+                ignored_signatures: LazaretListReading::ListUnreadable(
+                    TrustListReadFailure::AccessDenied,
+                ),
+                ..empty_trust_list()
+            }),
+        );
         assert_eq!(review_steps.len(), 1);
         assert_eq!(review_steps[0].node_state(), StepNodeState::NeedsReview);
     }
 
     #[test]
     fn empty_readable_trust_lists_add_no_review_step() {
-        assert!(trust_review_steps(&TrustListReading::ListsRead(empty_trust_list())).is_empty());
-        assert!(trust_review_steps(&TrustListReading::FolderMissing).is_empty());
-        let status_steps = trusted_detections_status_steps(&TrustListReading::FolderMissing);
+        let message_catalog = &crate::translated_messages::english_catalog();
+        assert!(
+            trust_review_steps(
+                message_catalog,
+                &TrustListReading::ListsRead(empty_trust_list())
+            )
+            .is_empty()
+        );
+        assert!(trust_review_steps(message_catalog, &TrustListReading::FolderMissing).is_empty());
+        let status_steps =
+            trusted_detections_status_steps(message_catalog, &TrustListReading::FolderMissing);
         assert_eq!(status_steps.len(), 1);
         assert_eq!(status_steps[0].node_state(), StepNodeState::Completed);
         assert_eq!(

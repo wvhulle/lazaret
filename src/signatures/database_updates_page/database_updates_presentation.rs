@@ -38,6 +38,7 @@ use crate::{
         LastManualUpdate, SignatureUpdateProgress, SignatureUpdateView,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const DATABASE_FRESH_LIMIT: SignedDuration = SignedDuration::from_hours(4 * 24);
@@ -51,11 +52,13 @@ pub enum DatabaseUpdateAction {
 }
 
 impl StepActionButton for DatabaseUpdateAction {
-    fn button_label(&self) -> String {
+    fn button_label(&self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::UpdateSignatures => translated_messages::signatures::update_signatures(),
+            Self::UpdateSignatures => {
+                translated_messages::signatures::update_signatures(message_catalog)
+            }
             Self::CancelSignatureUpdate => {
-                translated_messages::signatures::cancel_signature_update()
+                translated_messages::signatures::cancel_signature_update(message_catalog)
             }
         }
     }
@@ -151,6 +154,7 @@ pub fn signature_condition(
 }
 
 fn database_status_text(
+    message_catalog: &MessageCatalog,
     database_evidence: &DatabaseEvidence,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -158,18 +162,19 @@ fn database_status_text(
     match database_evidence {
         DatabaseEvidence::BuiltAt { built_at } if *built_at <= reference_moment => {
             translated_messages::signatures::definitions_built_date(
+                message_catalog,
                 moment_formatters.relative_moment_text(*built_at, reference_moment),
                 moment_formatters.calendar_date_text(*built_at),
             )
         }
         DatabaseEvidence::BuiltAt { .. } | DatabaseEvidence::AgeUndetermined => {
-            translated_messages::signatures::definitions_exist_not_determined()
+            translated_messages::signatures::definitions_exist_not_determined(message_catalog)
         }
         DatabaseEvidence::DatabaseMissing => {
-            translated_messages::signatures::no_virus_definitions_found()
+            translated_messages::signatures::no_virus_definitions_found(message_catalog)
         }
         DatabaseEvidence::InspectionInterrupted => {
-            translated_messages::signatures::age_definitions_unknown_checking()
+            translated_messages::signatures::age_definitions_unknown_checking(message_catalog)
         }
     }
 }
@@ -194,6 +199,7 @@ impl From<UpdaterRunHistory> for EvidenceMoment {
 }
 
 fn updater_row(
+    message_catalog: &MessageCatalog,
     updater_evidence: &UpdaterEvidence,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -203,26 +209,31 @@ fn updater_row(
             evidence_moment: EvidenceMoment::HappeningNow,
             ..evidence_row(
                 translated_messages::signatures::updater_updated(
+                    message_catalog,
                     updater_evidence.updater_program.program_name(),
                 ),
-                translated_messages::signatures::updater_running_now(),
+                translated_messages::signatures::updater_running_now(message_catalog),
             )
         };
     }
     let evidence_moment = EvidenceMoment::from(updater_evidence.last_completed_run);
     let evidence_value = if updater_failed(updater_evidence) {
-        translated_messages::signatures::last_update_failed()
+        translated_messages::signatures::last_update_failed(message_catalog)
     } else {
         match updater_evidence.last_completed_run {
-            UpdaterRunHistory::JournalUnreadable(read_failure) => unknown_run_text(read_failure),
+            UpdaterRunHistory::JournalUnreadable(read_failure) => {
+                unknown_run_text(message_catalog, read_failure)
+            }
             UpdaterRunHistory::NoCompletedUpdate => {
-                translated_messages::signatures::no_completed_update()
+                translated_messages::signatures::no_completed_update(message_catalog)
             }
             UpdaterRunHistory::CompletedUpdate { .. } => String::new(),
         }
     };
     timed_evidence_row(
+        message_catalog,
         translated_messages::signatures::updater_updated(
+            message_catalog,
             updater_evidence.updater_program.program_name(),
         ),
         evidence_moment,
@@ -233,21 +244,28 @@ fn updater_row(
 }
 
 fn third_party_file_row(
+    message_catalog: &MessageCatalog,
     signature_file: &ThirdPartySignatureFile,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
 ) -> StepEvidenceRow {
     let file_size_text = byte_size_text(signature_file.file_size);
     timed_evidence_row(
-        translated_messages::signatures::provider_fetched(signature_file_source_name(
-            provider_of_signature_file(&signature_file.file_name),
-        )),
+        message_catalog,
+        translated_messages::signatures::provider_fetched(
+            message_catalog,
+            signature_file_source_name(
+                message_catalog,
+                provider_of_signature_file(&signature_file.file_name),
+            ),
+        ),
         EvidenceMoment::PastEvent {
             happened_at: signature_file.modified_at,
         },
         match signature_file.signature_lines {
             SignatureLineCount::LinesCounted { signature_count } => {
                 translated_messages::signatures::count_signature_size_file(
+                    message_catalog,
                     signature_count,
                     &file_size_text,
                     &signature_file.file_name,
@@ -255,6 +273,7 @@ fn third_party_file_row(
             }
             SignatureLineCount::FileUnreadable { failure_kind } => {
                 translated_messages::signatures::file_unreadable(
+                    message_catalog,
                     failure_kind,
                     &file_size_text,
                     &signature_file.file_name,
@@ -267,6 +286,7 @@ fn third_party_file_row(
 }
 
 fn third_party_rows(
+    message_catalog: &MessageCatalog,
     third_party_listing: &ThirdPartySignatureListing,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -275,14 +295,20 @@ fn third_party_rows(
         ThirdPartySignatureListing::FilesListed(signature_files) => signature_files
             .iter()
             .map(|signature_file| {
-                third_party_file_row(signature_file, moment_formatters, reference_moment)
+                third_party_file_row(
+                    message_catalog,
+                    signature_file,
+                    moment_formatters,
+                    reference_moment,
+                )
             })
             .collect(),
         ThirdPartySignatureListing::FolderUnreadable(read_failure) => vec![evidence_row(
-            translated_messages::signatures::other_signature_sources(),
-            translated_messages::signatures::unknown_reason_database(database_folder_failure_text(
-                *read_failure,
-            )),
+            translated_messages::signatures::other_signature_sources(message_catalog),
+            translated_messages::signatures::unknown_reason_database(
+                message_catalog,
+                database_folder_failure_text(message_catalog, *read_failure),
+            ),
         )],
     }
 }
@@ -295,6 +321,7 @@ fn update_progress_of(signature_update: &SignatureUpdateView) -> SignatureUpdate
 }
 
 fn manual_update_row(
+    message_catalog: &MessageCatalog,
     signature_update: &SignatureUpdateView,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -315,11 +342,12 @@ fn manual_update_row(
         ),
         LastManualUpdate::NotRunThisSession => (
             EvidenceMoment::CurrentFact,
-            translated_messages::signatures::fetch_newest_signatures(),
+            translated_messages::signatures::fetch_newest_signatures(message_catalog),
         ),
     };
     timed_evidence_row(
-        translated_messages::signatures::manual_update(),
+        message_catalog,
+        translated_messages::signatures::manual_update(message_catalog),
         evidence_moment,
         evidence_value,
         moment_formatters,
@@ -327,30 +355,36 @@ fn manual_update_row(
     )
 }
 
-fn update_host_rows(signature_update: &SignatureUpdateView) -> Vec<StepEvidenceRow> {
+fn update_host_rows(
+    message_catalog: &MessageCatalog,
+    signature_update: &SignatureUpdateView,
+) -> Vec<StepEvidenceRow> {
     match signature_update {
         SignatureUpdateView::HostStatusLoading => Vec::new(),
         SignatureUpdateView::HostStatusKnown(known_host) => vec![
             evidence_row(
-                translated_messages::signatures::update_service(),
+                translated_messages::signatures::update_service(message_catalog),
                 known_host.update_service_text.clone(),
             ),
             evidence_row(
-                translated_messages::signatures::database_folder(),
+                translated_messages::signatures::database_folder(message_catalog),
                 known_host.database_folder_text.clone(),
             ),
         ],
     }
 }
 
-fn updater_output_rows(update_progress: &SignatureUpdateProgress) -> Vec<StepEvidenceRow> {
+fn updater_output_rows(
+    message_catalog: &MessageCatalog,
+    update_progress: &SignatureUpdateProgress,
+) -> Vec<StepEvidenceRow> {
     match update_progress {
         SignatureUpdateProgress::CancellableUpdateRunning { latest_output_line }
         | SignatureUpdateProgress::UncancellableUpdateRunning { latest_output_line } => {
             vec![StepEvidenceRow {
                 evidence_moment: EvidenceMoment::HappeningNow,
                 ..evidence_row(
-                    translated_messages::signatures::updater_output(),
+                    translated_messages::signatures::updater_output(message_catalog),
                     latest_output_line.clone(),
                 )
             }]
@@ -361,15 +395,16 @@ fn updater_output_rows(update_progress: &SignatureUpdateProgress) -> Vec<StepEvi
     }
 }
 
-fn signature_step_title() -> String {
-    translated_messages::signatures::current_label()
+fn signature_step_title(message_catalog: &MessageCatalog) -> String {
+    translated_messages::signatures::current_label(message_catalog)
 }
 
-fn signature_mechanism_details() -> String {
-    translated_messages::signatures::signature_mechanism()
+fn signature_mechanism_details(message_catalog: &MessageCatalog) -> String {
+    translated_messages::signatures::signature_mechanism(message_catalog)
 }
 
 fn signature_status_rows(
+    message_catalog: &MessageCatalog,
     signature_evidence: &SignatureEvidence,
     moment_formatters: &MomentFormatters,
     reference_moment: Timestamp,
@@ -377,8 +412,16 @@ fn signature_status_rows(
     signature_evidence
         .updater_evidence
         .iter()
-        .map(|updater_evidence| updater_row(updater_evidence, moment_formatters, reference_moment))
+        .map(|updater_evidence| {
+            updater_row(
+                message_catalog,
+                updater_evidence,
+                moment_formatters,
+                reference_moment,
+            )
+        })
         .chain(third_party_rows(
+            message_catalog,
             &signature_evidence.third_party_listing,
             moment_formatters,
             reference_moment,
@@ -412,6 +455,7 @@ fn system_updater_running(signature_evidence: &SignatureEvidence) -> bool {
 }
 
 pub fn signature_update_step(
+    message_catalog: &MessageCatalog,
     signature_evidence: &SignatureEvidence,
     signature_update: &SignatureUpdateView,
     moment_formatters: &MomentFormatters,
@@ -420,20 +464,26 @@ pub fn signature_update_step(
 ) -> DatabaseUpdateStep {
     let evidence_state = signature_node_state(signature_evidence, reference_moment);
     let update_progress = update_progress_of(signature_update);
-    let manual_row = manual_update_row(signature_update, moment_formatters, reference_moment);
-    let other_rows = updater_output_rows(&update_progress)
+    let manual_row = manual_update_row(
+        message_catalog,
+        signature_update,
+        moment_formatters,
+        reference_moment,
+    );
+    let other_rows = updater_output_rows(message_catalog, &update_progress)
         .into_iter()
         .chain(signature_status_rows(
+            message_catalog,
             signature_evidence,
             moment_formatters,
             reference_moment,
         ))
-        .chain(update_host_rows(signature_update))
+        .chain(update_host_rows(message_catalog, signature_update))
         .collect::<Vec<_>>();
     let running_signature_step = |status_text: String, cancel_slot| {
         TimelineStep::running(
-            signature_step_title(),
-            signature_mechanism_details(),
+            signature_step_title(message_catalog),
+            signature_mechanism_details(message_catalog),
             status_text,
             RunningStep {
                 evidence_rows: std::iter::once(manual_row.clone())
@@ -445,9 +495,10 @@ pub fn signature_update_step(
     };
     let settled_signature_step = |manual_control| {
         TimelineStep::settled(
-            signature_step_title(),
-            signature_mechanism_details(),
+            signature_step_title(message_catalog),
+            signature_mechanism_details(message_catalog),
             database_status_text(
+                message_catalog,
                 &signature_evidence.database_evidence,
                 moment_formatters,
                 reference_moment,
@@ -465,24 +516,24 @@ pub fn signature_update_step(
     };
     let signature_step = match &update_progress {
         SignatureUpdateProgress::CancellableUpdateRunning { .. } => running_signature_step(
-            translated_messages::signatures::updating_signatures(),
+            translated_messages::signatures::updating_signatures(message_catalog),
             CancelSlot::Cancellable {
                 cancel_action: DatabaseUpdateAction::CancelSignatureUpdate,
             },
         ),
         SignatureUpdateProgress::UncancellableUpdateRunning { .. } => running_signature_step(
-            translated_messages::signatures::updating_signatures(),
+            translated_messages::signatures::updating_signatures(message_catalog),
             CancelSlot::NotCancellable,
         ),
         SignatureUpdateProgress::UpdateCancelling => running_signature_step(
-            translated_messages::signatures::update_cancelling(),
+            translated_messages::signatures::update_cancelling(message_catalog),
             CancelSlot::NotCancellable,
         ),
         SignatureUpdateProgress::ReadyToUpdate | SignatureUpdateProgress::UpdateUnavailable
             if system_updater_running(signature_evidence) =>
         {
             running_signature_step(
-                translated_messages::signatures::updating_signatures(),
+                translated_messages::signatures::updating_signatures(message_catalog),
                 CancelSlot::NotCancellable,
             )
         }
@@ -504,6 +555,7 @@ pub fn signature_update_step(
 }
 
 pub fn database_update_steps(
+    message_catalog: &MessageCatalog,
     protection_evidence: &ProtectionEvidence,
     signature_update: &SignatureUpdateView,
     moment_formatters: &MomentFormatters,
@@ -511,11 +563,13 @@ pub fn database_update_steps(
     distribution_family: DistributionFamily,
 ) -> Vec<DatabaseUpdateStep> {
     program_trust_step(
+        message_catalog,
         &protection_evidence.program_trust,
         TrustedProgramGroup::UpdaterPrograms,
     )
     .into_iter()
     .chain([signature_update_step(
+        message_catalog,
         &protection_evidence.signature_evidence,
         signature_update,
         moment_formatters,
@@ -555,10 +609,12 @@ mod database_updates_presentation_tests {
     }
 
     fn update_step_with(
+        message_catalog: &MessageCatalog,
         signature_evidence: &SignatureEvidence,
         update_progress: SignatureUpdateProgress,
     ) -> DatabaseUpdateStep {
         signature_update_step(
+            message_catalog,
             signature_evidence,
             &known_update_host(update_progress),
             &english_formatters(),
@@ -567,8 +623,15 @@ mod database_updates_presentation_tests {
         )
     }
 
-    fn ready_step_with(signature_evidence: &SignatureEvidence) -> DatabaseUpdateStep {
-        update_step_with(signature_evidence, SignatureUpdateProgress::ReadyToUpdate)
+    fn ready_step_with(
+        message_catalog: &MessageCatalog,
+        signature_evidence: &SignatureEvidence,
+    ) -> DatabaseUpdateStep {
+        update_step_with(
+            message_catalog,
+            signature_evidence,
+            SignatureUpdateProgress::ReadyToUpdate,
+        )
     }
 
     fn row_named<'step>(
@@ -603,8 +666,12 @@ mod database_updates_presentation_tests {
             .collect()
     }
 
-    fn update_steps_with_trust(program_trust: ProgramTrustInspection) -> Vec<DatabaseUpdateStep> {
+    fn update_steps_with_trust(
+        message_catalog: &MessageCatalog,
+        program_trust: ProgramTrustInspection,
+    ) -> Vec<DatabaseUpdateStep> {
         database_update_steps(
+            message_catalog,
             &ProtectionEvidence {
                 program_trust,
                 ..healthy_evidence()
@@ -618,7 +685,9 @@ mod database_updates_presentation_tests {
 
     #[test]
     fn a_ready_update_offers_update_now_on_the_manual_update_row() {
-        let signature_step = ready_step_with(&healthy_evidence().signature_evidence);
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let signature_step =
+            ready_step_with(message_catalog, &healthy_evidence().signature_evidence);
         assert_eq!(signature_step.node_state(), StepNodeState::Completed);
         assert_eq!(signature_step.header_offer(), None);
         assert_eq!(
@@ -640,7 +709,9 @@ mod database_updates_presentation_tests {
 
     #[test]
     fn a_running_update_shows_its_progress_and_can_be_cancelled() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let signature_step = update_step_with(
+            message_catalog,
             &healthy_evidence().signature_evidence,
             SignatureUpdateProgress::CancellableUpdateRunning {
                 latest_output_line: "daily.cld updated".to_owned(),
@@ -660,6 +731,7 @@ mod database_updates_presentation_tests {
 
     #[test]
     fn an_update_the_system_timer_started_shows_in_progress_without_update_now() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let running_updater = SignatureEvidence {
             updater_evidence: vec![UpdaterEvidence {
                 updater_program: SignatureUpdaterProgram::Freshclam,
@@ -672,7 +744,7 @@ mod database_updates_presentation_tests {
             }],
             ..healthy_evidence().signature_evidence
         };
-        let signature_step = ready_step_with(&running_updater);
+        let signature_step = ready_step_with(message_catalog, &running_updater);
         assert_eq!(signature_step.node_state(), StepNodeState::InProgress);
         assert_eq!(signature_step.status_text, "Updating signatures…");
         assert!(signature_step.offered_actions().is_empty());
@@ -682,6 +754,7 @@ mod database_updates_presentation_tests {
 
     #[test]
     fn a_failed_updater_or_stale_source_warns_even_with_fresh_definitions() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let failed_updater = SignatureEvidence {
             updater_evidence: vec![UpdaterEvidence {
                 updater_program: SignatureUpdaterProgram::Fangfrisch,
@@ -692,7 +765,7 @@ mod database_updates_presentation_tests {
             }],
             ..healthy_evidence().signature_evidence
         };
-        let signature_step = ready_step_with(&failed_updater);
+        let signature_step = ready_step_with(message_catalog, &failed_updater);
         assert_eq!(signature_step.node_state(), StepNodeState::NeedsReview);
         assert_eq!(
             manual_row_control(&signature_step),
@@ -704,12 +777,16 @@ mod database_updates_presentation_tests {
 
     #[test]
     fn an_unreadable_signature_folder_is_unknown_rather_than_no_other_sources() {
-        let signature_step = ready_step_with(&SignatureEvidence {
-            third_party_listing: ThirdPartySignatureListing::FolderUnreadable(
-                DatabaseFolderReadFailure::ReadingTaskInterrupted,
-            ),
-            ..healthy_evidence().signature_evidence
-        });
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let signature_step = ready_step_with(
+            message_catalog,
+            &SignatureEvidence {
+                third_party_listing: ThirdPartySignatureListing::FolderUnreadable(
+                    DatabaseFolderReadFailure::ReadingTaskInterrupted,
+                ),
+                ..healthy_evidence().signature_evidence
+            },
+        );
         assert_eq!(signature_step.node_state(), StepNodeState::NeedsReview);
         assert_eq!(
             row_named(&signature_step, "Other signature sources").evidence_value,
@@ -719,10 +796,14 @@ mod database_updates_presentation_tests {
 
     #[test]
     fn an_interrupted_database_check_is_unknown_rather_than_missing() {
-        let signature_step = ready_step_with(&SignatureEvidence {
-            database_evidence: DatabaseEvidence::InspectionInterrupted,
-            ..healthy_evidence().signature_evidence
-        });
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let signature_step = ready_step_with(
+            message_catalog,
+            &SignatureEvidence {
+                database_evidence: DatabaseEvidence::InspectionInterrupted,
+                ..healthy_evidence().signature_evidence
+            },
+        );
         assert_eq!(signature_step.node_state(), StepNodeState::NeedsReview);
         assert!(signature_step.status_text.contains("unknown"));
         assert!(!signature_step.status_text.contains("No virus definitions"));
@@ -730,25 +811,30 @@ mod database_updates_presentation_tests {
 
     #[test]
     fn only_a_replaceable_freshclam_adds_a_trust_step_before_the_signatures() {
-        let refused_freshclam =
-            update_steps_with_trust(ProgramTrustInspection::ProgramsChecked(vec![
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let refused_freshclam = update_steps_with_trust(
+            message_catalog,
+            ProgramTrustInspection::ProgramsChecked(vec![
                 ProgramTrustFinding::OnlyReplaceableProgram {
                     program_name: "freshclam",
                     replaceable_paths: vec!["/home/user/.local/bin/freshclam".to_owned()],
                 },
-            ]));
+            ]),
+        );
         assert_eq!(
             step_titles(&refused_freshclam),
             vec!["freshclam can be trusted", "Signatures current"]
         );
         assert_eq!(refused_freshclam[0].node_state(), StepNodeState::HasFailed);
-        let refused_scanner =
-            update_steps_with_trust(ProgramTrustInspection::ProgramsChecked(vec![
+        let refused_scanner = update_steps_with_trust(
+            message_catalog,
+            ProgramTrustInspection::ProgramsChecked(vec![
                 ProgramTrustFinding::OnlyReplaceableProgram {
                     program_name: "clamdscan",
                     replaceable_paths: vec!["/home/user/.local/bin/clamdscan".to_owned()],
                 },
-            ]));
+            ]),
+        );
         assert_eq!(step_titles(&refused_scanner), vec!["Signatures current"]);
     }
 }

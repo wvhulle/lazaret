@@ -1,4 +1,4 @@
-use std::{future::Future, path::PathBuf};
+use std::{future::Future, path::PathBuf, rc::Rc};
 
 use relm4::{
     Sender, adw,
@@ -7,7 +7,7 @@ use relm4::{
     gtk::{gio, glib},
 };
 
-use crate::translated_messages;
+use crate::{translated_messages, translated_messages::MessageCatalog};
 
 #[derive(Debug)]
 pub enum TextExportOutcome {
@@ -40,8 +40,11 @@ impl From<glib::Error> for FileDialogEnding {
     }
 }
 
-pub fn describe_export_failure(export_failure: &glib::Error) -> String {
-    translated_messages::widgets::not_save_file_error(export_failure)
+pub fn describe_export_failure(
+    message_catalog: &MessageCatalog,
+    export_failure: &glib::Error,
+) -> String {
+    translated_messages::widgets::not_save_file_error(message_catalog, export_failure)
 }
 
 fn active_application_window() -> Option<gtk::Window> {
@@ -138,7 +141,10 @@ pub enum ChosenSubmissionFile {
     ChoiceFailed(String),
 }
 
-pub async fn chosen_file_to_submit(dialog_title: String) -> ChosenSubmissionFile {
+pub async fn chosen_file_to_submit(
+    message_catalog: Rc<MessageCatalog>,
+    dialog_title: String,
+) -> ChosenSubmissionFile {
     let chosen_file = gtk::FileDialog::builder()
         .title(dialog_title)
         .build()
@@ -148,14 +154,17 @@ pub async fn chosen_file_to_submit(dialog_title: String) -> ChosenSubmissionFile
         Ok(chosen_file) => chosen_file.path().map_or_else(
             || {
                 ChosenSubmissionFile::ChoiceFailed(
-                    translated_messages::widgets::chosen_file_not_local(chosen_file.uri()),
+                    translated_messages::widgets::chosen_file_not_local(
+                        &message_catalog,
+                        chosen_file.uri(),
+                    ),
                 )
             },
             ChosenSubmissionFile::FileChosen,
         ),
         Err(FileDialogEnding::DismissedByUser) => ChosenSubmissionFile::ChoiceCancelled,
         Err(FileDialogEnding::DialogBroke(dialog_failure)) => ChosenSubmissionFile::ChoiceFailed(
-            translated_messages::widgets::not_choose_file_error(dialog_failure),
+            translated_messages::widgets::not_choose_file_error(&message_catalog, dialog_failure),
         ),
     }
 }
@@ -178,9 +187,13 @@ pub async fn imported_file(dialog_title: String) -> ImportedFileOutcome {
     }
 }
 
-pub async fn exported_text(suggested_name: String, exported_text: String) -> TextExportOutcome {
+pub async fn exported_text(
+    message_catalog: Rc<MessageCatalog>,
+    suggested_name: String,
+    exported_text: String,
+) -> TextExportOutcome {
     let chosen_file = gtk::FileDialog::builder()
-        .title(translated_messages::widgets::export_title())
+        .title(translated_messages::widgets::export_title(&message_catalog))
         .initial_name(suggested_name)
         .build()
         .save_future(active_application_window().as_ref())

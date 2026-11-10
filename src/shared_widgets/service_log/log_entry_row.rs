@@ -1,8 +1,11 @@
+use std::rc::Rc;
+
 use relm4::{gtk, gtk::prelude::*, typed_view::list::RelmListItem};
 
 use crate::{
     host_services::desktop::locale_formatting::MomentFormatters,
     shared_widgets::service_log::service_log_state::ShownLogRow,
+    translated_messages::MessageCatalog,
 };
 
 pub enum ShownLogTime {
@@ -11,11 +14,13 @@ pub enum ShownLogTime {
 }
 
 pub struct LogEntryRow {
+    pub message_catalog: Rc<MessageCatalog>,
     shown_log_row: ShownLogRow,
     shown_log_time: ShownLogTime,
 }
 
 pub fn log_entry_row(
+    message_catalog: &Rc<MessageCatalog>,
     moment_formatters: &MomentFormatters,
     shown_log_row: ShownLogRow,
 ) -> LogEntryRow {
@@ -25,6 +30,7 @@ pub fn log_entry_row(
             ShownLogTime::LoggedAt(moment_formatters.log_moment_text(logged_at))
         });
     LogEntryRow {
+        message_catalog: Rc::clone(message_catalog),
         shown_log_row,
         shown_log_time,
     }
@@ -94,12 +100,16 @@ impl RelmListItem for LogEntryRow {
     }
 
     fn bind(&mut self, entry_widgets: &mut Self::Widgets, _entry_box: &mut Self::Root) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let level_icon_name = self.shown_log_row.row_level.level_icon_name();
         entry_widgets.level_icon.set_icon_name(level_icon_name);
         entry_widgets
             .level_icon
             .set_visible(level_icon_name.is_some());
-        let level_text = self.shown_log_row.row_level.level_label_text();
+        let level_text = self
+            .shown_log_row
+            .row_level
+            .level_label_text(&message_catalog);
         entry_widgets
             .level_label
             .set_visible(!level_text.is_empty());

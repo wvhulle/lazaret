@@ -10,6 +10,7 @@ use crate::{
         systemd_journal::unit_journal_reader::{journal_field_value, open_system_journal},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const HELPER_SERVICE_UNIT: &str = "lazaret-clamav-admin.service";
@@ -65,19 +66,24 @@ impl AuditedOutcome {
         }
     }
 
-    pub fn described(&self) -> String {
+    pub fn described(&self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::ActionApplied => translated_messages::host::action_applied(),
-            Self::ActionRolledBack => translated_messages::host::action_rolled_back(),
-            Self::AuthorizationRefused => {
-                translated_messages::host::authorization_refused_described()
+            Self::ActionApplied => translated_messages::host::action_applied(message_catalog),
+            Self::ActionRolledBack => {
+                translated_messages::host::action_rolled_back(message_catalog)
             }
-            Self::ActionFailed => translated_messages::host::action_failed(),
-            Self::OutcomeNotRecorded => translated_messages::host::outcome_not_recorded(),
+            Self::AuthorizationRefused => {
+                translated_messages::host::authorization_refused_described(message_catalog)
+            }
+            Self::ActionFailed => translated_messages::host::action_failed(message_catalog),
+            Self::OutcomeNotRecorded => {
+                translated_messages::host::outcome_not_recorded(message_catalog)
+            }
             Self::UnrecognizedOutcome { outcome_field } => {
-                translated_messages::host::unrecognized_outcome(sanitize_scanner_line(
-                    outcome_field,
-                ))
+                translated_messages::host::unrecognized_outcome(
+                    message_catalog,
+                    sanitize_scanner_line(outcome_field),
+                )
             }
         }
     }
@@ -398,6 +404,7 @@ mod admin_audit_records_tests {
 
     #[test]
     fn a_missing_outcome_is_not_reported_as_a_failure() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let audit_entry = entry_of(&AuditJournalFields {
             outcome_field: JournalFieldPresence::FieldAbsent,
             requester_field: JournalFieldPresence::FieldAbsent,
@@ -409,7 +416,7 @@ mod admin_audit_records_tests {
         );
         assert_eq!(audit_entry.requester, Requester::UnknownUser);
         assert_eq!(
-            audit_entry.audited_outcome.described(),
+            audit_entry.audited_outcome.described(message_catalog),
             "Outcome not recorded"
         );
     }
@@ -623,6 +630,7 @@ mod admin_audit_records_tests {
 
     #[test]
     fn an_unknown_outcome_is_not_reported_as_a_failure() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let audit_entry = entry_of(&AuditJournalFields {
             outcome_field: JournalFieldPresence::FieldPresent {
                 field_value: "postponed".to_owned(),
@@ -636,7 +644,7 @@ mod admin_audit_records_tests {
             }
         );
         assert_eq!(
-            audit_entry.audited_outcome.described(),
+            audit_entry.audited_outcome.described(message_catalog),
             "Unrecognized outcome postponed"
         );
     }

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, adw,
     adw::prelude::*, gtk, gtk::gio,
@@ -30,12 +32,14 @@ use crate::{
         PreferenceRowsInput,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const SYSTEM_SCAN_TIMER: &str = "clamdscan.timer";
 
 pub struct ScanScheduleSection {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     system_bus: SystemBusAccess,
     user_bus: UserBusAccess,
     sandbox_kind: SandboxKind,
@@ -77,78 +81,95 @@ pub enum ScanScheduleSectionCommand {
 }
 
 fn describe_timer_state(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     timer_state: &ScheduleTimerState,
 ) -> String {
     match timer_state {
-        ScheduleTimerState::TimerInactive => translated_messages::scans::timer_inactive(),
+        ScheduleTimerState::TimerInactive => {
+            translated_messages::scans::timer_inactive(message_catalog)
+        }
         ScheduleTimerState::TimerActive {
             next_run: UnitTimestamp::RecordedAt { recorded_at },
         } => translated_messages::scans::next_run_time(
+            message_catalog,
             moment_formatters.exact_moment_text(*recorded_at),
         ),
         ScheduleTimerState::TimerActive {
             next_run: UnitTimestamp::NeverRecorded,
-        } => translated_messages::scans::scheduled_time_next_run(),
-        ScheduleTimerState::SystemdUnavailable => translated_messages::scans::systemd_unavailable(),
+        } => translated_messages::scans::scheduled_time_next_run(message_catalog),
+        ScheduleTimerState::SystemdUnavailable => {
+            translated_messages::scans::systemd_unavailable(message_catalog)
+        }
     }
 }
 
 fn describe_system_schedule(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     next_run: UnitTimestamp,
 ) -> String {
     match next_run {
         UnitTimestamp::RecordedAt { recorded_at } => {
             translated_messages::scans::system_already_runs_scheduled(
+                message_catalog,
                 moment_formatters.exact_moment_text(recorded_at),
             )
         }
-        UnitTimestamp::NeverRecorded => translated_messages::scans::system_scan_timer_settings(),
+        UnitTimestamp::NeverRecorded => {
+            translated_messages::scans::system_scan_timer_settings(message_catalog)
+        }
     }
 }
 
 fn describe_user_timer(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     user_timer_view: &UserTimerView,
 ) -> String {
     match user_timer_view {
-        UserTimerView::ReadingUserTimer => translated_messages::scans::reading_user_timer(),
+        UserTimerView::ReadingUserTimer => {
+            translated_messages::scans::reading_user_timer(message_catalog)
+        }
         UserTimerView::UserTimerRead(timer_state) => {
-            describe_timer_state(moment_formatters, timer_state)
+            describe_timer_state(message_catalog, moment_formatters, timer_state)
         }
     }
 }
 
 fn describe_schedule_group(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     system_schedule_owner: &SystemScheduleOwner,
     user_timer_view: &UserTimerView,
 ) -> String {
     match system_schedule_owner {
         SystemScheduleOwner::InspectingSystemTimer => {
-            translated_messages::scans::inspecting_system_timer()
+            translated_messages::scans::inspecting_system_timer(message_catalog)
         }
         SystemScheduleOwner::NoSystemTimer => {
-            describe_user_timer(moment_formatters, user_timer_view)
+            describe_user_timer(message_catalog, moment_formatters, user_timer_view)
         }
         SystemScheduleOwner::SystemTimerExists { next_run } => {
-            describe_system_schedule(moment_formatters, *next_run)
+            describe_system_schedule(message_catalog, moment_formatters, *next_run)
         }
         SystemScheduleOwner::SystemTimerUnknown(inspection_failure) => {
-            translated_messages::scans::system_timer_unknown(inspection_failure)
+            translated_messages::scans::system_timer_unknown(message_catalog, inspection_failure)
         }
     }
 }
 
-fn describe_page_notice(page_notice: &ScheduleSectionNotice) -> String {
+fn describe_page_notice(
+    message_catalog: &MessageCatalog,
+    page_notice: &ScheduleSectionNotice,
+) -> String {
     match page_notice {
         ScheduleSectionNotice::NoNoticeShown => String::new(),
         ScheduleSectionNotice::ScanTimeUnreadable => {
-            translated_messages::scans::scan_time_unreadable()
+            translated_messages::scans::scan_time_unreadable(message_catalog)
         }
         ScheduleSectionNotice::ScheduleNotApplied(apply_failure) => {
-            describe_apply_failure(apply_failure)
+            describe_apply_failure(message_catalog, apply_failure)
         }
     }
 }
@@ -157,18 +178,21 @@ const fn shows_page_notice(page_notice: &ScheduleSectionNotice) -> bool {
     !matches!(page_notice, ScheduleSectionNotice::NoNoticeShown)
 }
 
-fn describe_apply_failure(apply_failure: &ScheduleApplyFailure) -> String {
+fn describe_apply_failure(
+    message_catalog: &MessageCatalog,
+    apply_failure: &ScheduleApplyFailure,
+) -> String {
     match apply_failure {
         ScheduleApplyFailure::UnitFilesUnwritable(unit_failure) => {
-            translated_messages::scans::unit_files_unwritable(unit_failure)
+            translated_messages::scans::unit_files_unwritable(message_catalog, unit_failure)
         }
         ScheduleApplyFailure::UserManagerFailed(manager_failure) => {
-            translated_messages::scans::timer_not_applied_error(manager_failure)
+            translated_messages::scans::timer_not_applied_error(message_catalog, manager_failure)
         }
     }
 }
 
-fn schedule_row_specs() -> Vec<PreferenceRowSpec> {
+fn schedule_row_specs(message_catalog: &MessageCatalog) -> Vec<PreferenceRowSpec> {
     let described_row = |preference_key, setting_title, setting_description| PreferenceRowSpec {
         preference_key,
         setting_title,
@@ -177,38 +201,38 @@ fn schedule_row_specs() -> Vec<PreferenceRowSpec> {
     vec![
         described_row(
             PreferenceKey::ScheduleEnabled,
-            translated_messages::scans::enable_scheduled_scans_title(),
+            translated_messages::scans::enable_scheduled_scans_title(message_catalog),
             String::new(),
         ),
         described_row(
             PreferenceKey::ScheduleFrequency,
-            translated_messages::scans::frequency_title(),
+            translated_messages::scans::frequency_title(message_catalog),
             String::new(),
         ),
         described_row(
             PreferenceKey::ScheduleTime,
-            translated_messages::scans::time_24_hour_title(),
+            translated_messages::scans::time_24_hour_title(message_catalog),
             String::new(),
         ),
         described_row(
             PreferenceKey::ScheduleDayOfWeek,
-            translated_messages::scans::day_week_title(),
-            translated_messages::scans::used_weekly_scans_subtitle(),
+            translated_messages::scans::day_week_title(message_catalog),
+            translated_messages::scans::used_weekly_scans_subtitle(message_catalog),
         ),
         described_row(
             PreferenceKey::ScheduleDayOfMonth,
-            translated_messages::scans::day_month_title(),
-            translated_messages::scans::used_monthly_scans_subtitle(),
+            translated_messages::scans::day_month_title(message_catalog),
+            translated_messages::scans::used_monthly_scans_subtitle(message_catalog),
         ),
         described_row(
             PreferenceKey::ScheduleSkipOnBattery,
-            translated_messages::scans::skip_battery_schedule_title(),
-            translated_messages::scans::not_start_scheduled_subtitle(),
+            translated_messages::scans::skip_battery_schedule_title(message_catalog),
+            translated_messages::scans::not_start_scheduled_subtitle(message_catalog),
         ),
         described_row(
             PreferenceKey::ScheduleAutoQuarantine,
-            translated_messages::scans::auto_quarantine_title(),
-            translated_messages::scans::automatically_quarantine_threats_subtitle(),
+            translated_messages::scans::auto_quarantine_title(message_catalog),
+            translated_messages::scans::automatically_quarantine_threats_subtitle(message_catalog),
         ),
     ]
 }
@@ -254,7 +278,7 @@ impl ScanScheduleSection {
     }
 
     fn show_stored_settings(&mut self) {
-        let _moment_formatters = self.moment_formatters;
+        let _moment_formatters = &self.moment_formatters;
         let stored_schedule = StoredScheduleSettings::read_from(&self.stored_settings);
         if stored_schedule == self.schedule_settings {
             return;
@@ -268,7 +292,8 @@ impl ScanScheduleSection {
 }
 
 pub struct ScanScheduleSectionInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub sandbox_kind: SandboxKind,
     pub system_bus: SystemBusAccess,
     pub user_bus: UserBusAccess,
@@ -290,18 +315,19 @@ impl Component for ScanScheduleSection {
 
             #[local_ref]
             schedule_group -> adw::PreferencesGroup {
-                set_title: &translated_messages::scans::schedule_title(),
+                set_title: &translated_messages::scans::schedule_title(&model.message_catalog),
                 #[watch]
                 set_sensitive: allows_applying_schedule(&model.system_schedule_owner),
                 #[watch]
                 set_description: Some(&describe_schedule_group(
-                    model.moment_formatters,
+                    &model.message_catalog,
+                    &model.moment_formatters,
                     &model.system_schedule_owner,
                     &model.user_timer_view,
                 )),
                 #[wrap(Some)]
                 set_header_suffix = &gtk::Button {
-                    set_label: &translated_messages::scans::apply_label(),
+                    set_label: &translated_messages::scans::apply_label(&model.message_catalog),
                     set_valign: gtk::Align::Center,
                     add_css_class: "suggested-action",
                     connect_clicked => ScanScheduleSectionInput::ApplyRequested,
@@ -313,7 +339,7 @@ impl Component for ScanScheduleSection {
                 set_sensitive: allows_applying_schedule(&model.system_schedule_owner),
 
                 adw::EntryRow {
-                    set_title: &translated_messages::scans::targets_separated_commas_title(),
+                    set_title: &translated_messages::scans::targets_separated_commas_title(&model.message_catalog),
                     #[track(model.entry_texts_replaced)]
                     #[block_signal(targets_changed_handler)]
                     set_text: &model.scan_targets_text,
@@ -330,7 +356,7 @@ impl Component for ScanScheduleSection {
                 #[watch]
                 set_visible: shows_page_notice(&model.page_notice),
                 #[watch]
-                set_label: &describe_page_notice(&model.page_notice),
+                set_label: &describe_page_notice(&model.message_catalog, &model.page_notice),
             },
             },
         }
@@ -338,6 +364,7 @@ impl Component for ScanScheduleSection {
 
     fn init(
         ScanScheduleSectionInit {
+            message_catalog,
             moment_formatters,
             sandbox_kind,
             system_bus,
@@ -355,14 +382,16 @@ impl Component for ScanScheduleSection {
         );
         let schedule_settings = StoredScheduleSettings::read_from(&stored_settings);
         let model = Self {
-            moment_formatters,
+            message_catalog: Rc::clone(&message_catalog),
+            moment_formatters: Rc::clone(&moment_formatters),
             sandbox_kind,
             system_bus,
             user_bus,
             schedule_rows: PreferenceRowsGroup::builder()
                 .launch(PreferenceRowsInit {
-                    moment_formatters,
-                    row_specs: schedule_row_specs(),
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
+                    row_specs: schedule_row_specs(&message_catalog),
                     apply_mode: PreferenceApplyMode::AppliedWithGroup,
                 })
                 .detach(),

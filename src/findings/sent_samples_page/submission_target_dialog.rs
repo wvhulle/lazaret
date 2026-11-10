@@ -11,6 +11,7 @@ use crate::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,22 +58,25 @@ pub struct ChosenTarget {
 }
 
 pub fn present_target_choice<Message: 'static>(
+    message_catalog: &MessageCatalog,
     parent_widget: &impl IsA<gtk::Widget>,
     choice_request: TargetChoiceRequest,
     message_sender: Sender<Message>,
     chosen_message: fn(ChosenTarget) -> Message,
 ) {
     let target_dialog = adw::AlertDialog::new(
-        Some(&translated_messages::findings::choose_service_heading()),
+        Some(&translated_messages::findings::choose_service_heading(
+            message_catalog,
+        )),
         Some(&format!(
             "{}\n\n{}",
             choice_request.file_name,
-            translated_messages::findings::each_service_gets_file()
+            translated_messages::findings::each_service_gets_file(message_catalog)
         )),
     );
     add_dismissing_choice::<TargetDialogChoice>(
         &target_dialog,
-        &translated_messages::findings::cancel_submission(),
+        &translated_messages::findings::cancel_submission(message_catalog),
     );
     choice_request
         .offered_targets
@@ -82,7 +86,7 @@ pub fn present_target_choice<Message: 'static>(
             add_alert_choice(
                 &target_dialog,
                 target_choice,
-                &target_choice_label(offered_target.submission_target),
+                &target_choice_label(message_catalog, offered_target.submission_target),
             );
             let needs_key = choice_request
                 .targets_needing_key
@@ -102,7 +106,7 @@ pub fn present_target_choice<Message: 'static>(
         add_alert_choice(
             &target_dialog,
             TargetDialogChoice::KeySetUpChosen,
-            &translated_messages::findings::set_up_keys_response(),
+            &translated_messages::findings::set_up_keys_response(message_catalog),
         );
     }
     target_dialog.set_default_response(Some(TargetDialogChoice::TargetDismissed.response_id()));

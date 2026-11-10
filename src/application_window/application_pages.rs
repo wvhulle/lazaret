@@ -1,4 +1,4 @@
-use crate::translated_messages;
+use crate::{translated_messages, translated_messages::MessageCatalog};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApplicationPage {
@@ -52,19 +52,25 @@ impl ApplicationPage {
             .find(|application_page| application_page.page_name() == page_name)
     }
 
-    pub fn page_title(self) -> String {
+    pub fn page_title(self, message_catalog: &MessageCatalog) -> String {
         match self {
-            Self::SignatureSources => translated_messages::window::signature_sources(),
-            Self::DatabaseUpdates => translated_messages::window::database_updates(),
-            Self::ScanEngine => translated_messages::window::scan_engine(),
-            Self::OnAccessScanning => translated_messages::window::access_scanning(),
-            Self::ScheduledScans => translated_messages::window::scheduled_scans_page(),
-            Self::ManualScan => translated_messages::window::manual_scan(),
-            Self::RemovableDrives => translated_messages::window::removable_drives(),
-            Self::Detections => translated_messages::window::detections_label(),
-            Self::Quarantine => translated_messages::window::quarantine_label(),
-            Self::TrustedDetections => translated_messages::window::trusted_detections(),
-            Self::SentSamples => translated_messages::window::sent_samples(),
+            Self::SignatureSources => {
+                translated_messages::window::signature_sources(message_catalog)
+            }
+            Self::DatabaseUpdates => translated_messages::window::database_updates(message_catalog),
+            Self::ScanEngine => translated_messages::window::scan_engine(message_catalog),
+            Self::OnAccessScanning => translated_messages::window::access_scanning(message_catalog),
+            Self::ScheduledScans => {
+                translated_messages::window::scheduled_scans_page(message_catalog)
+            }
+            Self::ManualScan => translated_messages::window::manual_scan(message_catalog),
+            Self::RemovableDrives => translated_messages::window::removable_drives(message_catalog),
+            Self::Detections => translated_messages::window::detections_label(message_catalog),
+            Self::Quarantine => translated_messages::window::quarantine_label(message_catalog),
+            Self::TrustedDetections => {
+                translated_messages::window::trusted_detections(message_catalog)
+            }
+            Self::SentSamples => translated_messages::window::sent_samples(message_catalog),
         }
     }
 

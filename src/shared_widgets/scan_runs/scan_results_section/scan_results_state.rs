@@ -6,6 +6,7 @@ use crate::{
         scanner_output_parser::{DetectedThreat, displayed_threat_name, sanitize_scanner_line},
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,30 +54,40 @@ impl ScanResultsView {
         }
     }
 
-    pub fn headline_text(&self) -> String {
+    pub fn headline_text(&self, message_catalog: &MessageCatalog) -> String {
         match self.results_status {
             ScanResultsStatus::ThreatsDetected if !self.detected_threats.is_empty() => {
-                threats_found_text(self.detected_threats.len())
+                threats_found_text(message_catalog, self.detected_threats.len())
             }
-            other_status => status_title(other_status),
+            other_status => status_title(message_catalog, other_status),
         }
     }
 
-    pub fn summary_text(&self) -> String {
+    pub fn summary_text(&self, message_catalog: &MessageCatalog) -> String {
         let scanned_text = if self.inspected_file_count < self.planned_file_count {
             translated_messages::widgets::done_total_file_scanned(
+                message_catalog,
                 self.planned_file_count,
                 self.inspected_file_count,
             )
         } else {
-            translated_messages::widgets::count_file_scanned_results(self.inspected_file_count)
+            translated_messages::widgets::count_file_scanned_results(
+                message_catalog,
+                self.inspected_file_count,
+            )
         };
         let excluded_text = (self.excluded_entry_count > 0).then(|| {
-            translated_messages::widgets::count_entry_skipped_exclusions(self.excluded_entry_count)
+            translated_messages::widgets::count_entry_skipped_exclusions(
+                message_catalog,
+                self.excluded_entry_count,
+            )
         });
         std::iter::once(scanned_text)
             .chain(excluded_text)
-            .chain(std::iter::once(elapsed_duration_text(self.elapsed_time)))
+            .chain(std::iter::once(elapsed_duration_text(
+                message_catalog,
+                self.elapsed_time,
+            )))
             .collect::<Vec<_>>()
             .join(" · ")
     }
@@ -88,18 +99,20 @@ impl ScanResultsView {
     }
 }
 
-pub fn status_title(results_status: ScanResultsStatus) -> String {
+pub fn status_title(message_catalog: &MessageCatalog, results_status: ScanResultsStatus) -> String {
     match results_status {
         ScanResultsStatus::ThreatsDetected => {
-            translated_messages::widgets::threats_detected_status()
+            translated_messages::widgets::threats_detected_status(message_catalog)
         }
         ScanResultsStatus::NoThreatsDetected => {
-            translated_messages::widgets::no_threats_detected_status()
+            translated_messages::widgets::no_threats_detected_status(message_catalog)
         }
         ScanResultsStatus::FinishedWithProblems => {
-            translated_messages::widgets::finished_problems_status()
+            translated_messages::widgets::finished_problems_status(message_catalog)
         }
-        ScanResultsStatus::ScanCancelled => translated_messages::widgets::scan_cancelled_status(),
+        ScanResultsStatus::ScanCancelled => {
+            translated_messages::widgets::scan_cancelled_status(message_catalog)
+        }
     }
 }
 
@@ -122,31 +135,34 @@ pub fn status_icon(results_status: ScanResultsStatus) -> &'static str {
     }
 }
 
-fn threats_found_text(threat_count: usize) -> String {
-    translated_messages::widgets::count_threat_found_results(threat_count)
+fn threats_found_text(message_catalog: &MessageCatalog, threat_count: usize) -> String {
+    translated_messages::widgets::count_threat_found_results(message_catalog, threat_count)
 }
 
-pub fn format_scan_report(results_view: &ScanResultsView) -> String {
+pub fn format_scan_report(
+    message_catalog: &MessageCatalog,
+    results_view: &ScanResultsView,
+) -> String {
     let statistics_lines = [
-        status_title(results_view.results_status),
+        status_title(message_catalog, results_view.results_status),
         format!(
             "{}: {}",
-            translated_messages::widgets::files_scanned(),
+            translated_messages::widgets::files_scanned(message_catalog),
             results_view.inspected_file_count
         ),
         format!(
             "{}: {}",
-            translated_messages::widgets::files_planned(),
+            translated_messages::widgets::files_planned(message_catalog),
             results_view.planned_file_count
         ),
         format!(
             "{}: {}",
-            translated_messages::widgets::directories_label(),
+            translated_messages::widgets::directories_label(message_catalog),
             results_view.scanned_directory_count
         ),
         format!(
             "{}: {}",
-            translated_messages::widgets::threats_found(),
+            translated_messages::widgets::threats_found(message_catalog),
             results_view.detected_threats.len()
         ),
     ];
@@ -154,7 +170,7 @@ pub fn format_scan_report(results_view: &ScanResultsView) -> String {
         format!(
             "{}: {}",
             sanitize_scanner_line(&detected_threat.file_path.to_string_lossy()),
-            displayed_threat_name(&detected_threat.threat_identity)
+            displayed_threat_name(message_catalog, &detected_threat.threat_identity)
         )
     });
     let problem_sections = results_view.problem_path_groups.iter().map(|path_group| {
@@ -186,11 +202,20 @@ pub fn format_scan_report(results_view: &ScanResultsView) -> String {
     formatted_report
 }
 
-pub fn fingerprint_failure_text(fingerprint_failure: &std::io::Error) -> String {
+pub fn fingerprint_failure_text(
+    message_catalog: &MessageCatalog,
+    fingerprint_failure: &std::io::Error,
+) -> String {
     match fingerprint_failure.kind() {
-        std::io::ErrorKind::NotFound => translated_messages::widgets::file_no_longer_quarantine(),
-        std::io::ErrorKind::PermissionDenied => translated_messages::widgets::permission_denied(),
-        _other_kind => translated_messages::widgets::file_not_read_scan(fingerprint_failure),
+        std::io::ErrorKind::NotFound => {
+            translated_messages::widgets::file_no_longer_quarantine(message_catalog)
+        }
+        std::io::ErrorKind::PermissionDenied => {
+            translated_messages::widgets::permission_denied(message_catalog)
+        }
+        _other_kind => {
+            translated_messages::widgets::file_not_read_scan(message_catalog, fingerprint_failure)
+        }
     }
 }
 
@@ -227,7 +252,8 @@ mod scan_results_state_tests {
 
     #[test]
     fn the_report_lists_counts_threats_and_skipped_paths() {
-        let formatted_report = format_scan_report(&results_with_threat());
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let formatted_report = format_scan_report(message_catalog, &results_with_threat());
         assert!(formatted_report.contains("Files scanned: 3"));
         assert!(formatted_report.contains("Directories: 2"));
         assert!(formatted_report.contains("/scan/bad.txt: Eicar-Test-Signature"));
@@ -237,6 +263,7 @@ mod scan_results_state_tests {
 
     #[test]
     fn the_report_removes_terminal_control_sequences_from_paths() {
-        assert!(!format_scan_report(&results_with_threat()).contains('\u{1b}'));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        assert!(!format_scan_report(message_catalog, &results_with_threat()).contains('\u{1b}'));
     }
 }

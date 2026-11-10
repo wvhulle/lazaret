@@ -50,7 +50,6 @@ let
     ];
   };
 
-
   commonArgs = {
     inherit src;
     pname = "lazaret";
@@ -241,7 +240,6 @@ let
         cargo-machete
         touch "$out"
       '';
-
 
   documentationLinks =
     pkgs.runCommand "lazaret-documentation-links"

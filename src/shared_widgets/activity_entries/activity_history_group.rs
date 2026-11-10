@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, adw,
     adw::prelude::*, gtk, prelude::FactoryVecDeque,
@@ -19,10 +21,12 @@ use crate::{
         database_migration_failure_text::describe_history_failure,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct ActivityHistoryGroupInit {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub activity_history: ActivityHistory,
     pub history_filter: ActivityHistoryFilter,
     pub group_title: String,
@@ -37,7 +41,8 @@ enum TranscriptDialogView {
 }
 
 pub struct ActivityHistoryGroup {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     activity_history: ActivityHistory,
     history_filter: ActivityHistoryFilter,
     history_view: FilteredHistoryView,
@@ -56,10 +61,13 @@ pub enum ActivityHistoryGroupCommand {
     HistoryLoaded(Result<Vec<ActivityEntryRecord>, ActivityHistoryFailure>),
 }
 
-fn history_failure_text(history_view: &FilteredHistoryView) -> String {
+fn history_failure_text(
+    message_catalog: &MessageCatalog,
+    history_view: &FilteredHistoryView,
+) -> String {
     match history_view {
         FilteredHistoryView::HistoryLoadFailed(load_failure) => {
-            describe_history_failure(load_failure)
+            describe_history_failure(message_catalog, load_failure)
         }
         FilteredHistoryView::HistoryLoading | FilteredHistoryView::HistoryLoaded(_) => {
             String::new()
@@ -76,14 +84,16 @@ impl ActivityHistoryGroup {
     }
 
     fn open_transcript(&mut self, row_position: usize, root: &adw::PreferencesGroup) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let Some(activity_entry) = self.history_view.listed_entries().get(row_position) else {
             return;
         };
         let transcript_dialog = ActivityTranscriptDialog::builder()
             .launch(ActivityTranscriptDialogInit {
+                message_catalog: Rc::clone(&message_catalog),
                 activity_entry: activity_entry.clone(),
-                moment_formatters,
+                moment_formatters: Rc::clone(&moment_formatters),
             })
             .detach();
         transcript_dialog.widget().present(Some(root));
@@ -116,16 +126,16 @@ impl Component for ActivityHistoryGroup {
                 adw::ActionRow {
                     set_use_markup: false,
                     set_activatable: false,
-                    set_title: &translated_messages::widgets::scan_history_cannot_title(),
+                    set_title: &translated_messages::widgets::scan_history_cannot_title(&model.message_catalog),
                     set_subtitle_lines: 0,
                     #[watch]
-                    set_subtitle: &history_failure_text(&model.history_view),
+                    set_subtitle: &history_failure_text(&model.message_catalog, &model.history_view),
                     add_prefix = &gtk::Image {
                         set_icon_name: Some("dialog-error-symbolic"),
                         add_css_class: "error",
                     },
                     add_suffix = &gtk::Button {
-                        set_label: &translated_messages::widgets::retry_label(),
+                        set_label: &translated_messages::widgets::retry_label(&model.message_catalog),
                         set_valign: gtk::Align::Center,
                         connect_clicked => ActivityHistoryGroupInput::ReloadRequested,
                     },
@@ -152,8 +162,10 @@ impl Component for ActivityHistoryGroup {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let message_catalog = group_init.message_catalog;
         let moment_formatters = group_init.moment_formatters;
         let model = Self {
+            message_catalog: Rc::clone(&message_catalog),
             moment_formatters,
             activity_history: group_init.activity_history.clone(),
             history_filter: group_init.history_filter,
@@ -189,7 +201,8 @@ impl Component for ActivityHistoryGroup {
         _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         match group_command {
             ActivityHistoryGroupCommand::HistoryLoaded(load_outcome) => {
                 log_failed_outcome("loading the scan history failed", &load_outcome);
@@ -203,8 +216,9 @@ impl Component for ActivityHistoryGroup {
                     .cloned()
                     .for_each(|activity_entry| {
                         history_guard.push_back(ActivityEntryRowInit {
+                            message_catalog: Rc::clone(&message_catalog),
                             activity_entry,
-                            moment_formatters,
+                            moment_formatters: Rc::clone(&moment_formatters),
                         });
                     });
             }

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
@@ -6,34 +8,41 @@ use crate::{
         desktop::locale_formatting::MomentFormatters,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 pub struct SystemChangeRow {
-    pub moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     audit_entry: AdminAuditEntry,
 }
 
 impl SystemChangeRow {
     fn row_subtitle(&self) -> String {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let recorded_time_text = moment_formatters.exact_moment_text(self.audit_entry.recorded_at);
-        let outcome_text = self.audit_entry.audited_outcome.described();
+        let outcome_text = self.audit_entry.audited_outcome.described(&message_catalog);
         match self.audit_entry.requester {
             Requester::KnownUser { user_id } => translated_messages::widgets::known_user(
+                &message_catalog,
                 &recorded_time_text,
                 &outcome_text,
                 user_id,
             ),
-            Requester::UnknownUser => {
-                translated_messages::widgets::unknown_user(&recorded_time_text, &outcome_text)
-            }
+            Requester::UnknownUser => translated_messages::widgets::unknown_user(
+                &message_catalog,
+                &recorded_time_text,
+                &outcome_text,
+            ),
         }
     }
 }
 
 pub struct SystemChangeRowInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub audit_entry: AdminAuditEntry,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::factory(pub)]
@@ -53,7 +62,7 @@ impl FactoryComponent for SystemChangeRow {
 
             add_prefix = &gtk::Image {
                 set_icon_name: Some("dialog-warning-symbolic"),
-                set_tooltip_text: Some(&translated_messages::widgets::change_lowered_protection_tooltip()),
+                set_tooltip_text: Some(&translated_messages::widgets::change_lowered_protection_tooltip(&self.message_catalog)),
                 add_css_class: "warning",
                 set_visible: self.audit_entry.lowered_protection(),
             },
@@ -62,6 +71,7 @@ impl FactoryComponent for SystemChangeRow {
 
     fn init_model(
         SystemChangeRowInit {
+            message_catalog,
             audit_entry,
             moment_formatters,
         }: Self::Init,
@@ -69,6 +79,7 @@ impl FactoryComponent for SystemChangeRow {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            message_catalog,
             audit_entry,
             moment_formatters,
         }

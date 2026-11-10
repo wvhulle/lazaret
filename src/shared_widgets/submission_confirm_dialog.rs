@@ -12,6 +12,7 @@ use crate::{
         AlertChoice, add_alert_choice, add_dismissing_choice, alert_choice, deliver_local_outcome,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,6 +75,7 @@ fn sent_items_text(sent_items: &[String]) -> String {
 }
 
 fn assembled_body(
+    message_catalog: &MessageCatalog,
     file_line: String,
     sent_items: &[String],
     audience_text: String,
@@ -82,82 +84,97 @@ fn assembled_body(
     [
         file_line,
         shown_path.to_owned(),
-        translated_messages::widgets::what_is_sent_label(),
+        translated_messages::widgets::what_is_sent_label(message_catalog),
         sent_items_text(sent_items),
         audience_text,
     ]
     .join("\n\n")
 }
 
-fn clamav_audience_text() -> String {
-    translated_messages::widgets::clamav_audience()
+fn clamav_audience_text(message_catalog: &MessageCatalog) -> String {
+    translated_messages::widgets::clamav_audience(message_catalog)
 }
 
-pub fn confirmation_text(submission_proposal: &SubmissionProposal) -> ConfirmationText {
+pub fn confirmation_text(
+    message_catalog: &MessageCatalog,
+    submission_proposal: &SubmissionProposal,
+) -> ConfirmationText {
     match submission_proposal {
         SubmissionProposal::ClamavReportProposed(report_proposal) => {
             let (heading, mut sent_items) = match &report_proposal.report_kind {
                 ClamavReportKind::FalsePositive { detection_name } => (
-                    translated_messages::widgets::report_false_positive_clamav(),
+                    translated_messages::widgets::report_false_positive_clamav(message_catalog),
                     vec![
-                        translated_messages::widgets::file_content(),
-                        translated_messages::widgets::detection_name(detection_name),
+                        translated_messages::widgets::file_content(message_catalog),
+                        translated_messages::widgets::detection_name(
+                            message_catalog,
+                            detection_name,
+                        ),
                     ],
                 ),
                 ClamavReportKind::MissedMalware => (
-                    translated_messages::widgets::report_missed_malware_clamav(),
-                    vec![translated_messages::widgets::file_content()],
+                    translated_messages::widgets::report_missed_malware_clamav(message_catalog),
+                    vec![translated_messages::widgets::file_content(message_catalog)],
                 ),
             };
-            sent_items.push(translated_messages::widgets::name_email_address_talos());
+            sent_items.push(translated_messages::widgets::name_email_address_talos(
+                message_catalog,
+            ));
             ConfirmationText {
                 heading,
                 body_text: assembled_body(
-                    translated_messages::widgets::lazaret_sends_file_clamav(),
+                    message_catalog,
+                    translated_messages::widgets::lazaret_sends_file_clamav(message_catalog),
                     &sent_items,
-                    clamav_audience_text(),
+                    clamav_audience_text(message_catalog),
                     &report_proposal.shown_path,
                 ),
-                confirm_label: translated_messages::widgets::send_report_button(),
+                confirm_label: translated_messages::widgets::send_report_button(message_catalog),
             }
         }
         SubmissionProposal::SampleUploadProposed(upload_proposal) => {
-            sample_upload_text(upload_proposal)
+            sample_upload_text(message_catalog, upload_proposal)
         }
     }
 }
 
-fn sample_upload_text(upload_proposal: &SampleUploadProposal) -> ConfirmationText {
-    let hashed_content = translated_messages::widgets::file_content_named_sha();
+fn sample_upload_text(
+    message_catalog: &MessageCatalog,
+    upload_proposal: &SampleUploadProposal,
+) -> ConfirmationText {
+    let hashed_content = translated_messages::widgets::file_content_named_sha(message_catalog);
     match &upload_proposal.upload_service {
         UploadService::MalwareBazaarUpload { signature_name } => ConfirmationText {
-            heading: translated_messages::widgets::upload_malwarebazaar_heading(),
+            heading: translated_messages::widgets::upload_malwarebazaar_heading(message_catalog),
             body_text: assembled_body(
-                translated_messages::widgets::lazaret_uploads_file_malwarebazaar(),
+                message_catalog,
+                translated_messages::widgets::lazaret_uploads_file_malwarebazaar(message_catalog),
                 &[
                     hashed_content,
-                    translated_messages::widgets::tag_clamav_detection(bazaar_signature_tag(
-                        signature_name,
-                    )),
-                    translated_messages::widgets::abuse_ch_key_sample(),
+                    translated_messages::widgets::tag_clamav_detection(
+                        message_catalog,
+                        bazaar_signature_tag(signature_name),
+                    ),
+                    translated_messages::widgets::abuse_ch_key_sample(message_catalog),
                 ],
-                translated_messages::widgets::malwarebazaar_public_anyone_download(),
+                translated_messages::widgets::malwarebazaar_public_anyone_download(message_catalog),
                 &upload_proposal.shown_path,
             ),
-            confirm_label: translated_messages::widgets::upload_publicly_button(),
+            confirm_label: translated_messages::widgets::upload_publicly_button(message_catalog),
         },
         UploadService::VirusTotalUpload => ConfirmationText {
-            heading: translated_messages::widgets::upload_virustotal_heading(),
+            heading: translated_messages::widgets::upload_virustotal_heading(message_catalog),
             body_text: assembled_body(
-                translated_messages::widgets::lazaret_uploads_file_virustotal(),
+                message_catalog,
+                translated_messages::widgets::lazaret_uploads_file_virustotal(message_catalog),
                 &[
                     hashed_content,
-                    translated_messages::widgets::virustotal_key_links_upload(),
+                    translated_messages::widgets::virustotal_key_links_upload(message_catalog),
                 ],
-                translated_messages::widgets::virustotal_shares_uploaded_files(),
+                translated_messages::widgets::virustotal_shares_uploaded_files(message_catalog),
                 &upload_proposal.shown_path,
             ),
-            confirm_label: translated_messages::widgets::upload_button(),
+            confirm_label: translated_messages::widgets::upload_button(message_catalog),
         },
     }
 }
@@ -169,12 +186,15 @@ fn contact_from_rows(name_row: &adw::EntryRow, email_row: &adw::EntryRow) -> Rep
     }
 }
 
-fn confirmation_dialog(confirmation: &ConfirmationText) -> adw::AlertDialog {
+fn confirmation_dialog(
+    message_catalog: &MessageCatalog,
+    confirmation: &ConfirmationText,
+) -> adw::AlertDialog {
     let submission_dialog =
         adw::AlertDialog::new(Some(&confirmation.heading), Some(&confirmation.body_text));
     add_dismissing_choice::<SubmissionDialogChoice>(
         &submission_dialog,
-        &translated_messages::widgets::cancel_submission(),
+        &translated_messages::widgets::cancel_submission(message_catalog),
     );
     add_alert_choice(
         &submission_dialog,
@@ -191,19 +211,26 @@ fn confirmation_dialog(confirmation: &ConfirmationText) -> adw::AlertDialog {
 }
 
 pub fn present_clamav_report_confirmation<Message: 'static>(
+    message_catalog: &MessageCatalog,
     parent_widget: &impl IsA<gtk::Widget>,
     report_proposal: ClamavReportProposal,
     message_sender: Sender<Message>,
     confirmed_message: fn(ClamavReportRequest) -> Message,
 ) {
-    let report_dialog = confirmation_dialog(&confirmation_text(
-        &SubmissionProposal::ClamavReportProposed(report_proposal.clone()),
-    ));
+    let report_dialog = confirmation_dialog(
+        message_catalog,
+        &confirmation_text(
+            message_catalog,
+            &SubmissionProposal::ClamavReportProposed(report_proposal.clone()),
+        ),
+    );
     let name_row = adw::EntryRow::builder()
-        .title(translated_messages::widgets::name_title())
+        .title(translated_messages::widgets::name_title(message_catalog))
         .build();
     let email_row = adw::EntryRow::builder()
-        .title(translated_messages::widgets::email_address_title())
+        .title(translated_messages::widgets::email_address_title(
+            message_catalog,
+        ))
         .input_purpose(gtk::InputPurpose::Email)
         .build();
     let contact_list = gtk::ListBox::builder()
@@ -243,14 +270,19 @@ pub fn present_clamav_report_confirmation<Message: 'static>(
 }
 
 pub fn present_sample_upload_confirmation<Message: 'static>(
+    message_catalog: &MessageCatalog,
     parent_widget: &impl IsA<gtk::Widget>,
     upload_proposal: SampleUploadProposal,
     message_sender: Sender<Message>,
     confirmed_message: fn(SampleUploadProposal) -> Message,
 ) {
-    let upload_dialog = confirmation_dialog(&confirmation_text(
-        &SubmissionProposal::SampleUploadProposed(upload_proposal.clone()),
-    ));
+    let upload_dialog = confirmation_dialog(
+        message_catalog,
+        &confirmation_text(
+            message_catalog,
+            &SubmissionProposal::SampleUploadProposed(upload_proposal.clone()),
+        ),
+    );
     upload_dialog.set_response_appearance(
         SubmissionDialogChoice::SendChosen.response_id(),
         adw::ResponseAppearance::Destructive,
@@ -283,10 +315,13 @@ mod submission_confirm_dialog_tests {
 
     #[test]
     fn a_clamav_report_names_the_file_the_service_and_its_privacy() {
-        let false_positive_text =
-            confirmation_text(&clamav_proposal(ClamavReportKind::FalsePositive {
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let false_positive_text = confirmation_text(
+            message_catalog,
+            &clamav_proposal(ClamavReportKind::FalsePositive {
                 detection_name: "Win.Trojan.Agent-1".to_owned(),
-            }));
+            }),
+        );
         assert!(false_positive_text.heading.contains("ClamAV"));
         assert!(
             false_positive_text
@@ -310,9 +345,13 @@ mod submission_confirm_dialog_tests {
 
     #[test]
     fn a_malware_bazaar_upload_says_the_sample_becomes_public() {
-        let bazaar_text = confirmation_text(&upload_proposal(UploadService::MalwareBazaarUpload {
-            signature_name: "Win.Test.EICAR_HDB-1".to_owned(),
-        }));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let bazaar_text = confirmation_text(
+            message_catalog,
+            &upload_proposal(UploadService::MalwareBazaarUpload {
+                signature_name: "Win.Test.EICAR_HDB-1".to_owned(),
+            }),
+        );
         assert!(bazaar_text.heading.contains("MalwareBazaar"));
         assert!(
             bazaar_text
@@ -327,7 +366,11 @@ mod submission_confirm_dialog_tests {
 
     #[test]
     fn a_virustotal_upload_says_paying_customers_get_the_file() {
-        let virustotal_text = confirmation_text(&upload_proposal(UploadService::VirusTotalUpload));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let virustotal_text = confirmation_text(
+            message_catalog,
+            &upload_proposal(UploadService::VirusTotalUpload),
+        );
         assert!(virustotal_text.heading.contains("VirusTotal"));
         assert!(virustotal_text.body_text.contains("invoice.exe"));
         assert!(virustotal_text.body_text.contains("paying customers"));
@@ -336,7 +379,11 @@ mod submission_confirm_dialog_tests {
 
     #[test]
     fn a_missed_malware_report_sends_no_detection_name() {
-        let missed_text = confirmation_text(&clamav_proposal(ClamavReportKind::MissedMalware));
+        let message_catalog = &crate::translated_messages::english_catalog();
+        let missed_text = confirmation_text(
+            message_catalog,
+            &clamav_proposal(ClamavReportKind::MissedMalware),
+        );
         assert!(missed_text.heading.contains("Missed Malware"));
         assert!(!missed_text.body_text.contains("detection name"));
         assert!(missed_text.body_text.contains("invoice.exe"));

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk, prelude::FactoryVecDeque,
 };
@@ -37,6 +39,7 @@ use crate::{
         trust_confirmation_dialog::present_trust_confirmation,
     },
     translated_messages,
+    translated_messages::MessageCatalog,
 };
 
 const AUDIT_ENTRY_LIMIT: usize = 500;
@@ -106,19 +109,25 @@ pub async fn load_trusted_detections(sandbox_kind: SandboxKind) -> TrustedDetect
     }
 }
 
-pub fn trust_list_failure_text(read_failure: &TrustListReadFailure) -> String {
+pub fn trust_list_failure_text(
+    message_catalog: &MessageCatalog,
+    read_failure: &TrustListReadFailure,
+) -> String {
     match read_failure {
-        TrustListReadFailure::AccessDenied => translated_messages::findings::access_denied(),
+        TrustListReadFailure::AccessDenied => {
+            translated_messages::findings::access_denied(message_catalog)
+        }
         TrustListReadFailure::OtherReadFailure { failure_kind } => {
-            translated_messages::findings::other_read_failure(failure_kind)
+            translated_messages::findings::other_read_failure(message_catalog, failure_kind)
         }
         TrustListReadFailure::ReadingTaskAborted => {
-            translated_messages::findings::reading_task_aborted()
+            translated_messages::findings::reading_task_aborted(message_catalog)
         }
     }
 }
 
 fn added_text(
+    message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
     audit_history: &AuditHistoryReading,
     adding_action: &AuditedAction,
@@ -127,26 +136,30 @@ fn added_text(
         AuditHistoryReading::EntriesRead(audit_entries) => audit_entries,
         AuditHistoryReading::JournalUnreadable(read_failure) => {
             return translated_messages::findings::journal_unreadable_added(
-                unit_journal_failure_text(*read_failure),
+                message_catalog,
+                unit_journal_failure_text(message_catalog, *read_failure),
             );
         }
     };
     match latest_applied_entry(audit_entries, adding_action) {
         Some(audit_entry) => match audit_entry.requester {
             Requester::KnownUser { user_id } => translated_messages::findings::known_user(
+                message_catalog,
                 moment_formatters.exact_moment_text(audit_entry.recorded_at),
                 user_id,
             ),
             Requester::UnknownUser => translated_messages::findings::unknown_user(
+                message_catalog,
                 moment_formatters.exact_moment_text(audit_entry.recorded_at),
             ),
         },
-        None => translated_messages::findings::no_record_added_system(),
+        None => translated_messages::findings::no_record_added_system(message_catalog),
     }
 }
 
 pub struct TrustedDetectionsSection {
-    moment_formatters: &'static MomentFormatters,
+    pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     sandbox_kind: SandboxKind,
     trusted_detections_state: TrustedDetectionsState,
     user_trust_rows: FactoryVecDeque<TrustListRow>,
@@ -193,16 +206,19 @@ fn trust_list_rows(
 }
 
 fn trusted_file_row(
+    message_catalog: &Rc<MessageCatalog>,
     moment_formatters: &MomentFormatters,
     trusted_file: &TrustedFileEntry,
     audit_history: &AuditHistoryReading,
 ) -> TrustListRow {
     TrustListRow {
+        message_catalog: Rc::clone(message_catalog),
         row_title: trusted_file.sha256_hex.clone(),
         row_subtitle: format!(
             "{} · {}",
             byte_size_text(trusted_file.file_size),
             added_text(
+                message_catalog,
                 moment_formatters,
                 audit_history,
                 &AuditedAction::TrustFile {
@@ -222,12 +238,14 @@ fn trusted_file_row(
 }
 
 fn user_trusted_file_row(
+    message_catalog: &Rc<MessageCatalog>,
     sandbox_kind: SandboxKind,
     sha256_hex: &str,
     byte_size: u64,
 ) -> TrustListRow {
     let file_size = bytesize::ByteSize::b(byte_size);
     TrustListRow {
+        message_catalog: Rc::clone(message_catalog),
         row_title: sha256_hex.to_owned(),
         row_subtitle: byte_size_text(file_size),
         shows_hash: true,
@@ -244,7 +262,7 @@ fn user_trusted_file_row(
                         sha256_hex: sha256_hex.to_owned(),
                         file_size,
                     },
-                    shown_path: translated_messages::findings::file_trusted_by_you(),
+                    shown_path: translated_messages::findings::file_trusted_by_you(message_catalog),
                     trust_scope: TrustScope::EveryUser,
                 })
             }
@@ -253,8 +271,12 @@ fn user_trusted_file_row(
     }
 }
 
-fn user_ignored_signature_row(signature_name: &str) -> TrustListRow {
+fn user_ignored_signature_row(
+    message_catalog: &Rc<MessageCatalog>,
+    signature_name: &str,
+) -> TrustListRow {
     TrustListRow {
+        message_catalog: Rc::clone(message_catalog),
         row_title: signature_name.to_owned(),
         row_subtitle: String::new(),
         shows_hash: false,
@@ -268,27 +290,38 @@ fn user_ignored_signature_row(signature_name: &str) -> TrustListRow {
     }
 }
 
-fn user_trust_rows(sandbox_kind: SandboxKind, user_trust: &UserTrustReading) -> Vec<TrustListRow> {
+fn user_trust_rows(
+    message_catalog: &Rc<MessageCatalog>,
+    sandbox_kind: SandboxKind,
+    user_trust: &UserTrustReading,
+) -> Vec<TrustListRow> {
     match user_trust {
         UserTrustReading::UserTrustRead(user_trust_list) => rows_or_empty_notice(
+            message_catalog,
             user_trust_list
                 .trusted_content_sizes
                 .iter()
                 .map(|(sha256_hex, byte_size)| {
-                    user_trusted_file_row(sandbox_kind, sha256_hex, *byte_size)
+                    user_trusted_file_row(message_catalog, sandbox_kind, sha256_hex, *byte_size)
                 })
                 .chain(
                     user_trust_list
                         .ignored_signatures
                         .iter()
                         .map(String::as_str)
-                        .map(user_ignored_signature_row),
+                        .map(|signature_name| {
+                            user_ignored_signature_row(message_catalog, signature_name)
+                        }),
                 )
                 .collect(),
-            translated_messages::findings::nothing_trusted_by_you(),
+            translated_messages::findings::nothing_trusted_by_you(message_catalog),
         ),
         UserTrustReading::UserTrustUnreadable { failure_text } => vec![TrustListRow {
-            row_title: translated_messages::findings::trust_by_you_unreadable(failure_text),
+            message_catalog: Rc::clone(message_catalog),
+            row_title: translated_messages::findings::trust_by_you_unreadable(
+                message_catalog,
+                failure_text,
+            ),
             row_subtitle: String::new(),
             shows_hash: false,
             needs_attention: true,
@@ -300,13 +333,16 @@ fn user_trust_rows(sandbox_kind: SandboxKind, user_trust: &UserTrustReading) -> 
 }
 
 fn ignored_signature_row(
+    message_catalog: &Rc<MessageCatalog>,
     moment_formatters: &MomentFormatters,
     signature_name: &str,
     audit_history: &AuditHistoryReading,
 ) -> TrustListRow {
     TrustListRow {
+        message_catalog: Rc::clone(message_catalog),
         row_title: signature_name.to_owned(),
         row_subtitle: added_text(
+            message_catalog,
             moment_formatters,
             audit_history,
             &AuditedAction::IgnoreSignature {
@@ -324,16 +360,21 @@ fn ignored_signature_row(
     }
 }
 
-fn foreign_allowlist_row(foreign_allowlist: &ForeignAllowlistFile) -> TrustListRow {
+fn foreign_allowlist_row(
+    message_catalog: &Rc<MessageCatalog>,
+    foreign_allowlist: &ForeignAllowlistFile,
+) -> TrustListRow {
     TrustListRow {
+        message_catalog: Rc::clone(message_catalog),
         row_title: foreign_allowlist.file_name.clone(),
         row_subtitle: match &foreign_allowlist.allowlist_entries {
             AllowlistEntries::EntriesCounted { entry_count } => {
-                translated_messages::findings::count_entry_not_added(*entry_count)
+                translated_messages::findings::count_entry_not_added(message_catalog, *entry_count)
             }
             AllowlistEntries::FileUnreadable(read_failure) => {
                 translated_messages::findings::entries_cannot_counted_reason(
-                    trust_list_failure_text(read_failure),
+                    message_catalog,
+                    trust_list_failure_text(message_catalog, read_failure),
                 )
             }
         },
@@ -345,10 +386,15 @@ fn foreign_allowlist_row(foreign_allowlist: &ForeignAllowlistFile) -> TrustListR
     }
 }
 
-fn unreadable_row(row_title: String, read_failure: &TrustListReadFailure) -> TrustListRow {
+fn unreadable_row(
+    message_catalog: &Rc<MessageCatalog>,
+    row_title: String,
+    read_failure: &TrustListReadFailure,
+) -> TrustListRow {
     TrustListRow {
+        message_catalog: Rc::clone(message_catalog),
         row_title,
-        row_subtitle: trust_list_failure_text(read_failure),
+        row_subtitle: trust_list_failure_text(message_catalog, read_failure),
         shows_hash: false,
         needs_attention: true,
         dimmed: false,
@@ -357,25 +403,33 @@ fn unreadable_row(row_title: String, read_failure: &TrustListReadFailure) -> Tru
     }
 }
 
-fn rows_or_empty_notice(listed_rows: Vec<TrustListRow>, empty_text: String) -> Vec<TrustListRow> {
+fn rows_or_empty_notice(
+    message_catalog: &Rc<MessageCatalog>,
+    listed_rows: Vec<TrustListRow>,
+    empty_text: String,
+) -> Vec<TrustListRow> {
     if listed_rows.is_empty() {
-        vec![TrustListRow::empty_list(empty_text)]
+        vec![TrustListRow::empty_list(message_catalog, empty_text)]
     } else {
         listed_rows
     }
 }
 
 fn lazaret_list_rows<ListEntry>(
+    message_catalog: &Rc<MessageCatalog>,
     list_reading: &LazaretListReading<ListEntry>,
     entry_row: impl Fn(&ListEntry) -> TrustListRow,
     empty_text: String,
 ) -> Vec<TrustListRow> {
     match list_reading {
-        LazaretListReading::ListRead(list_entries) => {
-            rows_or_empty_notice(list_entries.iter().map(entry_row).collect(), empty_text)
-        }
+        LazaretListReading::ListRead(list_entries) => rows_or_empty_notice(
+            message_catalog,
+            list_entries.iter().map(entry_row).collect(),
+            empty_text,
+        ),
         LazaretListReading::ListUnreadable(read_failure) => vec![unreadable_row(
-            translated_messages::findings::list_unreadable(),
+            message_catalog,
+            translated_messages::findings::list_unreadable(message_catalog),
             read_failure,
         )],
     }
@@ -388,43 +442,61 @@ struct TrustListGroupRows {
 }
 
 fn trust_list_group_rows(
-    moment_formatters: &MomentFormatters,
+    message_catalog: &Rc<MessageCatalog>,
+    moment_formatters: &Rc<MomentFormatters>,
     snapshot: &TrustedDetectionsSnapshot,
 ) -> TrustListGroupRows {
     let audit_history = &snapshot.audit_history;
     match &snapshot.trust_list {
         TrustListReading::ListsRead(trust_list) => TrustListGroupRows {
             trusted_file_rows: lazaret_list_rows(
+                message_catalog,
                 &trust_list.trusted_files,
-                |trusted_file| trusted_file_row(moment_formatters, trusted_file, audit_history),
-                translated_messages::findings::no_trusted_files(),
+                |trusted_file| {
+                    trusted_file_row(
+                        message_catalog,
+                        moment_formatters,
+                        trusted_file,
+                        audit_history,
+                    )
+                },
+                translated_messages::findings::no_trusted_files(message_catalog),
             ),
             ignored_signature_rows: lazaret_list_rows(
+                message_catalog,
                 &trust_list.ignored_signatures,
                 |signature_name| {
-                    ignored_signature_row(moment_formatters, signature_name, audit_history)
+                    ignored_signature_row(
+                        message_catalog,
+                        moment_formatters,
+                        signature_name,
+                        audit_history,
+                    )
                 },
-                translated_messages::findings::no_ignored_detections(),
+                translated_messages::findings::no_ignored_detections(message_catalog),
             ),
             foreign_allowlist_rows: trust_list
                 .foreign_allowlists
                 .iter()
-                .map(foreign_allowlist_row)
+                .map(|foreign_allowlist| foreign_allowlist_row(message_catalog, foreign_allowlist))
                 .collect(),
         },
         TrustListReading::FolderMissing => TrustListGroupRows {
             trusted_file_rows: vec![TrustListRow::empty_list(
-                translated_messages::findings::no_trusted_files(),
+                message_catalog,
+                translated_messages::findings::no_trusted_files(message_catalog),
             )],
             ignored_signature_rows: vec![TrustListRow::empty_list(
-                translated_messages::findings::no_ignored_detections(),
+                message_catalog,
+                translated_messages::findings::no_ignored_detections(message_catalog),
             )],
             foreign_allowlist_rows: Vec::new(),
         },
         TrustListReading::FolderUnreadable(read_failure) => {
             let folder_row = || {
                 unreadable_row(
-                    translated_messages::findings::lazaret_cannot_read_signature(),
+                    message_catalog,
+                    translated_messages::findings::lazaret_cannot_read_signature(message_catalog),
                     read_failure,
                 )
             };
@@ -447,16 +519,17 @@ fn replace_rows(shown_rows: &mut FactoryVecDeque<TrustListRow>, listed_rows: Vec
 
 impl TrustedDetectionsSection {
     fn show_snapshot(&mut self, snapshot: TrustedDetectionsSnapshot) {
-        let moment_formatters = self.moment_formatters;
+        let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let sandbox_kind = self.sandbox_kind;
         let TrustListGroupRows {
             trusted_file_rows,
             ignored_signature_rows,
             foreign_allowlist_rows,
-        } = trust_list_group_rows(moment_formatters, &snapshot);
+        } = trust_list_group_rows(&message_catalog, &moment_formatters, &snapshot);
         replace_rows(
             &mut self.user_trust_rows,
-            user_trust_rows(sandbox_kind, &snapshot.user_trust),
+            user_trust_rows(&message_catalog, sandbox_kind, &snapshot.user_trust),
         );
         replace_rows(&mut self.trusted_file_rows, trusted_file_rows);
         replace_rows(&mut self.ignored_signature_rows, ignored_signature_rows);
@@ -474,8 +547,9 @@ impl TrustedDetectionsSection {
 }
 
 pub struct TrustedDetectionsSectionInit {
+    pub message_catalog: Rc<MessageCatalog>,
     pub sandbox_kind: SandboxKind,
-    pub moment_formatters: &'static MomentFormatters,
+    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::component(pub)]
@@ -487,7 +561,7 @@ impl Component for TrustedDetectionsSection {
 
     view! {
         adw::PreferencesGroup {
-            set_title: &translated_messages::findings::trusted_detections_title(),
+            set_title: &translated_messages::findings::trusted_detections_title(&model.message_catalog),
             connect_map => TrustedDetectionsSectionInput::ReloadRequested,
 
             gtk::Box {
@@ -495,29 +569,29 @@ impl Component for TrustedDetectionsSection {
                 set_spacing: 24,
 
                 adw::PreferencesGroup {
-                    set_title: &translated_messages::findings::trusted_by_you_title(),
-                    set_description: Some(&translated_messages::findings::trusted_by_you_description()),
+                    set_title: &translated_messages::findings::trusted_by_you_title(&model.message_catalog),
+                    set_description: Some(&translated_messages::findings::trusted_by_you_description(&model.message_catalog)),
                     #[local_ref]
                     user_trust_list -> gtk::ListBox {},
                 },
 
                 adw::PreferencesGroup {
-                    set_title: &translated_messages::findings::trusted_for_all_users_title(),
-                    set_description: Some(&translated_messages::findings::clamav_never_reports_description()),
+                    set_title: &translated_messages::findings::trusted_for_all_users_title(&model.message_catalog),
+                    set_description: Some(&translated_messages::findings::clamav_never_reports_description(&model.message_catalog)),
                     #[local_ref]
                     trusted_file_list -> gtk::ListBox {},
                 },
 
                 adw::PreferencesGroup {
-                    set_title: &translated_messages::findings::ignored_detections_title(),
-                    set_description: Some(&translated_messages::findings::detection_names_clamav_description()),
+                    set_title: &translated_messages::findings::ignored_detections_title(&model.message_catalog),
+                    set_description: Some(&translated_messages::findings::detection_names_clamav_description(&model.message_catalog)),
                     #[local_ref]
                     ignored_signature_list -> gtk::ListBox {},
                 },
 
                 adw::PreferencesGroup {
-                    set_title: &translated_messages::findings::other_allowlists_title(),
-                    set_description: Some(&translated_messages::findings::allowlist_files_signature_description()),
+                    set_title: &translated_messages::findings::other_allowlists_title(&model.message_catalog),
+                    set_description: Some(&translated_messages::findings::allowlist_files_signature_description(&model.message_catalog)),
                     #[watch]
                     set_visible: model.trusted_detections_state.shows_other_allowlists(),
                     #[local_ref]
@@ -529,6 +603,7 @@ impl Component for TrustedDetectionsSection {
 
     fn init(
         TrustedDetectionsSectionInit {
+            message_catalog,
             sandbox_kind,
             moment_formatters,
         }: Self::Init,
@@ -536,6 +611,7 @@ impl Component for TrustedDetectionsSection {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = Self {
+            message_catalog,
             moment_formatters,
             sandbox_kind,
             trusted_detections_state: TrustedDetectionsState::SnapshotLoading,
@@ -558,6 +634,7 @@ impl Component for TrustedDetectionsSection {
         sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let sandbox_kind = self.sandbox_kind;
         match page_input {
             TrustedDetectionsSectionInput::ReloadRequested => {
@@ -565,6 +642,7 @@ impl Component for TrustedDetectionsSection {
             }
             TrustedDetectionsSectionInput::TrustChangeRequested(trust_choice) => {
                 present_trust_confirmation(
+                    &message_catalog,
                     sandbox_kind,
                     root,
                     trust_choice,
@@ -588,6 +666,7 @@ impl Component for TrustedDetectionsSection {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        let message_catalog = Rc::clone(&self.message_catalog);
         let sandbox_kind = self.sandbox_kind;
         match page_command {
             TrustedDetectionsSectionCommand::SnapshotLoaded(snapshot) => {
@@ -595,7 +674,7 @@ impl Component for TrustedDetectionsSection {
             }
             TrustedDetectionsSectionCommand::TrustChangeFinished(trust_outcome) => {
                 let _page_closed = sender.output(TrustedDetectionsSectionOutput::ToastRequested(
-                    trust_outcome_text(&trust_outcome),
+                    trust_outcome_text(&message_catalog, &trust_outcome),
                 ));
                 let _page_closed = sender.output(TrustedDetectionsSectionOutput::TrustListChanged);
                 Self::reload_snapshot(sandbox_kind, &sender);
@@ -611,11 +690,13 @@ mod trusted_detections_group_tests {
 
     #[test]
     fn an_unreadable_audit_journal_does_not_claim_there_is_no_record() {
+        let message_catalog = &crate::translated_messages::english_catalog();
         let moment_formatters = &english_formatters();
         let ignored_action = AuditedAction::IgnoreSignature {
             signature_name: "Win.Test.EICAR_HDB-1".to_owned(),
         };
         let unreadable_text = added_text(
+            message_catalog,
             moment_formatters,
             &AuditHistoryReading::JournalUnreadable(UnitJournalReadFailure::ReadingTaskInterrupted),
             &ignored_action,
@@ -624,6 +705,7 @@ mod trusted_detections_group_tests {
         assert!(!unreadable_text.contains("No record"));
         assert_eq!(
             added_text(
+                message_catalog,
                 moment_formatters,
                 &AuditHistoryReading::EntriesRead(Vec::new()),
                 &ignored_action
