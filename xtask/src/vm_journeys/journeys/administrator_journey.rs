@@ -9,9 +9,9 @@ use gtk_scene_capture::accessible_widget_lookup::{WidgetRole, WidgetTarget};
 
 use crate::vm_journeys::harness::{
     desktop_environment::{
-        ApplicationPage, ChordKey, KeyInput, answer_password_prompt, dismiss_password_prompt,
-        notifications_mentioning, scan_with_lazaret, send_keys, show_page, take_screenshot,
-        wait_for_lazaret_service, wait_for_notification,
+        ApplicationPage, answer_password_prompt, dismiss_password_prompt, notifications_mentioning,
+        scan_with_lazaret, show_page, take_screenshot, wait_for_lazaret_service,
+        wait_for_notification,
     },
     fixture_corpus::FixtureSample,
     journey_failure::{JourneyFailure, ensure},
@@ -307,12 +307,13 @@ fn max_threads_editor() -> WidgetTarget {
 }
 
 fn edit_max_threads(journey_run: &JourneyRun, new_value: u32) -> Result<(), JourneyFailure> {
-    journey_run.widgets.click_into(&max_threads_editor())?;
-    send_keys(&[
-        KeyInput::ControlChord(ChordKey::SelectAll),
-        KeyInput::TypedText(&new_value.to_string()),
-        KeyInput::Enter,
-    ])?;
+    journey_run
+        .widgets
+        .set_spin_value(&max_threads_editor(), f64::from(new_value))?;
+    journey_run.press(&in_expanded_row(
+        button(widgets::apply_tooltip(&MessageCatalog::source_language())),
+        MAX_THREADS,
+    ))?;
     journey_run
         .await_shown(&WidgetTarget::alert(widgets::change_setting(
             &MessageCatalog::source_language(),

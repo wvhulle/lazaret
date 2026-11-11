@@ -8,6 +8,7 @@ use atspi::{
         component::ComponentProxy,
         editable_text::EditableTextProxy,
         text::TextProxy,
+        value::ValueProxy,
     },
     zbus,
 };
@@ -601,6 +602,30 @@ impl AccessibleTree {
             "focused: {}, text: {shown_text:?}",
             widget_state.contains(State::Focused)
         ))
+    }
+
+    pub async fn assign_spin_value(
+        &self,
+        located_widget: &LocatedWidget,
+        assigned_value: f64,
+    ) -> Result<(), WidgetLookupFailure> {
+        let object_reference = &located_widget.object_reference;
+        let value_proxy = ValueProxy::builder(self.bus_connection())
+            .destination(
+                object_reference
+                    .name()
+                    .cloned()
+                    .ok_or(atspi::AtspiError::MissingName)?,
+            )?
+            .path(object_reference.path().clone())?
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await?;
+        value_proxy
+            .set_current_value(assigned_value)
+            .await
+            .map_err(WidgetLookupFailure::CallFailed)?;
+        Ok(())
     }
 
     pub async fn replace_widget_text(

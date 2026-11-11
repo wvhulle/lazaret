@@ -86,23 +86,6 @@ fn screen_position_of(located_widget: &LocatedWidget) -> ScreenPosition {
     }
 }
 
-fn text_position_of(located_widget: &LocatedWidget) -> ScreenPosition {
-    let widget_bounds = located_widget.widget_bounds;
-    let (_center_horizontal, center_vertical) = widget_bounds.center_point();
-    ScreenPosition {
-        logical_x: (widget_bounds.left_edge + widget_bounds.widget_width / 4)
-            .max(0)
-            .unsigned_abs(),
-        logical_y: center_vertical.max(0).unsigned_abs(),
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum PressMethod {
-    AccessibleActionFirst,
-    PointerClickIntoText,
-}
-
 fn lies_below_screen(located_widget: &LocatedWidget) -> bool {
     let screen_height = i32::try_from(SESSION_SCREEN_SIZE.logical_height).unwrap_or(i32::MAX);
     let (_center_horizontal, center_vertical) = located_widget.widget_bounds.center_point();
@@ -239,26 +222,9 @@ impl SessionWidgets {
         widget_target: &WidgetTarget,
         timeout: Duration,
     ) -> Result<(), JourneyFailure> {
-        self.press_by(widget_target, timeout, PressMethod::AccessibleActionFirst)
-    }
-
-    pub fn click_into(&self, widget_target: &WidgetTarget) -> Result<(), JourneyFailure> {
-        self.press_by(
-            widget_target,
-            DEFAULT_WIDGET_TIMEOUT,
-            PressMethod::PointerClickIntoText,
-        )
-    }
-
-    fn press_by(
-        &self,
-        widget_target: &WidgetTarget,
-        timeout: Duration,
-        press_method: PressMethod,
-    ) -> Result<(), JourneyFailure> {
         let deadline = Instant::now() + timeout;
         loop {
-            match self.press_attempt(widget_target, timeout, press_method) {
+            match self.press_attempt(widget_target, timeout) {
                 Err(JourneyFailure::WidgetUnavailable(_vanished_widget))
                     if Instant::now() < deadline =>
                 {
@@ -283,7 +249,6 @@ impl SessionWidgets {
         &self,
         widget_target: &WidgetTarget,
         timeout: Duration,
-        press_method: PressMethod,
     ) -> Result<(), JourneyFailure> {
         let mut pointer_input =
             VirtualPointerInput::connect(&session_wayland_socket(), SESSION_SCREEN_SIZE)?;
@@ -303,9 +268,6 @@ impl SessionWidgets {
             if !scroll_moved_widget {
                 break;
             }
-        }
-        if press_method == PressMethod::PointerClickIntoText {
-            return Ok(pointer_input.click_at(text_position_of(&located_widget))?);
         }
         pointer_input.move_to(screen_position_of(&located_widget))?;
         let activation_outcome = self.async_runtime.block_on(
@@ -342,6 +304,21 @@ impl SessionWidgets {
                 widget_target,
                 typed_text,
             ))
+            .map_err(lookup_failed)
+    }
+
+    pub fn set_spin_value(
+        &self,
+        widget_target: &WidgetTarget,
+        assigned_value: f64,
+    ) -> Result<(), JourneyFailure> {
+        let located_widget =
+            self.wait_for_sensitive_widget(widget_target, DEFAULT_WIDGET_TIMEOUT)?;
+        self.async_runtime
+            .block_on(
+                self.accessible_tree
+                    .assign_spin_value(&located_widget, assigned_value),
+            )
             .map_err(lookup_failed)
     }
 

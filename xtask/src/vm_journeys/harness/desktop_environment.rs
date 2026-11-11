@@ -255,29 +255,14 @@ pub fn wait_for_window_closed(title_fragment: &str) -> Result<(), JourneyFailure
     )
 }
 
-const LEFT_CONTROL_KEYCODE: u16 = 29;
 const ENTER_KEYCODE: u16 = 28;
 const ESCAPE_KEYCODE: u16 = 1;
 const DOWN_KEYCODE: u16 = 108;
 const TYPING_DELAY_MILLISECONDS: &str = "20";
 
 #[derive(Clone, Copy, Debug)]
-pub enum ChordKey {
-    SelectAll,
-}
-
-impl ChordKey {
-    const fn keycode(self) -> u16 {
-        match self {
-            Self::SelectAll => 30,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
 pub enum KeyInput<'typed> {
     TypedText(&'typed str),
-    ControlChord(ChordKey),
     Enter,
     Escape,
     Down,
@@ -299,12 +284,6 @@ fn send_key_input(key_input: KeyInput<'_>) -> Result<(), JourneyFailure> {
             TYPING_DELAY_MILLISECONDS.to_owned(),
             typed_text.to_owned(),
         ],
-        KeyInput::ControlChord(chord_key) => std::iter::once("key".to_owned())
-            .chain(pressed_and_released(&[
-                LEFT_CONTROL_KEYCODE,
-                chord_key.keycode(),
-            ]))
-            .collect(),
         KeyInput::Enter => std::iter::once("key".to_owned())
             .chain(pressed_and_released(&[ENTER_KEYCODE]))
             .collect(),
