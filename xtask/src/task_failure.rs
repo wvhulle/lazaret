@@ -6,8 +6,6 @@ pub enum TaskFailure {
     SceneCaptureFailed(#[from] gtk_scene_capture::scene_capture_failure::SceneCaptureFailure),
     #[error("the fixture systemd service failed: {0}")]
     FixtureSystemdFailed(#[from] zbus::Error),
-    #[error("the journey failed: {0}")]
-    JourneyFailed(#[from] crate::vm_journeys::JourneyFailure),
     #[error("{0}")]
     FakeInternetFailed(#[from] crate::vm_journeys::FakeInternetFailure),
     #[error("environment variable {variable_name} is not set")]

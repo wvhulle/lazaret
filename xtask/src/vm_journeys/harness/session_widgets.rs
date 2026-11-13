@@ -1,26 +1,20 @@
-use std::{
-    env,
-    path::PathBuf,
-    thread,
-    time::{Duration, Instant},
-};
+use std::{env, error::Error, path::PathBuf, time::Duration};
 
 use gtk_scene_capture::{
     accessible_widget_lookup::{
-        AccessibleTree, ApplicationScope, LocatedWidget, NameMatch, WidgetLookupFailure,
-        WidgetRole, WidgetSensitivity, WidgetTarget,
+        AccessibleTree, ApplicationScope, LocatedWidget, NameMatch, SearchScope,
+        WidgetLookupFailure, WidgetRole, WidgetSensitivity, WidgetTarget,
     },
     scene_capture_failure::SceneCaptureFailure,
     virtual_pointer_input::{ScreenPosition, ScreenSize, VirtualPointerInput},
 };
 
-use crate::vm_journeys::harness::journey_failure::JourneyFailure;
+use crate::vm_journeys::harness::system_commands::{poll_until, poll_within};
 
 const ACCESSIBILITY_BUS_NAME: &str = "org.a11y.Bus";
 const ACCESSIBILITY_BUS_PATH: &str = "/org/a11y/bus";
 const TESTED_APPLICATION_NAME: &str = "lazaret";
 const DEFAULT_WAYLAND_DISPLAY: &str = "wayland-1";
-const LOOKUP_RETRY_PAUSE: Duration = Duration::from_millis(300);
 const SLOW_LOOKUP: Duration = Duration::from_secs(1);
 const SCROLL_WHEEL_CLICK_LIMIT: usize = 40;
 const VISIBLE_EDGE_MARGIN: i32 = 24;
@@ -28,6 +22,7 @@ const SESSION_SCREEN_SIZE: ScreenSize = ScreenSize {
     logical_width: 1280,
     logical_height: 800,
 };
+const PRESS_EFFECT_WAIT: Duration = Duration::from_secs(3);
 pub const DEFAULT_WIDGET_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub fn button(accessible_name: impl Into<String>) -> WidgetTarget {
@@ -54,12 +49,8 @@ pub fn in_expanded_row(widget_target: WidgetTarget, row_title: impl Into<String>
     widget_target.inside_enclosing(WidgetRole::ListItem, WidgetTarget::list_item(row_title))
 }
 
-fn lookup_failed(lookup_failure: WidgetLookupFailure) -> JourneyFailure {
-    JourneyFailure::WidgetUnavailable(SceneCaptureFailure::from(lookup_failure))
-}
-
-fn session_accessibility_address() -> Result<String, JourneyFailure> {
-    Ok(zbus::blocking::Connection::session()?
+fn session_accessibility_address() -> zbus::Result<String> {
+    zbus::blocking::Connection::session()?
         .call_method(
             Some(ACCESSIBILITY_BUS_NAME),
             ACCESSIBILITY_BUS_PATH,
@@ -68,7 +59,7 @@ fn session_accessibility_address() -> Result<String, JourneyFailure> {
             &(),
         )?
         .body()
-        .deserialize::<String>()?)
+        .deserialize::<String>()
 }
 
 fn session_wayland_socket() -> PathBuf {
@@ -98,14 +89,13 @@ pub struct SessionWidgets {
 }
 
 impl SessionWidgets {
-    pub fn connect() -> Result<Self, JourneyFailure> {
+    pub fn try_connect() -> Result<Self, Box<dyn Error>> {
         let accessibility_address = session_accessibility_address()?;
         let async_runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
         let accessible_tree = async_runtime
-            .block_on(AccessibleTree::connect_to(&accessibility_address))
-            .map_err(lookup_failed)?
+            .block_on(AccessibleTree::connect_to(&accessibility_address))?
             .limited_to(ApplicationScope::ApplicationNamed(
                 TESTED_APPLICATION_NAME.to_owned(),
             ));
@@ -115,8 +105,14 @@ impl SessionWidgets {
         })
     }
 
+    pub fn connect() -> Self {
+        Self::try_connect().unwrap_or_else(|connection_failure| {
+            panic!("the session's accessibility tree could not be reached: {connection_failure}")
+        })
+    }
+
     fn try_find(&self, widget_target: &WidgetTarget) -> Result<LocatedWidget, WidgetLookupFailure> {
-        let lookup_started = Instant::now();
+        let lookup_started = std::time::Instant::now();
         let lookup_outcome = self
             .async_runtime
             .block_on(self.accessible_tree.find_widget(widget_target));
@@ -135,200 +131,195 @@ impl SessionWidgets {
         lookup_outcome
     }
 
-    fn wait_for_widget(
+    fn located_within(
         &self,
         widget_target: &WidgetTarget,
         timeout: Duration,
-    ) -> Result<LocatedWidget, JourneyFailure> {
-        let deadline = Instant::now() + timeout;
-        loop {
-            match self.try_find(widget_target) {
-                Ok(located_widget) => return Ok(located_widget),
-                Err(_vanished_or_missing) if Instant::now() < deadline => {
-                    thread::sleep(LOOKUP_RETRY_PAUSE);
-                }
-                Err(lookup_failure) => return Err(lookup_failed(lookup_failure)),
-            }
-        }
+    ) -> Option<LocatedWidget> {
+        poll_within(timeout, || self.try_find(widget_target).ok())
+    }
+
+    fn wait_for_widget(&self, widget_target: &WidgetTarget, timeout: Duration) -> LocatedWidget {
+        poll_until(&format!("showing {widget_target:?}"), timeout, || {
+            self.try_find(widget_target).ok()
+        })
+    }
+
+    fn accepts_input(&self, located_widget: &LocatedWidget) -> bool {
+        matches!(
+            self.async_runtime
+                .block_on(self.accessible_tree.widget_sensitivity(located_widget)),
+            Ok(WidgetSensitivity::AcceptsInput)
+        )
     }
 
     fn wait_for_sensitive_widget(
         &self,
         widget_target: &WidgetTarget,
         timeout: Duration,
-    ) -> Result<LocatedWidget, JourneyFailure> {
-        let deadline = Instant::now() + timeout;
-        loop {
-            let located_widget = self.wait_for_widget(widget_target, timeout)?;
-            match self
-                .async_runtime
-                .block_on(self.accessible_tree.widget_sensitivity(&located_widget))
-                .map_err(lookup_failed)?
-            {
-                WidgetSensitivity::AcceptsInput => return Ok(located_widget),
-                WidgetSensitivity::RefusesInput if Instant::now() < deadline => {
-                    thread::sleep(LOOKUP_RETRY_PAUSE);
-                }
-                WidgetSensitivity::RefusesInput => {
-                    return Err(JourneyFailure::ExpectationFailed(format!(
-                        "{widget_target:?} never accepted input"
-                    )));
-                }
-            }
-        }
+    ) -> LocatedWidget {
+        poll_until(
+            &format!("{widget_target:?} accepting input"),
+            timeout,
+            || {
+                let located_widget = self.try_find(widget_target).ok()?;
+                self.accepts_input(&located_widget)
+                    .then_some(located_widget)
+            },
+        )
     }
 
-    pub fn await_shown(&self, widget_target: &WidgetTarget) -> Result<(), JourneyFailure> {
-        self.await_shown_within(widget_target, DEFAULT_WIDGET_TIMEOUT)
+    pub fn await_shown(&self, widget_target: &WidgetTarget) {
+        self.await_shown_within(widget_target, DEFAULT_WIDGET_TIMEOUT);
     }
 
-    pub fn await_shown_within(
-        &self,
-        widget_target: &WidgetTarget,
-        timeout: Duration,
-    ) -> Result<(), JourneyFailure> {
-        self.wait_for_widget(widget_target, timeout)
-            .map(|_located_widget| ())
+    pub fn await_shown_within(&self, widget_target: &WidgetTarget, timeout: Duration) {
+        self.wait_for_widget(widget_target, timeout);
     }
 
-    pub fn await_gone(&self, widget_target: &WidgetTarget) -> Result<(), JourneyFailure> {
-        let deadline = Instant::now() + DEFAULT_WIDGET_TIMEOUT;
-        loop {
-            match self.try_find(widget_target) {
-                Err(WidgetLookupFailure::WidgetMissing { .. }) => return Ok(()),
-                Err(_) | Ok(_) if Instant::now() < deadline => {
-                    thread::sleep(LOOKUP_RETRY_PAUSE);
-                }
-                Err(lookup_failure) => return Err(lookup_failed(lookup_failure)),
-                Ok(_still_shown) => {
-                    return Err(JourneyFailure::ExpectationFailed(format!(
-                        "{widget_target:?} was still shown"
-                    )));
-                }
-            }
-        }
+    pub fn is_shown_within(&self, widget_target: &WidgetTarget, timeout: Duration) -> bool {
+        self.located_within(widget_target, timeout).is_some()
+    }
+
+    pub fn await_gone(&self, widget_target: &WidgetTarget) {
+        poll_until(
+            &format!("{widget_target:?} disappearing"),
+            DEFAULT_WIDGET_TIMEOUT,
+            || {
+                matches!(
+                    self.try_find(widget_target),
+                    Err(WidgetLookupFailure::WidgetMissing { .. })
+                )
+                .then_some(())
+            },
+        );
     }
 
     pub fn is_shown(&self, widget_target: &WidgetTarget) -> bool {
         self.try_find(widget_target).is_ok()
     }
 
-    pub fn press(&self, widget_target: &WidgetTarget) -> Result<(), JourneyFailure> {
-        self.press_within(widget_target, DEFAULT_WIDGET_TIMEOUT)
+    pub fn press(&self, widget_target: &WidgetTarget) {
+        self.press_within(widget_target, DEFAULT_WIDGET_TIMEOUT);
     }
 
-    pub fn press_within(
-        &self,
-        widget_target: &WidgetTarget,
-        timeout: Duration,
-    ) -> Result<(), JourneyFailure> {
-        let deadline = Instant::now() + timeout;
-        loop {
-            match self.press_attempt(widget_target, timeout) {
-                Err(JourneyFailure::WidgetUnavailable(_vanished_widget))
-                    if Instant::now() < deadline =>
-                {
-                    thread::sleep(LOOKUP_RETRY_PAUSE);
-                }
-                Err(press_failure) => return Err(press_failure),
-                Ok(()) => {
-                    if let gtk_scene_capture::accessible_widget_lookup::SearchScope::InsideWidget(
-                        container_target,
-                    ) = &widget_target.search_scope
-                        && container_target.widget_role == WidgetRole::Alert
-                    {
-                        self.await_gone(container_target)?;
-                    }
-                    return Ok(());
-                }
-            }
+    pub fn press_within(&self, widget_target: &WidgetTarget, timeout: Duration) {
+        poll_until(&format!("pressing {widget_target:?}"), timeout, || {
+            self.press_attempt(widget_target, timeout)
+                .inspect_err(|press_failure| {
+                    eprintln!("pressing {widget_target:?} failed, retrying: {press_failure}");
+                })
+                .ok()
+        });
+        if let SearchScope::InsideWidget(container_target) = &widget_target.search_scope
+            && container_target.widget_role == WidgetRole::Alert
+        {
+            self.await_gone(container_target);
         }
     }
 
-    fn press_attempt(
+    pub fn press_until_shown(&self, pressed_target: &WidgetTarget, awaited_target: &WidgetTarget) {
+        poll_until(
+            &format!("pressing {pressed_target:?} showing {awaited_target:?}"),
+            DEFAULT_WIDGET_TIMEOUT,
+            || {
+                self.press(pressed_target);
+                self.is_shown_within(awaited_target, PRESS_EFFECT_WAIT)
+                    .then_some(())
+            },
+        );
+    }
+
+    pub fn try_press_within(&self, widget_target: &WidgetTarget, timeout: Duration) -> bool {
+        let Some(located_widget) = self.located_within(widget_target, timeout) else {
+            return false;
+        };
+        self.accepts_input(&located_widget) && self.press_attempt(widget_target, timeout).is_ok()
+    }
+
+    fn scrolled_into_view(
         &self,
         widget_target: &WidgetTarget,
+        pointer_input: &mut VirtualPointerInput,
         timeout: Duration,
-    ) -> Result<(), JourneyFailure> {
-        let mut pointer_input =
-            VirtualPointerInput::connect(&session_wayland_socket(), SESSION_SCREEN_SIZE)?;
-        let mut located_widget = self.wait_for_sensitive_widget(widget_target, timeout)?;
+    ) -> Result<LocatedWidget, SceneCaptureFailure> {
         let screen_center = ScreenPosition {
             logical_x: SESSION_SCREEN_SIZE.logical_width / 2,
             logical_y: SESSION_SCREEN_SIZE.logical_height / 2,
         };
+        let mut located_widget = self.wait_for_sensitive_widget(widget_target, timeout);
         for _wheel_click in 0..SCROLL_WHEEL_CLICK_LIMIT {
             if !lies_below_screen(&located_widget) {
                 break;
             }
             pointer_input.scroll_wheel_down(screen_center)?;
-            let scrolled_widget = self.wait_for_widget(widget_target, timeout)?;
+            let scrolled_widget = self.wait_for_widget(widget_target, timeout);
             let scroll_moved_widget = scrolled_widget.widget_bounds != located_widget.widget_bounds;
             located_widget = scrolled_widget;
             if !scroll_moved_widget {
                 break;
             }
         }
+        Ok(located_widget)
+    }
+
+    fn press_attempt(
+        &self,
+        widget_target: &WidgetTarget,
+        timeout: Duration,
+    ) -> Result<(), SceneCaptureFailure> {
+        let mut pointer_input =
+            VirtualPointerInput::connect(&session_wayland_socket(), SESSION_SCREEN_SIZE)?;
+        let located_widget = self.scrolled_into_view(widget_target, &mut pointer_input, timeout)?;
         pointer_input.move_to(screen_position_of(&located_widget))?;
         let activation_outcome = self.async_runtime.block_on(
             self.accessible_tree
                 .activate_widget(&located_widget, widget_target),
         );
         match activation_outcome {
-            Ok(()) => {}
+            Ok(()) => Ok(()),
             Err(WidgetLookupFailure::ActionMissing { .. }) => {
-                pointer_input.click_at(screen_position_of(&located_widget))?;
+                pointer_input.click_at(screen_position_of(&located_widget))
             }
-            Err(activation_failure) => {
-                if !matches!(
-                    self.try_find(widget_target),
-                    Err(WidgetLookupFailure::WidgetMissing { .. })
-                ) {
-                    return Err(lookup_failed(activation_failure));
-                }
-            }
+            Err(activation_failure) => match self.try_find(widget_target) {
+                Err(WidgetLookupFailure::WidgetMissing { .. }) => Ok(()),
+                Err(_) | Ok(_) => Err(SceneCaptureFailure::from(activation_failure)),
+            },
         }
-        Ok(())
     }
 
-    pub fn type_into(
-        &self,
-        widget_target: &WidgetTarget,
-        typed_text: &str,
-    ) -> Result<(), JourneyFailure> {
-        let located_widget =
-            self.wait_for_sensitive_widget(widget_target, DEFAULT_WIDGET_TIMEOUT)?;
+    pub fn type_into(&self, widget_target: &WidgetTarget, typed_text: &str) {
+        let located_widget = self.wait_for_sensitive_widget(widget_target, DEFAULT_WIDGET_TIMEOUT);
         self.async_runtime
             .block_on(self.accessible_tree.replace_widget_text(
                 &located_widget,
                 widget_target,
                 typed_text,
             ))
-            .map_err(lookup_failed)
+            .unwrap_or_else(|typing_failure| {
+                panic!("typing into {widget_target:?} failed: {typing_failure}")
+            });
     }
 
-    pub fn set_spin_value(
-        &self,
-        widget_target: &WidgetTarget,
-        assigned_value: f64,
-    ) -> Result<(), JourneyFailure> {
-        let located_widget =
-            self.wait_for_sensitive_widget(widget_target, DEFAULT_WIDGET_TIMEOUT)?;
+    pub fn set_spin_value(&self, widget_target: &WidgetTarget, assigned_value: f64) {
+        let located_widget = self.wait_for_sensitive_widget(widget_target, DEFAULT_WIDGET_TIMEOUT);
         self.async_runtime
             .block_on(
                 self.accessible_tree
                     .assign_spin_value(&located_widget, assigned_value),
             )
-            .map_err(lookup_failed)
+            .unwrap_or_else(|assignment_failure| {
+                panic!("setting {widget_target:?} to {assigned_value} failed: {assignment_failure}")
+            });
     }
 
     pub fn describe_widget_input(&self, widget_target: &WidgetTarget) -> String {
-        self.wait_for_widget(widget_target, DEFAULT_WIDGET_TIMEOUT)
-            .and_then(|located_widget| {
-                self.async_runtime
-                    .block_on(self.accessible_tree.describe_widget_input(&located_widget))
-                    .map_err(lookup_failed)
-            })
+        let Some(located_widget) = self.located_within(widget_target, DEFAULT_WIDGET_TIMEOUT)
+        else {
+            return format!("unreadable: {widget_target:?} is not shown");
+        };
+        self.async_runtime
+            .block_on(self.accessible_tree.describe_widget_input(&located_widget))
             .unwrap_or_else(|lookup_failure| format!("unreadable: {lookup_failure}"))
     }
 

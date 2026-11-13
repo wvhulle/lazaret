@@ -163,7 +163,10 @@ fn run_repository_task(repository_task: RepositoryTask) -> Result<(), TaskFailur
         RepositoryTask::BuildVmFixtures { output_directory } => {
             build_vm_fixture_corpus(&output_directory)
         }
-        RepositoryTask::VmJourney { journey_name } => Ok(run_vm_journey(journey_name)?),
+        RepositoryTask::VmJourney { journey_name } => {
+            run_vm_journey(journey_name);
+            Ok(())
+        }
         RepositoryTask::ServeFakeInternet(server_options) => {
             Ok(serve_fake_internet(server_options)?)
         }
@@ -171,7 +174,7 @@ fn run_repository_task(repository_task: RepositoryTask) -> Result<(), TaskFailur
             Ok(serve_team_share_placement(placement_options)?)
         }
         RepositoryTask::DescribeSessionWidgets => {
-            describe_session_widgets()?
+            describe_session_widgets()
                 .iter()
                 .for_each(|widget_description| println!("{widget_description}"));
             Ok(())

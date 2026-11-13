@@ -1,8 +1,9 @@
-pub mod desktop_environment;
+pub mod desktop_notifications;
 pub mod fixture_corpus;
-pub mod journey_failure;
-pub mod journey_run;
+pub mod journey_progress;
+pub mod lazaret_application;
 pub mod lazaret_database;
 pub mod session_widgets;
+pub mod sway_windows;
 pub mod system_commands;
 pub mod ui_messages;
