@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://codeberg.org/wvhulle/lazaret/compare/v0.4.0...v0.5.0) - 2026-11-13
+
+### Added
+
+- show file path of detections
+- show file permissions
+- *(findings)* show file facts in sections on the detail pages
+
+### CI
+
+- *(release)* release only the lazaret package
+
+### Changed
+
+- connect the system and user buses once and pass them explicitly
+- build the host moment formatters once in main
+- pass the message catalog and moment formatters explicitly
+
 ## [0.4.0](https://codeberg.org/wvhulle/lazaret/compare/v0.3.0...v0.4.0) - 2026-11-08
 
 ### Added
