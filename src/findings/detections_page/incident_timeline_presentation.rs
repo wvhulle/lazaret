@@ -138,7 +138,11 @@ pub fn detection_state_text(
         DetectionState::Resolved {
             resolution_kind: ResolutionKind::MovedToQuarantine,
             ..
-        } if displayed_detection.file_state.file_is_present() => {
+        } if matches!(
+            displayed_detection.file_state,
+            DetectedFileState::Present { .. }
+        ) =>
+        {
             translated_messages::findings::restored_quarantine(message_catalog)
         }
         DetectionState::Resolved {
@@ -430,7 +434,13 @@ fn decision_choices(
     deletion_prompt: DeletionPrompt,
     file_state: &DetectedFileState,
 ) -> Vec<StepChoiceRow<IncidentStepAction>> {
-    if !file_state.user_can_move_or_delete() {
+    if !matches!(
+        file_state,
+        DetectedFileState::Present {
+            owner: FileOwner::CurrentUser,
+            ..
+        }
+    ) {
         return vec![StepChoiceRow {
             choice_description: translated_messages::findings::stop_asking_file_description(
                 message_catalog,
@@ -577,7 +587,10 @@ fn resolved_step(
             resolution_kind: ResolutionKind::MovedToQuarantine,
             ..
         }
-    ) && !displayed_detection.file_state.file_is_present();
+    ) && !matches!(
+        displayed_detection.file_state,
+        DetectedFileState::Present { .. }
+    );
     if !quarantined_copy_kept {
         return plain_step(
             step_title,
@@ -645,8 +658,9 @@ mod incident_timeline_presentation_tests {
                 service_access::{ApiKey, KeyProblem, OnlineServiceAccess},
             },
         },
-        shared_widgets::step_timeline::timeline_step_contents::{
-            ButtonStyle, StepNodeState, StepPhase,
+        shared_widgets::{
+            detected_file::detected_file_facts::OwnerRelation,
+            step_timeline::timeline_step_contents::{ButtonStyle, StepNodeState, StepPhase},
         },
     };
 
@@ -669,7 +683,7 @@ mod incident_timeline_presentation_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::BlockedOnAccess,
                 owner: FileOwner::CurrentUser,
-                live_facts: live_facts_owned_by(1000),
+                live_facts: live_facts_owned_by(OwnerRelation::ViewingUser),
             },
         }
     }
@@ -816,7 +830,7 @@ mod incident_timeline_presentation_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
-                live_facts: live_facts_owned_by(1000),
+                live_facts: live_facts_owned_by(OwnerRelation::ViewingUser),
             },
         };
         let incident_steps = incident_timeline(
@@ -850,7 +864,7 @@ mod incident_timeline_presentation_tests {
                     file_state: DetectedFileState::Present {
                         access: file_access,
                         owner: FileOwner::OtherUser,
-                        live_facts: live_facts_owned_by(0),
+                        live_facts: live_facts_owned_by(OwnerRelation::SystemAdministrator),
                     },
                     ..blocked_detection()
                 };
@@ -917,7 +931,7 @@ mod incident_timeline_presentation_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
-                live_facts: live_facts_owned_by(1000),
+                live_facts: live_facts_owned_by(OwnerRelation::ViewingUser),
             },
         };
         let incident_steps = incident_timeline(
@@ -950,7 +964,7 @@ mod incident_timeline_presentation_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
-                live_facts: live_facts_owned_by(1000),
+                live_facts: live_facts_owned_by(OwnerRelation::ViewingUser),
             },
         };
         assert_eq!(

@@ -230,6 +230,7 @@ mod detections_view_state_tests {
             },
             threat_intel::malware_bazaar_client::KnownSampleLookup,
         },
+        shared_widgets::detected_file::detected_file_facts::OwnerRelation,
     };
 
     fn stored_detection(detection_id: i64, detection_state: DetectionState) -> StoredDetection {
@@ -267,7 +268,7 @@ mod detections_view_state_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::BlockedOnAccess,
                 owner: FileOwner::CurrentUser,
-                live_facts: live_facts_owned_by(1000),
+                live_facts: live_facts_owned_by(OwnerRelation::ViewingUser),
             },
         }];
         assert_eq!(

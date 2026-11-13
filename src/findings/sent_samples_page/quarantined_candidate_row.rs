@@ -75,8 +75,11 @@ impl FactoryComponent for QuarantinedCandidateRow {
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
-        self.shown_fact_rows
-            .replace_in_expander(&widgets.candidate_expander_row, &self.row_view.fact_rows);
+        self.shown_fact_rows.replace_in_expander(
+            &self.message_catalog,
+            &widgets.candidate_expander_row,
+            &self.row_view.fact_rows,
+        );
         widgets
     }
 }

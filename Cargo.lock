@@ -2775,6 +2775,7 @@ dependencies = [
  "tokio-stream",
  "turso",
  "unic-langid",
+ "unix_mode",
  "uzers",
  "writeable",
  "xdg",
@@ -5082,6 +5083,12 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
+
+[[package]]
+name = "unix_mode"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b55eedc365f81a3c32aea49baf23fa965e3cd85bcc28fb8045708c7388d124ef"
 
 [[package]]
 name = "untrusted"

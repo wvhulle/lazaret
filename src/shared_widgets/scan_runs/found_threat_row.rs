@@ -9,11 +9,11 @@ use crate::{
         sample_submissions::submission_samples::shown_file_name,
     },
     shared_widgets::detected_file::{
-        detected_file_facts::{FileFactsSource, file_fact_rows},
+        detected_file_facts::FileFactsSource,
         detected_file_row::{
             InspectionRequest, LiveFactsLoading, ShownFactRows, inspect_live_facts_in_background,
-            path_then_fact_rows,
         },
+        file_fact_rows::{detected_file_rows, pending_file_rows},
     },
     translated_messages::MessageCatalog,
 };
@@ -93,12 +93,9 @@ impl FactoryComponent for FoundThreatRow {
     ) -> Self::Widgets {
         let widgets = view_output!();
         self.shown_fact_rows.replace_in_expander(
+            &self.message_catalog,
             &widgets.found_threat_expander_row,
-            &path_then_fact_rows(
-                &self.message_catalog,
-                &self.detected_threat.file_path,
-                Vec::new(),
-            ),
+            &pending_file_rows(&self.message_catalog, &self.detected_threat.file_path),
         );
         widgets
     }
@@ -121,13 +118,18 @@ impl FactoryComponent for FoundThreatRow {
         facts_source: FileFactsSource,
         sender: FactorySender<Self>,
     ) {
-        let fact_rows = file_fact_rows(
+        let fact_rows = detected_file_rows(
             &self.message_catalog,
             &self.moment_formatters,
+            jiff::Timestamp::now(),
+            &self.detected_threat.file_path,
             &facts_source,
         );
-        self.shown_fact_rows
-            .replace_in_expander(&widgets.found_threat_expander_row, &fact_rows);
+        self.shown_fact_rows.replace_in_expander(
+            &self.message_catalog,
+            &widgets.found_threat_expander_row,
+            &fact_rows,
+        );
         self.facts_loading = LiveFactsLoading::Inspected;
         self.update_view(widgets, sender);
     }

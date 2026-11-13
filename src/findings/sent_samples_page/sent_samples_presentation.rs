@@ -28,10 +28,8 @@ use crate::{
     },
     shared_widgets::{
         detected_file::{
-            detected_file_facts::{
-                FileFactRow, FileFactsSource, RecordedQuarantineFacts, file_fact_rows,
-            },
-            detected_file_row::path_then_fact_rows,
+            detected_file_facts::{FileFactsSource, RecordedQuarantineFacts},
+            file_fact_rows::{FileFactRow, detected_file_rows},
         },
         quarantine_failure_text::describe_quarantine_failure,
         submission_outcome_text::history_failure_text,
@@ -225,6 +223,7 @@ impl CandidateRowView {
 pub fn candidate_row_view(
     message_catalog: &MessageCatalog,
     moment_formatters: &MomentFormatters,
+    reference_moment: jiff::Timestamp,
     entry_record: &QuarantineEntryRecord,
     uploads_in_flight: &UploadsInFlight,
 ) -> CandidateRowView {
@@ -244,14 +243,12 @@ pub fn candidate_row_view(
         entry_id: entry_record.entry_id,
         row_title: shown_file_name(&entry_record.original_path),
         row_subtitle: context_line,
-        fact_rows: path_then_fact_rows(
+        fact_rows: detected_file_rows(
             message_catalog,
+            moment_formatters,
+            reference_moment,
             &entry_record.original_path,
-            file_fact_rows(
-                message_catalog,
-                moment_formatters,
-                &FileFactsSource::RecordedAtQuarantine(RecordedQuarantineFacts::from(entry_record)),
-            ),
+            &FileFactsSource::RecordedAtQuarantine(RecordedQuarantineFacts::from(entry_record)),
         ),
         send_availability: send_availability(&offered_target_activities(
             entry_record,
@@ -510,6 +507,7 @@ mod submissions_presentation_tests {
         let candidate_view = candidate_row_view(
             message_catalog,
             &english_formatters(),
+            Timestamp::constant(1_793_955_622, 0),
             &QuarantineEntryRecord {
                 entry_id: 5,
                 original_path: PathBuf::from("/home/user/old.bin"),
@@ -531,8 +529,10 @@ mod submissions_presentation_tests {
         );
         assert!(candidate_view.row_subtitle.contains("No usable hash"));
         assert!(!candidate_view.row_subtitle.contains("/home/user"));
-        assert_eq!(candidate_view.fact_rows[0].fact_value, "/home/user/old.bin");
-        assert_eq!(candidate_view.fact_rows.len(), 4);
+        assert_eq!(candidate_view.fact_rows[0].fact_label, "Folder");
+        assert_eq!(candidate_view.fact_rows[0].fact_value, "/home/user");
+        assert_eq!(candidate_view.fact_rows[2].fact_label, "Who can open it");
+        assert_eq!(candidate_view.fact_rows.len(), 6);
     }
 
     #[test]

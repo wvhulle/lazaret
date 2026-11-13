@@ -29,7 +29,8 @@ use crate::{
         detected_file::{
             detected_file_facts::{FileFactsSource, RecordedQuarantineFacts},
             detected_file_facts_group::{
-                DetectedFileFactsGroup, DetectedFileFactsGroupInit, ShownDetectedFile,
+                DetectedFileFactsGroup, DetectedFileFactsGroupInit, FileFactsGroupState,
+                ShownDetectedFile,
             },
         },
         submission_confirm_dialog::ClamavReportProposal,
@@ -452,12 +453,12 @@ impl FactoryComponent for QuarantineEntryDetail {
                 .launch(DetectedFileFactsGroupInit {
                     message_catalog: Rc::clone(&message_catalog),
                     moment_formatters: Rc::clone(&moment_formatters),
-                    shown_file: ShownDetectedFile {
+                    group_state: FileFactsGroupState::FileShown(ShownDetectedFile {
                         file_path: entry_record.original_path.clone(),
                         facts_source: FileFactsSource::RecordedAtQuarantine(
                             RecordedQuarantineFacts::from(&entry_record),
                         ),
-                    },
+                    }),
                 })
                 .detach(),
             message_catalog,

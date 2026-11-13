@@ -63,12 +63,9 @@ use crate::{
     shared_widgets::{
         component_streams::{RunningStream, run_stream},
         database_migration_failure_text::describe_history_failure,
-        detected_file::{
-            detected_file_facts::FileFactsSource,
-            detected_file_facts_group::{
-                DetectedFileFactsGroup, DetectedFileFactsGroupInit, DetectedFileFactsGroupInput,
-                ShownDetectedFile,
-            },
+        detected_file::detected_file_facts_group::{
+            DetectedFileFactsGroup, DetectedFileFactsGroupInit, DetectedFileFactsGroupInput,
+            FileFactsGroupState, ShownDetectedFile,
         },
         journal_follow_failure_text::journal_follow_failure_text,
         loading_indicators::{BUSY_PAGE_NAME, FirstLoad, IDLE_PAGE_NAME, busy_page_name},
@@ -872,10 +869,7 @@ impl Component for BackgroundDetectionsPage {
                 .launch(DetectedFileFactsGroupInit {
                     message_catalog: Rc::clone(&message_catalog),
                     moment_formatters: Rc::clone(&moment_formatters),
-                    shown_file: ShownDetectedFile {
-                        file_path: PathBuf::new(),
-                        facts_source: FileFactsSource::Unreadable,
-                    },
+                    group_state: FileFactsGroupState::NothingShown,
                 })
                 .detach(),
             message_catalog,

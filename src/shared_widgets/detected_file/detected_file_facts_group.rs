@@ -1,12 +1,14 @@
 use std::{path::PathBuf, rc::Rc};
 
-use relm4::{Component, ComponentParts, ComponentSender, adw, adw::prelude::*, gtk};
+use jiff::Timestamp;
+use relm4::{Component, ComponentParts, ComponentSender, adw, adw::prelude::*};
 
 use crate::{
     host_services::desktop::locale_formatting::MomentFormatters,
     shared_widgets::detected_file::{
-        detected_file_facts::{FileFactsSource, facts_source_description, file_fact_rows},
-        detected_file_row::{ShownFactRows, shown_file_path},
+        detected_file_facts::FileFactsSource,
+        detected_file_row::ShownFactRows,
+        file_fact_rows::{FileFactRow, detected_file_rows, facts_source_description},
     },
     translated_messages,
     translated_messages::MessageCatalog,
@@ -18,34 +20,57 @@ pub struct ShownDetectedFile {
     pub facts_source: FileFactsSource,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FileFactsGroupState {
+    NothingShown,
+    FileShown(ShownDetectedFile),
+}
+
 pub struct DetectedFileFactsGroupInit {
     pub message_catalog: Rc<MessageCatalog>,
     pub moment_formatters: Rc<MomentFormatters>,
-    pub shown_file: ShownDetectedFile,
+    pub group_state: FileFactsGroupState,
 }
 
 pub struct DetectedFileFactsGroup {
     pub message_catalog: Rc<MessageCatalog>,
     moment_formatters: Rc<MomentFormatters>,
-    shown_file: ShownDetectedFile,
+    group_state: FileFactsGroupState,
     shown_fact_rows: ShownFactRows,
 }
 
 #[derive(Debug)]
 pub enum DetectedFileFactsGroupInput {
     FileShown(ShownDetectedFile),
-    PathCopyRequested,
 }
 
 impl DetectedFileFactsGroup {
+    fn group_description(&self) -> String {
+        match &self.group_state {
+            FileFactsGroupState::NothingShown => String::new(),
+            FileFactsGroupState::FileShown(shown_file) => {
+                facts_source_description(&self.message_catalog, &shown_file.facts_source)
+            }
+        }
+    }
+
+    fn group_fact_rows(&self) -> Vec<FileFactRow> {
+        match &self.group_state {
+            FileFactsGroupState::NothingShown => Vec::new(),
+            FileFactsGroupState::FileShown(shown_file) => detected_file_rows(
+                &self.message_catalog,
+                &self.moment_formatters,
+                Timestamp::now(),
+                &shown_file.file_path,
+                &shown_file.facts_source,
+            ),
+        }
+    }
+
     fn show_fact_rows(&mut self, facts_group: &adw::PreferencesGroup) {
-        let fact_rows = file_fact_rows(
-            &self.message_catalog,
-            &self.moment_formatters,
-            &self.shown_file.facts_source,
-        );
+        let fact_rows = self.group_fact_rows();
         self.shown_fact_rows
-            .replace_in_group(facts_group, &fact_rows);
+            .replace_in_group(&self.message_catalog, facts_group, &fact_rows);
     }
 }
 
@@ -60,26 +85,7 @@ impl Component for DetectedFileFactsGroup {
         adw::PreferencesGroup {
             set_title: &translated_messages::findings::file_label(&model.message_catalog),
             #[watch]
-            set_description: Some(&facts_source_description(&model.message_catalog, &model.shown_file.facts_source)),
-
-            add = &adw::ActionRow {
-                set_use_markup: false,
-                set_title: &translated_messages::findings::file_path(&model.message_catalog),
-                #[watch]
-                set_subtitle: &shown_file_path(&model.shown_file.file_path),
-                set_subtitle_lines: 0,
-                set_subtitle_selectable: true,
-                add_css_class: "property",
-
-                add_suffix = &gtk::Button {
-                    set_icon_name: "edit-copy-symbolic",
-                    set_tooltip_text: Some(&translated_messages::widgets::copy_path(&model.message_catalog)),
-                    update_property: &[gtk::accessible::Property::Label(&translated_messages::widgets::copy_path(&model.message_catalog))],
-                    set_valign: gtk::Align::Center,
-                    add_css_class: "flat",
-                    connect_clicked => DetectedFileFactsGroupInput::PathCopyRequested,
-                },
-            },
+            set_description: Some(&model.group_description()),
         }
     }
 
@@ -87,15 +93,15 @@ impl Component for DetectedFileFactsGroup {
         DetectedFileFactsGroupInit {
             message_catalog,
             moment_formatters,
-            shown_file,
+            group_state,
         }: Self::Init,
         root: Self::Root,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let mut model = Self {
             message_catalog,
             moment_formatters,
-            shown_file,
+            group_state,
             shown_fact_rows: ShownFactRows::default(),
         };
         let widgets = view_output!();
@@ -111,12 +117,8 @@ impl Component for DetectedFileFactsGroup {
     ) {
         match group_input {
             DetectedFileFactsGroupInput::FileShown(shown_file) => {
-                self.shown_file = shown_file;
+                self.group_state = FileFactsGroupState::FileShown(shown_file);
                 self.show_fact_rows(root);
-            }
-            DetectedFileFactsGroupInput::PathCopyRequested => {
-                root.clipboard()
-                    .set_text(&self.shown_file.file_path.to_string_lossy());
             }
         }
     }

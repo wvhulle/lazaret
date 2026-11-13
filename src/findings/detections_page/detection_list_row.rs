@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use jiff::Timestamp;
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
@@ -8,8 +9,7 @@ use crate::{
     },
     host_services::desktop::locale_formatting::MomentFormatters,
     shared_widgets::detected_file::{
-        detected_file_facts::file_fact_rows,
-        detected_file_row::{ShownFactRows, path_then_fact_rows},
+        detected_file_row::ShownFactRows, file_fact_rows::detected_file_rows,
     },
     translated_messages,
     translated_messages::MessageCatalog,
@@ -117,17 +117,18 @@ impl FactoryComponent for DetectionListRow {
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
-        let fact_rows = path_then_fact_rows(
+        let fact_rows = detected_file_rows(
             &self.message_catalog,
+            &self.moment_formatters,
+            Timestamp::now(),
             &self.displayed_detection.stored_detection.file_path,
-            file_fact_rows(
-                &self.message_catalog,
-                &self.moment_formatters,
-                &self.displayed_detection.file_state.facts_source(),
-            ),
+            &self.displayed_detection.file_state.facts_source(),
         );
-        self.shown_fact_rows
-            .replace_in_expander(&widgets.detection_expander_row, &fact_rows);
+        self.shown_fact_rows.replace_in_expander(
+            &self.message_catalog,
+            &widgets.detection_expander_row,
+            &fact_rows,
+        );
         widgets
     }
 }

@@ -1,11 +1,11 @@
-use std::{io, path::Path};
+use std::path::Path;
 
 use rustix::process::geteuid;
 
 use crate::{
     host_services::clamav_scanner::scanner_output_parser::is_blocked_by_on_access,
     shared_widgets::detected_file::detected_file_facts::{
-        FileFactsSource, LiveFileFacts, live_file_metadata,
+        FileFactsSource, LiveFileFacts, LiveFileInspection, OwnerRelation, read_live_file_facts,
     },
 };
 
@@ -40,20 +40,6 @@ pub enum OpeningCheck {
 }
 
 impl DetectedFileState {
-    pub const fn file_is_present(&self) -> bool {
-        matches!(self, Self::Present { .. })
-    }
-
-    pub const fn user_can_move_or_delete(&self) -> bool {
-        matches!(
-            self,
-            Self::Present {
-                owner: FileOwner::CurrentUser,
-                ..
-            }
-        )
-    }
-
     pub fn facts_source(&self) -> FileFactsSource {
         match self {
             Self::Present { live_facts, .. } => FileFactsSource::LiveSnapshot(live_facts.clone()),
@@ -63,21 +49,23 @@ impl DetectedFileState {
     }
 }
 
+const fn file_owner(owner_relation: OwnerRelation) -> FileOwner {
+    match owner_relation {
+        OwnerRelation::ViewingUser => FileOwner::CurrentUser,
+        OwnerRelation::SystemAdministrator | OwnerRelation::AnotherUser => FileOwner::OtherUser,
+    }
+}
+
 pub fn classify_file_state(
-    metadata_outcome: Result<LiveFileFacts, io::ErrorKind>,
-    current_user_id: u32,
+    live_inspection: LiveFileInspection,
     file_access: FileAccess,
 ) -> DetectedFileState {
-    match metadata_outcome {
-        Err(io::ErrorKind::NotFound) => DetectedFileState::NoLongerThere,
-        Err(_other_failure) => DetectedFileState::StateUnknown,
-        Ok(live_facts) => DetectedFileState::Present {
+    match live_inspection {
+        LiveFileInspection::NoLongerThere => DetectedFileState::NoLongerThere,
+        LiveFileInspection::Unreadable => DetectedFileState::StateUnknown,
+        LiveFileInspection::Present(live_facts) => DetectedFileState::Present {
             access: file_access,
-            owner: if live_facts.owner_account.numeric_id() == current_user_id {
-                FileOwner::CurrentUser
-            } else {
-                FileOwner::OtherUser
-            },
+            owner: file_owner(live_facts.owner_relation),
             live_facts,
         },
     }
@@ -92,8 +80,7 @@ pub fn inspect_detected_file(file_path: &Path, opening_check: OpeningCheck) -> D
         OpeningCheck::OpenToCheckBlocking => FileAccess::Readable,
     };
     classify_file_state(
-        live_file_metadata(file_path).map(|file_metadata| LiveFileFacts::from(&file_metadata)),
-        geteuid().as_raw(),
+        read_live_file_facts(file_path, geteuid().as_raw()),
         file_access,
     )
 }
@@ -104,17 +91,14 @@ pub mod detected_file_state_fixtures {
     use jiff::Timestamp;
 
     use crate::shared_widgets::detected_file::detected_file_facts::{
-        AccountIdentity, LiveFileFacts, ModificationMoment,
+        AccountIdentity, LiveFileFacts, ModificationMoment, OwnerRelation,
     };
 
-    pub fn live_facts_owned_by(owner_id: u32) -> LiveFileFacts {
+    pub fn live_facts_owned_by(owner_relation: OwnerRelation) -> LiveFileFacts {
         LiveFileFacts {
-            owner_account: AccountIdentity::NumberedAccount {
-                numeric_id: owner_id,
-            },
-            group_account: AccountIdentity::NumberedAccount {
-                numeric_id: owner_id,
-            },
+            owner_account: AccountIdentity::NumberedAccount { numeric_id: 1000 },
+            owner_relation,
+            group_account: AccountIdentity::NumberedAccount { numeric_id: 100 },
             permission_mode: 0o100_644,
             byte_size: ByteSize::b(68),
             modification_moment: ModificationMoment::ModifiedAt(Timestamp::constant(
@@ -129,66 +113,46 @@ pub mod detected_file_state_fixtures {
 mod detected_file_state_tests {
     use super::{detected_file_state_fixtures::live_facts_owned_by, *};
 
-    const OWN_USER: u32 = 1000;
-
     #[test]
     fn a_blocked_file_keeps_its_owner() {
+        let administrator_facts = live_facts_owned_by(OwnerRelation::SystemAdministrator);
         assert_eq!(
             classify_file_state(
-                Ok(live_facts_owned_by(0)),
-                OWN_USER,
+                LiveFileInspection::Present(administrator_facts.clone()),
                 FileAccess::BlockedOnAccess
             ),
             DetectedFileState::Present {
                 access: FileAccess::BlockedOnAccess,
                 owner: FileOwner::OtherUser,
-                live_facts: live_facts_owned_by(0),
+                live_facts: administrator_facts,
             }
         );
-        assert!(
-            !classify_file_state(
-                Ok(live_facts_owned_by(0)),
-                OWN_USER,
-                FileAccess::BlockedOnAccess
-            )
-            .user_can_move_or_delete()
-        );
-        assert!(
+        assert!(matches!(
             classify_file_state(
-                Ok(live_facts_owned_by(OWN_USER)),
-                OWN_USER,
+                LiveFileInspection::Present(live_facts_owned_by(OwnerRelation::ViewingUser)),
                 FileAccess::BlockedOnAccess
-            )
-            .user_can_move_or_delete()
-        );
+            ),
+            DetectedFileState::Present {
+                owner: FileOwner::CurrentUser,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn missing_unknown_and_present_files_are_told_apart() {
         assert_eq!(
-            classify_file_state(Err(io::ErrorKind::NotFound), OWN_USER, FileAccess::Readable),
+            classify_file_state(LiveFileInspection::NoLongerThere, FileAccess::Readable),
             DetectedFileState::NoLongerThere
         );
         assert_eq!(
-            classify_file_state(
-                Err(io::ErrorKind::PermissionDenied),
-                OWN_USER,
-                FileAccess::Readable
-            ),
+            classify_file_state(LiveFileInspection::Unreadable, FileAccess::Readable),
             DetectedFileState::StateUnknown
         );
         assert_eq!(
-            classify_file_state(Err(io::ErrorKind::NotFound), OWN_USER, FileAccess::Readable)
+            classify_file_state(LiveFileInspection::NoLongerThere, FileAccess::Readable)
                 .facts_source(),
             FileFactsSource::NoLongerThere
-        );
-        assert!(
-            !classify_file_state(
-                Err(io::ErrorKind::PermissionDenied),
-                OWN_USER,
-                FileAccess::Readable
-            )
-            .user_can_move_or_delete()
         );
     }
 }

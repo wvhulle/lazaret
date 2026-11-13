@@ -26,11 +26,12 @@ use crate::{
     },
     shared_widgets::{
         detected_file::{
-            detected_file_facts::{FileFactsSource, file_fact_rows},
+            detected_file_facts::FileFactsSource,
             detected_file_row::{
                 InspectionRequest, LiveFactsLoading, ShownFactRows,
-                inspect_live_facts_in_background, path_then_fact_rows,
+                inspect_live_facts_in_background,
             },
+            file_fact_rows::{detected_file_rows, pending_file_rows},
         },
         named_menu_items::NamedMenuItems,
         quarantine_failure_text::describe_quarantine_failure,
@@ -318,12 +319,9 @@ impl FactoryComponent for DetectedThreatRow {
     ) -> Self::Widgets {
         let widgets = view_output!();
         self.shown_fact_rows.replace_in_expander(
+            &self.message_catalog,
             &widgets.threat_expander_row,
-            &path_then_fact_rows(
-                &self.message_catalog,
-                &self.detected_threat.file_path,
-                Vec::new(),
-            ),
+            &pending_file_rows(&self.message_catalog, &self.detected_threat.file_path),
         );
         let mut row_actions = RelmActionGroup::<ThreatRowActions>::new();
         row_actions.add_action(row_action::<TrustFileAction>(
@@ -384,17 +382,18 @@ impl FactoryComponent for DetectedThreatRow {
         facts_source: FileFactsSource,
         sender: FactorySender<Self>,
     ) {
-        let fact_rows = path_then_fact_rows(
+        let fact_rows = detected_file_rows(
             &self.message_catalog,
+            &self.moment_formatters,
+            jiff::Timestamp::now(),
             &self.detected_threat.file_path,
-            file_fact_rows(
-                &self.message_catalog,
-                &self.moment_formatters,
-                &facts_source,
-            ),
+            &facts_source,
         );
-        self.shown_fact_rows
-            .replace_in_expander(&widgets.threat_expander_row, &fact_rows);
+        self.shown_fact_rows.replace_in_expander(
+            &self.message_catalog,
+            &widgets.threat_expander_row,
+            &fact_rows,
+        );
         self.facts_loading = LiveFactsLoading::Inspected;
         self.update_view(widgets, sender);
     }

@@ -23,8 +23,9 @@ use crate::{
         sample_submissions::submission_samples::shown_file_name,
     },
     shared_widgets::detected_file::{
-        detected_file_facts::{FileFactsSource, RecordedQuarantineFacts, file_fact_rows},
-        detected_file_row::{ShownFactRows, path_then_fact_rows},
+        detected_file_facts::{FileFactsSource, RecordedQuarantineFacts},
+        detected_file_row::ShownFactRows,
+        file_fact_rows::detected_file_rows,
     },
     translated_messages,
     translated_messages::MessageCatalog,
@@ -159,19 +160,20 @@ impl FactoryComponent for QuarantineEntryRow {
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
-        let fact_rows = path_then_fact_rows(
+        let fact_rows = detected_file_rows(
             &self.message_catalog,
+            &self.moment_formatters,
+            jiff::Timestamp::now(),
             &self.entry_record.original_path,
-            file_fact_rows(
-                &self.message_catalog,
-                &self.moment_formatters,
-                &FileFactsSource::RecordedAtQuarantine(RecordedQuarantineFacts::from(
-                    &self.entry_record,
-                )),
-            ),
+            &FileFactsSource::RecordedAtQuarantine(RecordedQuarantineFacts::from(
+                &self.entry_record,
+            )),
         );
-        self.shown_fact_rows
-            .replace_in_expander(&widgets.entry_expander_row, &fact_rows);
+        self.shown_fact_rows.replace_in_expander(
+            &self.message_catalog,
+            &widgets.entry_expander_row,
+            &fact_rows,
+        );
         widgets
     }
 

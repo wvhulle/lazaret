@@ -310,6 +310,7 @@ impl SentSamplesPage {
                     row_view: candidate_row_view(
                         &message_catalog,
                         &moment_formatters,
+                        jiff::Timestamp::now(),
                         listed_candidate,
                         &self.uploads_in_flight,
                     ),

@@ -54,6 +54,7 @@ fluent-bundle = "0.16"
 fluent-langneg = "0.13"
 unic-langid = "0.9"
 uzers = "0.12.2"
+unix_mode = "0.1.4"
 
 [dev-dependencies]
 libc = "0.2"
