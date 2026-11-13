@@ -1,7 +1,7 @@
 use crate::{
     shared_widgets::detected_file::{
         file_access_summary::{AccessAudience, ProgramRunning, file_access_summary},
-        file_fact_rows::{FileFactRow, RowEmphasis, hovered_fact_row},
+        file_fact_rows::{FactSection, FileFactRow, RowEmphasis, hovered_fact_row},
         file_fact_texts::{OwnerMention, audience_text, running_text},
     },
     translated_messages,
@@ -34,6 +34,7 @@ pub fn access_rows(
     let raw_mode_text = unix_mode::to_string(permission_mode);
     if unix_mode::Type::from(permission_mode) == unix_mode::Type::Symlink {
         return vec![hovered_fact_row(
+            FactSection::AccessSection,
             translated_messages::findings::kind_label(message_catalog),
             translated_messages::findings::kind_link(message_catalog),
             raw_mode_text,
@@ -44,6 +45,7 @@ pub fn access_rows(
         FileFactRow {
             row_emphasis: audience_emphasis(access_summary.opening),
             ..hovered_fact_row(
+                FactSection::AccessSection,
                 translated_messages::findings::who_can_open(message_catalog),
                 audience_text(message_catalog, owner_mention, access_summary.opening),
                 raw_mode_text.clone(),
@@ -52,6 +54,7 @@ pub fn access_rows(
         FileFactRow {
             row_emphasis: audience_emphasis(access_summary.changing),
             ..hovered_fact_row(
+                FactSection::AccessSection,
                 translated_messages::findings::who_can_change(message_catalog),
                 audience_text(message_catalog, owner_mention, access_summary.changing),
                 raw_mode_text.clone(),
@@ -60,6 +63,7 @@ pub fn access_rows(
         FileFactRow {
             row_emphasis: running_emphasis(access_summary.running),
             ..hovered_fact_row(
+                FactSection::AccessSection,
                 translated_messages::findings::can_run_program(message_catalog),
                 running_text(message_catalog, owner_mention, access_summary.running),
                 raw_mode_text,

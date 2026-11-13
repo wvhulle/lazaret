@@ -141,7 +141,6 @@ const fn shows_page_notice(page_notice: &ScanPageNotice) -> bool {
 
 pub struct ScanPage {
     pub message_catalog: Rc<MessageCatalog>,
-    moment_formatters: Rc<MomentFormatters>,
     sandbox_kind: SandboxKind,
     activity_history: ActivityHistory,
     profile_store: ScanProfileStore,
@@ -889,7 +888,6 @@ impl Component for ScanPage {
             scan_results_section: ScanResultsSection::builder()
                 .launch(ScanResultsSectionInit {
                     message_catalog: Rc::clone(&message_catalog),
-                    moment_formatters: Rc::clone(&moment_formatters),
                     sandbox_kind,
                     quarantine_vault: page_init.quarantine_vault,
                     dismiss_label: translated_messages::scans::new_scan_button(&message_catalog),
@@ -912,7 +910,6 @@ impl Component for ScanPage {
                     },
                 ),
             scan_target_rows,
-            moment_formatters: Rc::clone(&moment_formatters),
             scanner_backend_view: ScannerBackendView::DetectingBackend,
             scanner_program_trust: ScannerProgramTrust::ProgramsTrusted,
             scan_options_section: ScanOptionsSection::builder()
@@ -1123,7 +1120,6 @@ impl Component for ScanPage {
                     threat_rows_guard.push_back(FoundThreatRowInit {
                         detected_threat,
                         message_catalog: Rc::clone(&message_catalog),
-                        moment_formatters: Rc::clone(&self.moment_formatters),
                     });
                 });
             }

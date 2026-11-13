@@ -539,7 +539,6 @@ impl Component for RemovableDrivesPage {
             scan_results_section: ScanResultsSection::builder()
                 .launch(ScanResultsSectionInit {
                     message_catalog: Rc::clone(&message_catalog),
-                    moment_formatters: Rc::clone(&moment_formatters),
                     sandbox_kind,
                     quarantine_vault: page_init.quarantine_vault,
                     dismiss_label: translated_messages::scans::close_results_button(
@@ -675,7 +674,6 @@ impl Component for RemovableDrivesPage {
                     threat_rows_guard.push_back(FoundThreatRowInit {
                         detected_threat,
                         message_catalog: Rc::clone(&message_catalog),
-                        moment_formatters: Rc::clone(&self.moment_formatters),
                     });
                 });
             }

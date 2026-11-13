@@ -27,10 +27,6 @@ use crate::{
         },
     },
     shared_widgets::{
-        detected_file::{
-            detected_file_facts::{FileFactsSource, RecordedQuarantineFacts},
-            file_fact_rows::{FileFactRow, detected_file_rows},
-        },
         quarantine_failure_text::describe_quarantine_failure,
         submission_outcome_text::history_failure_text,
     },
@@ -210,7 +206,6 @@ pub struct CandidateRowView {
     pub entry_id: i64,
     pub row_title: String,
     pub row_subtitle: String,
-    pub fact_rows: Vec<FileFactRow>,
     pub send_availability: SendAvailability,
 }
 
@@ -222,34 +217,24 @@ impl CandidateRowView {
 
 pub fn candidate_row_view(
     message_catalog: &MessageCatalog,
-    moment_formatters: &MomentFormatters,
-    reference_moment: jiff::Timestamp,
     entry_record: &QuarantineEntryRecord,
     uploads_in_flight: &UploadsInFlight,
 ) -> CandidateRowView {
     let detection_text = displayed_threat_name(message_catalog, &entry_record.threat_identity);
-    let context_line = match &entry_record.payload_hash {
-        RecordedPayloadHash::KnownSha256 { sha256_hex } => {
-            format!("{detection_text} · {}", short_hash(sha256_hex))
-        }
-        RecordedPayloadHash::IntegrityUnknown => {
-            translated_messages::findings::integrity_unknown_candidate(
-                message_catalog,
-                &detection_text,
-            )
-        }
-    };
     CandidateRowView {
         entry_id: entry_record.entry_id,
         row_title: shown_file_name(&entry_record.original_path),
-        row_subtitle: context_line,
-        fact_rows: detected_file_rows(
-            message_catalog,
-            moment_formatters,
-            reference_moment,
-            &entry_record.original_path,
-            &FileFactsSource::RecordedAtQuarantine(RecordedQuarantineFacts::from(entry_record)),
-        ),
+        row_subtitle: match &entry_record.payload_hash {
+            RecordedPayloadHash::KnownSha256 { sha256_hex } => {
+                format!("{detection_text} · {}", short_hash(sha256_hex))
+            }
+            RecordedPayloadHash::IntegrityUnknown => {
+                translated_messages::findings::integrity_unknown_candidate(
+                    message_catalog,
+                    &detection_text,
+                )
+            }
+        },
         send_availability: send_availability(&offered_target_activities(
             entry_record,
             uploads_in_flight,
@@ -506,8 +491,6 @@ mod submissions_presentation_tests {
         let message_catalog = &crate::translated_messages::english_catalog();
         let candidate_view = candidate_row_view(
             message_catalog,
-            &english_formatters(),
-            Timestamp::constant(1_793_955_622, 0),
             &QuarantineEntryRecord {
                 entry_id: 5,
                 original_path: PathBuf::from("/home/user/old.bin"),
@@ -528,11 +511,6 @@ mod submissions_presentation_tests {
             SendAvailability::NothingToSend
         );
         assert!(candidate_view.row_subtitle.contains("No usable hash"));
-        assert!(!candidate_view.row_subtitle.contains("/home/user"));
-        assert_eq!(candidate_view.fact_rows[0].fact_label, "Folder");
-        assert_eq!(candidate_view.fact_rows[0].fact_value, "/home/user");
-        assert_eq!(candidate_view.fact_rows[2].fact_label, "Who can open it");
-        assert_eq!(candidate_view.fact_rows.len(), 6);
     }
 
     #[test]

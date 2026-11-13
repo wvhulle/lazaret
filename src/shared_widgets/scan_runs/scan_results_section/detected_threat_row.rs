@@ -20,21 +20,10 @@ use crate::{
             DetectedThreat, ThreatIdentity, ThreatSeverity, displayed_threat_name,
             sanitize_scanner_line,
         },
-        desktop::locale_formatting::MomentFormatters,
         quarantine_vault::quarantine_file_moves::QuarantineMoveFailure,
-        sample_submissions::submission_samples::shown_file_name,
     },
     shared_widgets::{
-        detected_file::{
-            detected_file_facts::FileFactsSource,
-            detected_file_row::{
-                InspectionRequest, LiveFactsLoading, ShownFactRows,
-                inspect_live_facts_in_background,
-            },
-            file_fact_rows::{detected_file_rows, pending_file_rows},
-        },
-        named_menu_items::NamedMenuItems,
-        quarantine_failure_text::describe_quarantine_failure,
+        named_menu_items::NamedMenuItems, quarantine_failure_text::describe_quarantine_failure,
         submission_confirm_dialog::ClamavReportProposal,
     },
     translated_messages,
@@ -154,18 +143,14 @@ pub enum ThreatQuarantineState {
 
 pub struct DetectedThreatRow {
     pub message_catalog: Rc<MessageCatalog>,
-    moment_formatters: Rc<MomentFormatters>,
     pub detected_threat: DetectedThreat,
     pub row_index: DynamicIndex,
     quarantine_state: ThreatQuarantineState,
-    facts_loading: LiveFactsLoading,
-    shown_fact_rows: ShownFactRows,
 }
 
 #[derive(Debug)]
 pub enum DetectedThreatRowInput {
     QuarantineStateChanged(ThreatQuarantineState),
-    FileFactsRequested,
 }
 
 #[derive(Clone, Debug)]
@@ -202,20 +187,21 @@ fn severity_badge_class(threat_severity: ThreatSeverity) -> &'static str {
 impl DetectedThreatRow {
     fn row_subtitle(&self) -> String {
         let message_catalog = Rc::clone(&self.message_catalog);
-        let displayed_name = shown_file_name(&self.detected_threat.file_path);
+        let displayed_path =
+            sanitize_scanner_line(&self.detected_threat.file_path.to_string_lossy());
         match &self.quarantine_state {
             ThreatQuarantineState::AwaitingDecision | ThreatQuarantineState::MovingToQuarantine => {
-                displayed_name
+                displayed_path
             }
             ThreatQuarantineState::MovedToQuarantine => {
                 translated_messages::widgets::moved_quarantine_path_check(
                     &message_catalog,
-                    &displayed_name,
+                    &displayed_path,
                 )
             }
             ThreatQuarantineState::QuarantineFailed(move_failure) => {
                 format!(
-                    "{displayed_name}\n{}",
+                    "{displayed_path}\n{}",
                     describe_quarantine_failure(&message_catalog, move_failure)
                 )
             }
@@ -237,7 +223,6 @@ impl DetectedThreatRow {
 pub struct DetectedThreatRowInit {
     pub detected_threat: DetectedThreat,
     pub message_catalog: Rc<MessageCatalog>,
-    pub moment_formatters: Rc<MomentFormatters>,
 }
 
 #[relm4::factory(pub)]
@@ -245,18 +230,13 @@ impl FactoryComponent for DetectedThreatRow {
     type Init = DetectedThreatRowInit;
     type Input = DetectedThreatRowInput;
     type Output = DetectedThreatRowOutput;
-    type CommandOutput = FileFactsSource;
+    type CommandOutput = ();
     type ParentWidget = gtk::ListBox;
 
     view! {
-        #[name = "threat_expander_row"]
-        adw::ExpanderRow {
+        #[name = "threat_action_row"]
+        adw::ActionRow {
             set_use_markup: false,
-            connect_expanded_notify[sender] => move |expander_row| {
-                if expander_row.is_expanded() {
-                    sender.input(DetectedThreatRowInput::FileFactsRequested);
-                }
-            },
             set_title: &displayed_threat_name(&self.message_catalog, &self.detected_threat.threat_identity),
             #[watch]
             set_subtitle: &self.row_subtitle(),
@@ -294,19 +274,15 @@ impl FactoryComponent for DetectedThreatRow {
         DetectedThreatRowInit {
             detected_threat,
             message_catalog,
-            moment_formatters,
         }: Self::Init,
         row_index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
             message_catalog,
-            moment_formatters,
             detected_threat,
             row_index: row_index.clone(),
             quarantine_state: ThreatQuarantineState::AwaitingDecision,
-            facts_loading: LiveFactsLoading::NotRequested,
-            shown_fact_rows: ShownFactRows::default(),
         }
     }
 
@@ -318,11 +294,6 @@ impl FactoryComponent for DetectedThreatRow {
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
-        self.shown_fact_rows.replace_in_expander(
-            &self.message_catalog,
-            &widgets.threat_expander_row,
-            &pending_file_rows(&self.message_catalog, &self.detected_threat.file_path),
-        );
         let mut row_actions = RelmActionGroup::<ThreatRowActions>::new();
         row_actions.add_action(row_action::<TrustFileAction>(
             &sender,
@@ -351,7 +322,7 @@ impl FactoryComponent for DetectedThreatRow {
             index,
             DetectedThreatRowOutput::PathCopyRequested,
         ));
-        row_actions.register_for_widget(&widgets.threat_expander_row);
+        row_actions.register_for_widget(&widgets.threat_action_row);
         widgets
             .threat_actions_button
             .set_named_menu_model(&threat_actions_menu(
@@ -361,41 +332,12 @@ impl FactoryComponent for DetectedThreatRow {
         widgets
     }
 
-    fn update(&mut self, row_input: DetectedThreatRowInput, sender: FactorySender<Self>) {
+    fn update(&mut self, row_input: DetectedThreatRowInput, _sender: FactorySender<Self>) {
         match row_input {
             DetectedThreatRowInput::QuarantineStateChanged(quarantine_state) => {
                 self.quarantine_state = quarantine_state;
             }
-            DetectedThreatRowInput::FileFactsRequested => {
-                if self.facts_loading.request_inspection() == InspectionRequest::StartInspection {
-                    sender.oneshot_command(inspect_live_facts_in_background(
-                        self.detected_threat.file_path.clone(),
-                    ));
-                }
-            }
         }
-    }
-
-    fn update_cmd_with_view(
-        &mut self,
-        widgets: &mut Self::Widgets,
-        facts_source: FileFactsSource,
-        sender: FactorySender<Self>,
-    ) {
-        let fact_rows = detected_file_rows(
-            &self.message_catalog,
-            &self.moment_formatters,
-            jiff::Timestamp::now(),
-            &self.detected_threat.file_path,
-            &facts_source,
-        );
-        self.shown_fact_rows.replace_in_expander(
-            &self.message_catalog,
-            &widgets.threat_expander_row,
-            &fact_rows,
-        );
-        self.facts_loading = LiveFactsLoading::Inspected;
-        self.update_view(widgets, sender);
     }
 }
 

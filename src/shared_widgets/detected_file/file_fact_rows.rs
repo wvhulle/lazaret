@@ -39,8 +39,22 @@ pub enum FolderActions {
     CopyAndReveal(PathBuf),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FactSection {
+    LocationSection,
+    AccessSection,
+    DetailsSection,
+}
+
+pub const FACT_SECTIONS: [FactSection; 3] = [
+    FactSection::LocationSection,
+    FactSection::AccessSection,
+    FactSection::DetailsSection,
+];
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileFactRow {
+    pub fact_section: FactSection,
     pub fact_label: String,
     pub fact_value: String,
     pub hover_detail: HoverDetail,
@@ -48,8 +62,9 @@ pub struct FileFactRow {
     pub folder_actions: FolderActions,
 }
 
-pub fn fact_row(fact_label: String, fact_value: String) -> FileFactRow {
+pub fn fact_row(fact_section: FactSection, fact_label: String, fact_value: String) -> FileFactRow {
     FileFactRow {
+        fact_section,
         fact_label,
         fact_value,
         hover_detail: HoverDetail::NoHoverDetail,
@@ -58,15 +73,43 @@ pub fn fact_row(fact_label: String, fact_value: String) -> FileFactRow {
     }
 }
 
-pub fn hovered_fact_row(fact_label: String, fact_value: String, hover_text: String) -> FileFactRow {
+pub fn hovered_fact_row(
+    fact_section: FactSection,
+    fact_label: String,
+    fact_value: String,
+    hover_text: String,
+) -> FileFactRow {
     FileFactRow {
         hover_detail: HoverDetail::HoverText(hover_text),
-        ..fact_row(fact_label, fact_value)
+        ..fact_row(fact_section, fact_label, fact_value)
     }
+}
+
+pub fn section_title(message_catalog: &MessageCatalog, fact_section: FactSection) -> String {
+    match fact_section {
+        FactSection::LocationSection => {
+            translated_messages::findings::location_section(message_catalog)
+        }
+        FactSection::AccessSection => {
+            translated_messages::findings::access_section(message_catalog)
+        }
+        FactSection::DetailsSection => {
+            translated_messages::findings::details_section(message_catalog)
+        }
+    }
+}
+
+pub fn rows_in_section(fact_rows: &[FileFactRow], fact_section: FactSection) -> Vec<FileFactRow> {
+    fact_rows
+        .iter()
+        .filter(|fact_row| fact_row.fact_section == fact_section)
+        .cloned()
+        .collect()
 }
 
 fn size_row(message_catalog: &MessageCatalog, byte_size: ByteSize) -> FileFactRow {
     hovered_fact_row(
+        FactSection::DetailsSection,
         translated_messages::findings::file_size(message_catalog),
         byte_size_text(byte_size),
         exact_byte_size_text(message_catalog, byte_size),
@@ -80,6 +123,7 @@ fn moment_row(
     reference_moment: Timestamp,
 ) -> FileFactRow {
     hovered_fact_row(
+        FactSection::DetailsSection,
         fact_label,
         moment_formatters.relative_moment_text(shown_moment, reference_moment),
         moment_formatters.exact_moment_text(shown_moment),
@@ -113,11 +157,13 @@ fn live_fact_rows(
             reference_moment,
         ),
         ModificationMoment::OutsideCalendarRange => fact_row(
+            FactSection::DetailsSection,
             modified_label,
             translated_messages::findings::unknown_label(message_catalog),
         ),
     };
     std::iter::once(hovered_fact_row(
+        FactSection::AccessSection,
         translated_messages::findings::file_owner(message_catalog),
         shown_owner,
         owner_hover,
@@ -148,9 +194,11 @@ fn recorded_fact_rows(
             *detected_at,
             reference_moment,
         ),
-        StoredDetectionDate::UnreadableText(stored_text) => {
-            fact_row(detected_label, sanitize_scanner_line(stored_text))
-        }
+        StoredDetectionDate::UnreadableText(stored_text) => fact_row(
+            FactSection::DetailsSection,
+            detected_label,
+            sanitize_scanner_line(stored_text),
+        ),
     };
     std::iter::once(detected_row)
         .chain(access_rows(
@@ -178,19 +226,12 @@ pub fn folder_row(
     FileFactRow {
         folder_actions,
         ..hovered_fact_row(
+            FactSection::LocationSection,
             translated_messages::findings::file_folder(message_catalog),
             shown_folder(file_path),
             sanitize_scanner_line(&file_path.to_string_lossy()),
         )
     }
-}
-
-pub fn pending_file_rows(message_catalog: &MessageCatalog, file_path: &Path) -> Vec<FileFactRow> {
-    vec![folder_row(
-        message_catalog,
-        file_path,
-        FolderActions::CopyPath(file_path.to_path_buf()),
-    )]
 }
 
 pub fn detected_file_rows(
@@ -223,6 +264,7 @@ pub fn detected_file_rows(
         FileFactsSource::NoLongerThere => (
             FolderActions::CopyPath(copied_path),
             vec![fact_row(
+                FactSection::LocationSection,
                 translated_messages::findings::file_status(message_catalog),
                 translated_messages::findings::no_longer_there_detection(message_catalog),
             )],
@@ -230,6 +272,7 @@ pub fn detected_file_rows(
         FileFactsSource::Unreadable => (
             FolderActions::CopyPath(copied_path),
             vec![fact_row(
+                FactSection::LocationSection,
                 translated_messages::findings::file_status(message_catalog),
                 translated_messages::findings::state_unknown_detection(message_catalog),
             )],

@@ -69,6 +69,7 @@ use crate::{
         },
         journal_follow_failure_text::journal_follow_failure_text,
         loading_indicators::{BUSY_PAGE_NAME, FirstLoad, IDLE_PAGE_NAME, busy_page_name},
+        page_widget_templates::ClampedPage,
         quarantine_failure_text::describe_quarantine_failure,
         step_timeline::{
             timeline_step_contents::TimelineStepRowOutput,
@@ -503,7 +504,6 @@ impl BackgroundDetectionsPage {
 
     fn show_detection_list(&mut self) {
         let message_catalog = Rc::clone(&self.message_catalog);
-        let moment_formatters = Rc::clone(&self.moment_formatters);
         let mut row_guard = self.detection_list_rows.guard();
         row_guard.clear();
         detections_needing_attention_first(&self.displayed_detections)
@@ -512,7 +512,6 @@ impl BackgroundDetectionsPage {
                 row_guard.push_back(DetectionListRowInit {
                     displayed_detection,
                     message_catalog: Rc::clone(&message_catalog),
-                    moment_formatters: Rc::clone(&moment_formatters),
                 });
             });
     }
@@ -839,14 +838,16 @@ impl Component for BackgroundDetectionsPage {
                         },
                     },
 
-                    add_named[Some(INCIDENT_VIEW_NAME)] = &adw::PreferencesPage {
-                        set_title: &translated_messages::findings::detection_title(&model.message_catalog),
+                    #[template]
+                    add_named[Some(INCIDENT_VIEW_NAME)] = &ClampedPage {
+                        #[template_child]
+                        page_content {
+                            #[local_ref]
+                            incident_file_group -> gtk::Box {},
 
-                        #[local_ref]
-                        add = incident_file_group -> adw::PreferencesGroup {},
-
-                        #[local_ref]
-                        add = incident_group -> adw::PreferencesGroup {},
+                            #[local_ref]
+                            incident_group -> adw::PreferencesGroup {},
+                        },
                     },
 
                     #[watch]

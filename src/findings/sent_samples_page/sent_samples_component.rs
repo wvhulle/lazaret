@@ -299,7 +299,6 @@ impl SentSamplesPage {
 
     fn show_candidate_rows(&mut self) {
         let message_catalog = Rc::clone(&self.message_catalog);
-        let moment_formatters = Rc::clone(&self.moment_formatters);
         let mut row_guard = self.candidate_rows.guard();
         row_guard.clear();
         self.candidate_listing
@@ -309,8 +308,6 @@ impl SentSamplesPage {
                 row_guard.push_back(QuarantinedCandidateRowInit {
                     row_view: candidate_row_view(
                         &message_catalog,
-                        &moment_formatters,
-                        jiff::Timestamp::now(),
                         listed_candidate,
                         &self.uploads_in_flight,
                     ),

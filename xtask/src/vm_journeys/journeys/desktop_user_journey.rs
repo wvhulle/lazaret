@@ -17,7 +17,7 @@ use crate::vm_journeys::{
         journey_failure::{JourneyFailure, ensure},
         journey_run::{JourneyRun, SAMPLE_HOME, SAMPLE_PASSWORD},
         lazaret_database::{SubmissionKey, SubmissionKind, SubmissionService, SubmissionStatus},
-        session_widgets::{button, in_alert, in_row, label_containing},
+        session_widgets::{button, in_alert, label_containing, row_titled},
         system_commands::{
             as_root, journal_text, settle, succeed, unit_journal_lines_mentioning, wait_until,
         },
@@ -128,10 +128,7 @@ fn show_quarantine_entry(
     let entry_title = journey_run
         .database
         .wait_for_quarantined_signature(path_fragment)?;
-    journey_run.press(&in_row(
-        button(findings::open_details(&MessageCatalog::source_language())),
-        entry_title,
-    ))?;
+    journey_run.press(&row_titled(entry_title))?;
     journey_run.await_shown(&button(findings::trust_label(
         &MessageCatalog::source_language(),
     )))
@@ -434,10 +431,7 @@ pub fn run_desktop_user_journey() -> Result<(), JourneyFailure> {
             FixtureSample::EicarInvoice.place_at(&deleted_file)?;
             wait_until_blocked(&deleted_file)?;
             wait_for_notification(&deleted_file)?;
-            journey_run.press(&in_row(
-                button(findings::open_details(&MessageCatalog::source_language())),
-                "throwaway.exe",
-            ))?;
+            journey_run.press(&row_titled("throwaway.exe"))?;
             journey_run.press(&button(findings::ask_incident_deletion(
                 &MessageCatalog::source_language(),
             )))?;

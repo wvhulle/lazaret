@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use relm4::{
     adw,
@@ -6,13 +6,11 @@ use relm4::{
     gtk,
     gtk::{gio, glib},
 };
-use tokio::task::spawn_blocking;
 
 use crate::{
     host_services::desktop::failure_journal_log::log_failure_to_journal,
-    shared_widgets::detected_file::{
-        detected_file_facts::{FileFactsSource, inspect_live_file_facts},
-        file_fact_rows::{FileFactRow, FolderActions, HoverDetail, RowEmphasis},
+    shared_widgets::detected_file::file_fact_rows::{
+        FileFactRow, FolderActions, HoverDetail, RowEmphasis,
     },
     translated_messages,
     translated_messages::MessageCatalog,
@@ -113,20 +111,6 @@ impl ShownFactRows {
         )
     }
 
-    pub fn replace_in_expander(
-        &mut self,
-        message_catalog: &MessageCatalog,
-        expander_row: &adw::ExpanderRow,
-        fact_rows: &[FileFactRow],
-    ) {
-        self.rebuilt_rows(message_catalog, fact_rows)
-            .iter()
-            .for_each(|removed_row| expander_row.remove(removed_row));
-        self.action_rows
-            .iter()
-            .for_each(|shown_row| expander_row.add_row(shown_row));
-    }
-
     pub fn replace_in_group(
         &mut self,
         message_catalog: &MessageCatalog,
@@ -139,54 +123,5 @@ impl ShownFactRows {
         self.action_rows
             .iter()
             .for_each(|shown_row| preferences_group.add(shown_row));
-    }
-}
-
-#[derive(Debug)]
-pub enum LiveFactsLoading {
-    NotRequested,
-    Inspecting,
-    Inspected,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum InspectionRequest {
-    StartInspection,
-    AlreadyRequested,
-}
-
-impl LiveFactsLoading {
-    pub fn request_inspection(&mut self) -> InspectionRequest {
-        match self {
-            Self::NotRequested => {
-                *self = Self::Inspecting;
-                InspectionRequest::StartInspection
-            }
-            Self::Inspecting | Self::Inspected => InspectionRequest::AlreadyRequested,
-        }
-    }
-}
-
-pub async fn inspect_live_facts_in_background(file_path: PathBuf) -> FileFactsSource {
-    spawn_blocking(move || inspect_live_file_facts(&file_path))
-        .await
-        .unwrap_or(FileFactsSource::Unreadable)
-}
-
-#[cfg(test)]
-mod detected_file_row_tests {
-    use super::*;
-
-    #[test]
-    fn inspection_starts_once() {
-        let mut facts_loading = LiveFactsLoading::NotRequested;
-        assert_eq!(
-            facts_loading.request_inspection(),
-            InspectionRequest::StartInspection
-        );
-        assert_eq!(
-            facts_loading.request_inspection(),
-            InspectionRequest::AlreadyRequested
-        );
     }
 }

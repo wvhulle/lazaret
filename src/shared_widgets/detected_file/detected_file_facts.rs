@@ -2,7 +2,6 @@ use std::{ffi::OsStr, fs, io, os::unix::fs::MetadataExt, path::Path};
 
 use bytesize::ByteSize;
 use jiff::Timestamp;
-use rustix::process::geteuid;
 
 use crate::host_services::{
     clamav_scanner::scanner_output_parser::sanitize_scanner_line,
@@ -77,16 +76,6 @@ pub enum FileFactsSource {
     Unreadable,
 }
 
-impl From<LiveFileInspection> for FileFactsSource {
-    fn from(live_inspection: LiveFileInspection) -> Self {
-        match live_inspection {
-            LiveFileInspection::Present(live_facts) => Self::LiveSnapshot(live_facts),
-            LiveFileInspection::NoLongerThere => Self::NoLongerThere,
-            LiveFileInspection::Unreadable => Self::Unreadable,
-        }
-    }
-}
-
 fn named_account(numeric_id: u32, account_name: &OsStr) -> AccountIdentity {
     AccountIdentity::NamedAccount {
         account_name: sanitize_scanner_line(&account_name.to_string_lossy()),
@@ -148,10 +137,6 @@ pub fn read_live_file_facts(file_path: &Path, viewing_user_id: u32) -> LiveFileI
         byte_size: ByteSize::b(file_metadata.size()),
         modification_moment: modification_moment(&file_metadata),
     })
-}
-
-pub fn inspect_live_file_facts(file_path: &Path) -> FileFactsSource {
-    FileFactsSource::from(read_live_file_facts(file_path, geteuid().as_raw()))
 }
 
 #[cfg(test)]
