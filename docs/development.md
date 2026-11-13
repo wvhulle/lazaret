@@ -135,7 +135,9 @@ flatpak install --user dist/lazaret-x86_64.flatpak
 
 ## Releases
 
-Releases are cut by [release-plz](https://release-plz.dev/) on Codeberg, configured in `release-plz.toml`:
+Releases are cut by [release-plz](https://release-plz.dev/) on Codeberg, configured in `release-plz.toml`. Only the `lazaret` package is released: `release = false` in its `[workspace]` section keeps every other workspace crate internal, so a new crate needs no entry there.
+
+The steps:
 
 1. On every push to `main`, `.woodpecker/release.yaml` opens or updates a release pull request. It bumps the version from the conventional commits since the last tag and writes the changelog.
 2. Merging that pull request tags `v<version>` and creates a Codeberg release.
