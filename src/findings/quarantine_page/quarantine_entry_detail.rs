@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use relm4::{
-    FactorySender, adw,
+    Component, ComponentController, Controller, FactorySender, adw,
     adw::prelude::*,
     gtk::{self, glib},
     prelude::{DynamicIndex, FactoryComponent},
@@ -16,9 +16,8 @@ use crate::{
         clamav_admin_service::trust_requests::{FileFingerprint, TrustChoice, TrustScope},
         clamav_programs::clamav_report_submission::{ClamavReportKind, SubmittedContent},
         clamav_scanner::scanner_output_parser::{displayed_threat_name, sanitize_scanner_line},
-        desktop::locale_formatting::{MomentFormatters, byte_size_text},
         quarantine_vault::{
-            quarantine_entry_database::{QuarantineEntryRecord, StoredDetectionDate},
+            quarantine_entry_database::QuarantineEntryRecord,
             quarantine_file_moves::RecordedPayloadHash,
         },
         threat_intel::{
@@ -26,7 +25,15 @@ use crate::{
             service_access::{KnownServiceAccess, ServiceAccess},
         },
     },
-    shared_widgets::submission_confirm_dialog::ClamavReportProposal,
+    shared_widgets::{
+        detected_file::{
+            detected_file_facts::{FileFactsSource, RecordedQuarantineFacts},
+            detected_file_facts_group::{
+                DetectedFileFactsGroup, DetectedFileFactsGroupInit, ShownDetectedFile,
+            },
+        },
+        submission_confirm_dialog::ClamavReportProposal,
+    },
     translated_messages,
     translated_messages::MessageCatalog,
 };
@@ -48,27 +55,11 @@ pub fn quarantined_false_positive_detection(
         })
 }
 
-pub fn entry_summary_text(
-    moment_formatters: &MomentFormatters,
-    entry_record: &QuarantineEntryRecord,
-) -> String {
-    format!(
-        "{}\n{} · {}",
-        sanitize_scanner_line(&entry_record.original_path.to_string_lossy()),
-        match &entry_record.detection_date {
-            StoredDetectionDate::DetectedAt(detected_at) =>
-                moment_formatters.exact_moment_text(*detected_at),
-            StoredDetectionDate::UnreadableText(stored_text) => sanitize_scanner_line(stored_text),
-        },
-        byte_size_text(entry_record.file_size),
-    )
-}
-
 pub struct QuarantineEntryDetail {
     pub message_catalog: Rc<MessageCatalog>,
-    pub moment_formatters: Rc<MomentFormatters>,
     entry_record: QuarantineEntryRecord,
     row_state: EntryRowState,
+    file_facts_group: Controller<DetectedFileFactsGroup>,
 }
 
 #[derive(Debug)]
@@ -272,8 +263,6 @@ impl FactoryComponent for QuarantineEntryDetail {
 
             adw::PreferencesGroup {
                 set_title: &glib::markup_escape_text(&displayed_threat_name(&self.message_catalog, &self.entry_record.threat_identity)),
-                set_description: Some(&glib::markup_escape_text(&entry_summary_text(&self.moment_formatters, &self.entry_record))),
-
                 #[wrap(Some)]
                 set_header_suffix = &gtk::Box {
                     set_spacing: 6,
@@ -299,6 +288,8 @@ impl FactoryComponent for QuarantineEntryDetail {
                     },
                 },
             },
+
+            append: self.file_facts_group.widget(),
 
             adw::PreferencesGroup {
                 set_title: &translated_messages::findings::reputation_section_title(&self.message_catalog),
@@ -457,8 +448,19 @@ impl FactoryComponent for QuarantineEntryDetail {
         _sender: FactorySender<Self>,
     ) -> Self {
         Self {
+            file_facts_group: DetectedFileFactsGroup::builder()
+                .launch(DetectedFileFactsGroupInit {
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
+                    shown_file: ShownDetectedFile {
+                        file_path: entry_record.original_path.clone(),
+                        facts_source: FileFactsSource::RecordedAtQuarantine(
+                            RecordedQuarantineFacts::from(&entry_record),
+                        ),
+                    },
+                })
+                .detach(),
             message_catalog,
-            moment_formatters,
             entry_record,
             row_state,
         }
@@ -535,7 +537,10 @@ mod quarantine_entry_detail_tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::host_services::clamav_scanner::scanner_output_parser::ThreatIdentity;
+    use crate::host_services::{
+        clamav_scanner::scanner_output_parser::ThreatIdentity,
+        quarantine_vault::quarantine_entry_database::StoredDetectionDate,
+    };
 
     fn quarantined_entry(threat_identity: ThreatIdentity) -> QuarantineEntryRecord {
         QuarantineEntryRecord {

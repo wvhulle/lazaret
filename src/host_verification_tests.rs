@@ -412,12 +412,15 @@ async fn host_background_detection_flows_from_journal_to_quarantine() {
     fs::write(&eicar_path, eicar_test_bytes()).expect("write into Downloads");
     tokio::time::sleep(Duration::from_secs(3)).await;
     let _refused_read = fs::read(&eicar_path);
-    assert_eq!(
-        inspect_detected_file(&eicar_path, OpeningCheck::OpenToCheckBlocking),
-        DetectedFileState::Present {
-            access: FileAccess::BlockedOnAccess,
-            owner: FileOwner::CurrentUser,
-        },
+    assert!(
+        matches!(
+            inspect_detected_file(&eicar_path, OpeningCheck::OpenToCheckBlocking),
+            DetectedFileState::Present {
+                access: FileAccess::BlockedOnAccess,
+                owner: FileOwner::CurrentUser,
+                ..
+            }
+        ),
         "on-access prevention must be blocking this file"
     );
 

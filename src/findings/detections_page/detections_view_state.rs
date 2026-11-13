@@ -159,7 +159,7 @@ pub fn file_state_for_detection(
     inspect_file: impl Fn(&Path, OpeningCheck) -> DetectedFileState,
 ) -> DetectedFileState {
     if let Some(known_state) = known_file_states.get(&stored_detection.detection_id) {
-        return *known_state;
+        return known_state.clone();
     }
     inspect_file(
         &stored_detection.file_path,
@@ -185,7 +185,7 @@ pub fn file_states_to_keep(
         .map(|displayed_detection| {
             (
                 displayed_detection.stored_detection.detection_id,
-                displayed_detection.file_state,
+                displayed_detection.file_state.clone(),
             )
         })
         .collect()
@@ -220,7 +220,9 @@ pub fn detection_for_file<'detections>(
 mod detections_view_state_tests {
     use super::*;
     use crate::{
-        findings::detections_page::detected_file_state::{FileAccess, FileOwner},
+        findings::detections_page::detected_file_state::{
+            FileAccess, FileOwner, detected_file_state_fixtures::live_facts_owned_by,
+        },
         host_services::{
             detection_journal::{
                 detection_history_store::{DetectionSources, DetectionState, ResolutionKind},
@@ -265,6 +267,7 @@ mod detections_view_state_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::BlockedOnAccess,
                 owner: FileOwner::CurrentUser,
+                live_facts: live_facts_owned_by(1000),
             },
         }];
         assert_eq!(

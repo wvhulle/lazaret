@@ -268,7 +268,10 @@ fn open_quarantined_entry(
     let entry_title = journey_run
         .database
         .wait_for_quarantined_signature(path_fragment)?;
-    journey_run.press(&row_titled(entry_title))?;
+    journey_run.press(&in_row(
+        button(findings::open_details(&MessageCatalog::source_language())),
+        entry_title,
+    ))?;
     journey_run.await_shown(&button(findings::trust_label(
         &MessageCatalog::source_language(),
     )))

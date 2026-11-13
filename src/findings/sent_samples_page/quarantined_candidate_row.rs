@@ -3,7 +3,8 @@ use std::rc::Rc;
 use relm4::{FactorySender, adw, adw::prelude::*, gtk, prelude::FactoryComponent};
 
 use crate::{
-    findings::sent_samples_page::sent_samples_presentation::CandidateRowView, translated_messages,
+    findings::sent_samples_page::sent_samples_presentation::CandidateRowView,
+    shared_widgets::detected_file::detected_file_row::ShownFactRows, translated_messages,
     translated_messages::MessageCatalog,
 };
 
@@ -15,6 +16,7 @@ pub enum QuarantinedCandidateRowOutput {
 pub struct QuarantinedCandidateRow {
     pub message_catalog: Rc<MessageCatalog>,
     row_view: CandidateRowView,
+    shown_fact_rows: ShownFactRows,
 }
 
 pub struct QuarantinedCandidateRowInit {
@@ -31,7 +33,8 @@ impl FactoryComponent for QuarantinedCandidateRow {
     type ParentWidget = gtk::ListBox;
 
     view! {
-        adw::ActionRow {
+        #[name = "candidate_expander_row"]
+        adw::ExpanderRow {
             set_use_markup: false,
             set_title: &self.row_view.row_title,
             set_subtitle: &self.row_view.row_subtitle,
@@ -60,6 +63,20 @@ impl FactoryComponent for QuarantinedCandidateRow {
         Self {
             row_view,
             message_catalog,
+            shown_fact_rows: ShownFactRows::default(),
         }
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &Self::Index,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+        self.shown_fact_rows
+            .replace_in_expander(&widgets.candidate_expander_row, &self.row_view.fact_rows);
+        widgets
     }
 }

@@ -22,6 +22,10 @@ use crate::{
     task_failure::TaskFailure,
 };
 
+fn open_details_in_row(row_title: &str) -> WidgetTarget {
+    WidgetTarget::button("Open details").inside(WidgetTarget::list_item(row_title))
+}
+
 const PAGE_SETTLE_DURATION: Duration = Duration::from_secs(4);
 const STEP_FRAME_DURATION: Duration = Duration::from_millis(1800);
 const POINTING_FRAME_DURATION: Duration = Duration::from_millis(900);
@@ -180,7 +184,7 @@ fn page_scenarios() -> Vec<PageScenario> {
             animation_name: "detections",
             user_interactions: [
                 shown("detections"),
-                point_and_click(WidgetTarget::list_item("invoice.pdf.exe")),
+                point_and_click(open_details_in_row("invoice.pdf.exe")),
                 shown("detection-incident"),
             ]
             .concat(),
@@ -191,7 +195,7 @@ fn page_scenarios() -> Vec<PageScenario> {
             animation_name: "quarantine",
             user_interactions: [
                 shown("quarantine"),
-                point_and_click(WidgetTarget::list_item("Win.Trojan.Agent")),
+                point_and_click(open_details_in_row("Win.Trojan.Agent")),
                 frame(),
                 shown("quarantine-entry"),
             ]

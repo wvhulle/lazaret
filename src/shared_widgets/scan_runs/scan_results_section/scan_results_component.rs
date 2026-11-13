@@ -21,6 +21,7 @@ use crate::{
         },
         desktop::{
             flatpak_sandbox::SandboxKind,
+            locale_formatting::MomentFormatters,
             stored_settings::{add_exclusion_entry, application_settings},
         },
         quarantine_vault::{
@@ -74,6 +75,7 @@ impl AlertChoice for QuarantineDialogChoice {
 
 pub struct ScanResultsSectionInit {
     pub message_catalog: Rc<MessageCatalog>,
+    pub moment_formatters: Rc<MomentFormatters>,
     pub sandbox_kind: SandboxKind,
     pub quarantine_vault: QuarantineVault,
     pub dismiss_label: String,
@@ -81,6 +83,7 @@ pub struct ScanResultsSectionInit {
 
 pub struct ScanResultsSection {
     pub message_catalog: Rc<MessageCatalog>,
+    moment_formatters: Rc<MomentFormatters>,
     sandbox_kind: SandboxKind,
     dismiss_label: String,
     results_view: ScanResultsView,
@@ -276,6 +279,7 @@ impl ScanResultsSection {
                 threat_guard.push_back(DetectedThreatRowInit {
                     detected_threat,
                     message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&self.moment_formatters),
                 });
             });
         drop(threat_guard);
@@ -387,12 +391,14 @@ impl Component for ScanResultsSection {
     ) -> ComponentParts<Self> {
         let ScanResultsSectionInit {
             message_catalog,
+            moment_formatters,
             quarantine_vault,
             dismiss_label,
             sandbox_kind,
         } = section_init;
         let model = Self {
             message_catalog,
+            moment_formatters,
             sandbox_kind,
             dismiss_label,
             results_view: ScanResultsView::empty_results(),

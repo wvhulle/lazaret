@@ -3,8 +3,9 @@ use std::{collections::HashMap, fs, path::PathBuf, rc::Rc};
 use futures::{Stream, StreamExt, stream};
 use jiff::Timestamp;
 use relm4::{
-    Component, ComponentParts, ComponentSender, abstractions::Toaster, actions::ActionName, adw,
-    adw::prelude::*, gtk, prelude::FactoryVecDeque,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
+    abstractions::Toaster, actions::ActionName, adw, adw::prelude::*, gtk,
+    prelude::FactoryVecDeque,
 };
 use tokio::task::spawn_blocking;
 
@@ -62,6 +63,13 @@ use crate::{
     shared_widgets::{
         component_streams::{RunningStream, run_stream},
         database_migration_failure_text::describe_history_failure,
+        detected_file::{
+            detected_file_facts::FileFactsSource,
+            detected_file_facts_group::{
+                DetectedFileFactsGroup, DetectedFileFactsGroupInit, DetectedFileFactsGroupInput,
+                ShownDetectedFile,
+            },
+        },
         journal_follow_failure_text::journal_follow_failure_text,
         loading_indicators::{BUSY_PAGE_NAME, FirstLoad, IDLE_PAGE_NAME, busy_page_name},
         quarantine_failure_text::describe_quarantine_failure,
@@ -92,6 +100,7 @@ pub struct BackgroundDetectionsPage {
     application_started: Timestamp,
     first_load: FirstLoad,
     detection_list_rows: FactoryVecDeque<DetectionListRow>,
+    incident_file_group: Controller<DetectedFileFactsGroup>,
     incident_rows: FactoryVecDeque<TimelineStepRow<IncidentStepAction>>,
     alert_rows: FactoryVecDeque<TimelineStepRow<AlertStepAction>>,
     evidence_refresh: EvidenceRefresh,
@@ -497,6 +506,7 @@ impl BackgroundDetectionsPage {
 
     fn show_detection_list(&mut self) {
         let message_catalog = Rc::clone(&self.message_catalog);
+        let moment_formatters = Rc::clone(&self.moment_formatters);
         let mut row_guard = self.detection_list_rows.guard();
         row_guard.clear();
         detections_needing_attention_first(&self.displayed_detections)
@@ -505,6 +515,7 @@ impl BackgroundDetectionsPage {
                 row_guard.push_back(DetectionListRowInit {
                     displayed_detection,
                     message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
                 });
             });
     }
@@ -590,6 +601,13 @@ impl BackgroundDetectionsPage {
     }
 
     fn show_incident_view(&mut self) {
+        if let Some(displayed_detection) = self.opened_detection() {
+            self.incident_file_group
+                .emit(DetectedFileFactsGroupInput::FileShown(ShownDetectedFile {
+                    file_path: displayed_detection.stored_detection.file_path.clone(),
+                    facts_source: displayed_detection.file_state.facts_source(),
+                }));
+        }
         let incident_steps = self.opened_incident_steps();
         if self.incident_rows.len() == incident_steps.len() {
             (0..)
@@ -828,6 +846,9 @@ impl Component for BackgroundDetectionsPage {
                         set_title: &translated_messages::findings::detection_title(&model.message_catalog),
 
                         #[local_ref]
+                        add = incident_file_group -> adw::PreferencesGroup {},
+
+                        #[local_ref]
                         add = incident_group -> adw::PreferencesGroup {},
                     },
 
@@ -847,6 +868,16 @@ impl Component for BackgroundDetectionsPage {
         let moment_formatters = page_init.moment_formatters;
         let sandbox_kind = page_init.sandbox_kind;
         let model = Self {
+            incident_file_group: DetectedFileFactsGroup::builder()
+                .launch(DetectedFileFactsGroupInit {
+                    message_catalog: Rc::clone(&message_catalog),
+                    moment_formatters: Rc::clone(&moment_formatters),
+                    shown_file: ShownDetectedFile {
+                        file_path: PathBuf::new(),
+                        facts_source: FileFactsSource::Unreadable,
+                    },
+                })
+                .detach(),
             message_catalog,
             moment_formatters,
             activity_history: page_init.activity_history.clone(),
@@ -886,6 +917,7 @@ impl Component for BackgroundDetectionsPage {
             ),
         };
         let detection_list_group = model.detection_list_rows.widget();
+        let incident_file_group = model.incident_file_group.widget();
         let incident_group = model.incident_rows.widget();
         let alert_group = model.alert_rows.widget();
         let widgets = view_output!();

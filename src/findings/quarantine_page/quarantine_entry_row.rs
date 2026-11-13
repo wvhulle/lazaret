@@ -8,9 +8,8 @@ use relm4::{
 };
 
 use crate::{
-    findings::quarantine_page::{
-        quarantine_entry_detail::entry_summary_text,
-        quarantine_page_state::{EntryRowState, QuarantineRowInit, RowRecheckState},
+    findings::quarantine_page::quarantine_page_state::{
+        EntryRowState, QuarantineRowInit, RowRecheckState,
     },
     host_services::{
         clamav_scanner::{
@@ -21,6 +20,11 @@ use crate::{
             quarantine_entry_database::QuarantineEntryRecord,
             quarantine_file_moves::RecordedPayloadHash,
         },
+        sample_submissions::submission_samples::shown_file_name,
+    },
+    shared_widgets::detected_file::{
+        detected_file_facts::{FileFactsSource, RecordedQuarantineFacts, file_fact_rows},
+        detected_file_row::{ShownFactRows, path_then_fact_rows},
     },
     translated_messages,
     translated_messages::MessageCatalog,
@@ -31,6 +35,7 @@ pub struct QuarantineEntryRow {
     pub moment_formatters: Rc<MomentFormatters>,
     entry_record: QuarantineEntryRecord,
     row_state: EntryRowState,
+    shown_fact_rows: ShownFactRows,
 }
 
 #[derive(Debug)]
@@ -76,7 +81,6 @@ impl QuarantineEntryRow {
     }
 
     fn integrity_unknown(&self) -> bool {
-        let _moment_formatters = &self.moment_formatters;
         self.entry_record.payload_hash == RecordedPayloadHash::IntegrityUnknown
     }
 }
@@ -91,15 +95,12 @@ impl FactoryComponent for QuarantineEntryRow {
 
     view! {
         #[root]
-        adw::ActionRow {
+        #[name = "entry_expander_row"]
+        adw::ExpanderRow {
             set_use_markup: false,
             set_title: &displayed_threat_name(&self.message_catalog, &self.entry_record.threat_identity),
-            set_subtitle: &entry_summary_text(&self.moment_formatters, &self.entry_record),
+            set_subtitle: &shown_file_name(&self.entry_record.original_path),
             set_subtitle_lines: 0,
-            set_activatable: true,
-            connect_activated[sender, entry_id = self.entry_record.entry_id] => move |_activated_row| {
-                let _parent_gone = sender.output(QuarantineEntryRowOutput::EntryOpened { entry_id });
-            },
 
             add_suffix = &gtk::Label {
                 set_valign: gtk::Align::Center,
@@ -118,8 +119,15 @@ impl FactoryComponent for QuarantineEntryRow {
                 set_visible: self.integrity_unknown(),
             },
 
-            add_suffix = &gtk::Image {
-                set_icon_name: Some("go-next-symbolic"),
+            add_suffix = &gtk::Button {
+                set_icon_name: "go-next-symbolic",
+                set_tooltip_text: Some(&translated_messages::findings::open_details(&self.message_catalog)),
+                update_property: &[gtk::accessible::Property::Label(&translated_messages::findings::open_details(&self.message_catalog))],
+                set_valign: gtk::Align::Center,
+                add_css_class: "flat",
+                connect_clicked[sender, entry_id = self.entry_record.entry_id] => move |_clicked_button| {
+                    let _parent_gone = sender.output(QuarantineEntryRowOutput::EntryOpened { entry_id });
+                },
             },
         }
     }
@@ -139,7 +147,32 @@ impl FactoryComponent for QuarantineEntryRow {
             moment_formatters,
             entry_record,
             row_state,
+            shown_fact_rows: ShownFactRows::default(),
         }
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+        let fact_rows = path_then_fact_rows(
+            &self.message_catalog,
+            &self.entry_record.original_path,
+            file_fact_rows(
+                &self.message_catalog,
+                &self.moment_formatters,
+                &FileFactsSource::RecordedAtQuarantine(RecordedQuarantineFacts::from(
+                    &self.entry_record,
+                )),
+            ),
+        );
+        self.shown_fact_rows
+            .replace_in_expander(&widgets.entry_expander_row, &fact_rows);
+        widgets
     }
 
     fn update(&mut self, row_input: QuarantineEntryRowInput, _sender: FactorySender<Self>) {

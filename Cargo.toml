@@ -53,6 +53,7 @@ xdg = "3.0.0"
 fluent-bundle = "0.16"
 fluent-langneg = "0.13"
 unic-langid = "0.9"
+uzers = "0.12.2"
 
 [dev-dependencies]
 libc = "0.2"

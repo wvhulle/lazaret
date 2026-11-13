@@ -161,14 +161,17 @@ pub fn detection_state_text(
             DetectedFileState::Present {
                 access: FileAccess::BlockedOnAccess,
                 owner: FileOwner::CurrentUser,
+                ..
             } => translated_messages::findings::blocked_needs_decision(message_catalog),
             DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
+                ..
             } => translated_messages::findings::not_blocked_needs_decision(message_catalog),
             DetectedFileState::Present {
                 access: FileAccess::NotOpened,
                 owner: FileOwner::CurrentUser,
+                ..
             } => translated_messages::findings::needs_decision(message_catalog),
             DetectedFileState::NoLongerThere => {
                 translated_messages::findings::no_longer_there_detection(message_catalog)
@@ -244,10 +247,6 @@ fn detected_step(
 ) -> IncidentStep {
     let signature_text = sanitize_scanner_line(&stored_detection.signature_name);
     let evidence_rows = vec![
-        evidence_row(
-            translated_messages::findings::file_label(message_catalog),
-            displayed_file_path(stored_detection),
-        ),
         evidence_row(
             translated_messages::findings::signature_source(message_catalog),
             signature_source_name(provider_of_signature(&stored_detection.signature_name)),
@@ -429,7 +428,7 @@ fn lookup_choices(
 fn decision_choices(
     message_catalog: &MessageCatalog,
     deletion_prompt: DeletionPrompt,
-    file_state: DetectedFileState,
+    file_state: &DetectedFileState,
 ) -> Vec<StepChoiceRow<IncidentStepAction>> {
     if !file_state.user_can_move_or_delete() {
         return vec![StepChoiceRow {
@@ -522,7 +521,7 @@ fn review_step(
             choice_rows: decision_choices(
                 message_catalog,
                 deletion_prompt,
-                displayed_detection.file_state,
+                &displayed_detection.file_state,
             )
             .into_iter()
             .chain(lookup_choices(message_catalog, service_access))
@@ -638,6 +637,7 @@ mod incident_timeline_presentation_tests {
 
     use super::*;
     use crate::{
+        findings::detections_page::detected_file_state::detected_file_state_fixtures::live_facts_owned_by,
         host_services::{
             protection_evidence::protection_evidence_fixtures::english_formatters,
             threat_intel::{
@@ -669,6 +669,7 @@ mod incident_timeline_presentation_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::BlockedOnAccess,
                 owner: FileOwner::CurrentUser,
+                live_facts: live_facts_owned_by(1000),
             },
         }
     }
@@ -815,6 +816,7 @@ mod incident_timeline_presentation_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
+                live_facts: live_facts_owned_by(1000),
             },
         };
         let incident_steps = incident_timeline(
@@ -848,6 +850,7 @@ mod incident_timeline_presentation_tests {
                     file_state: DetectedFileState::Present {
                         access: file_access,
                         owner: FileOwner::OtherUser,
+                        live_facts: live_facts_owned_by(0),
                     },
                     ..blocked_detection()
                 };
@@ -914,6 +917,7 @@ mod incident_timeline_presentation_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
+                live_facts: live_facts_owned_by(1000),
             },
         };
         let incident_steps = incident_timeline(
@@ -946,6 +950,7 @@ mod incident_timeline_presentation_tests {
             file_state: DetectedFileState::Present {
                 access: FileAccess::Readable,
                 owner: FileOwner::CurrentUser,
+                live_facts: live_facts_owned_by(1000),
             },
         };
         assert_eq!(
